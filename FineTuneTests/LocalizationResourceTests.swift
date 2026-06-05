@@ -7,6 +7,121 @@ import Testing
 
 @Suite("Localization resources")
 struct LocalizationResourceTests {
+    private static let appStoreLocaleIdentifiers: [String] = [
+        "ar-SA",
+        "bn-BD",
+        "ca",
+        "zh-Hans",
+        "zh-Hant",
+        "hr",
+        "cs",
+        "da",
+        "nl-NL",
+        "en-AU",
+        "en-CA",
+        "en-GB",
+        "en-US",
+        "fi",
+        "fr-FR",
+        "fr-CA",
+        "de-DE",
+        "el",
+        "gu-IN",
+        "he",
+        "hi",
+        "hu",
+        "id",
+        "it",
+        "ja",
+        "kn-IN",
+        "ko",
+        "ms",
+        "ml-IN",
+        "mr-IN",
+        "nb",
+        "or-IN",
+        "pl",
+        "pt-BR",
+        "pt-PT",
+        "pa-IN",
+        "ro",
+        "ru",
+        "sk",
+        "sl-SI",
+        "es-MX",
+        "es-ES",
+        "sv",
+        "ta-IN",
+        "te-IN",
+        "th",
+        "tr",
+        "uk",
+        "ur-PK",
+        "vi",
+    ]
+
+    private struct StringCatalog: Decodable {
+        struct Entry: Decodable {
+            struct Localization: Decodable {
+                struct StringUnit: Decodable {
+                    let value: String
+                }
+
+                let stringUnit: StringUnit
+            }
+
+            let localizations: [String: Localization]?
+        }
+
+        let strings: [String: Entry]
+    }
+
+    @Test("app bundle includes all App Store mainstream localizations")
+    func appBundleIncludesAllAppStoreMainstreamLocalizations() {
+        let localizedRegions = Set(Bundle.main.localizations)
+
+        for localeIdentifier in Self.appStoreLocaleIdentifiers {
+            #expect(localizedRegions.contains(localeIdentifier))
+        }
+    }
+
+    @Test("string catalogs include complete translations for every mainstream localization")
+    func stringCatalogsIncludeCompleteTranslationsForEveryMainstreamLocalization() throws {
+        let catalogURLs = [
+            sourceRoot().appending(path: "FineTune/Localizable.xcstrings"),
+            sourceRoot().appending(path: "FineTune/InfoPlist.xcstrings"),
+        ]
+
+        for catalogURL in catalogURLs {
+            let data = try Data(contentsOf: catalogURL)
+            let catalog = try JSONDecoder().decode(StringCatalog.self, from: data)
+
+            for (key, entry) in catalog.strings {
+                let localizations = entry.localizations ?? [:]
+                for localeIdentifier in Self.appStoreLocaleIdentifiers {
+                    let value = localizations[localeIdentifier]?.stringUnit.value ?? ""
+                    #expect(!value.isEmpty)
+                    #expect(Self.formatSpecifiers(in: value) == Self.formatSpecifiers(in: key))
+                }
+            }
+        }
+    }
+
+    private func sourceRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private static func formatSpecifiers(in string: String) -> [String] {
+        let pattern = #"%[@dfiouxX]|%l[du]|%ll[du]|%%"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(string.startIndex..<string.endIndex, in: string)
+        return regex.matches(in: string, range: range).map { match in
+            String(string[Range(match.range, in: string)!])
+        }
+    }
+
     @Test("Simplified Chinese resources localize core UI strings")
     func simplifiedChineseResourcesLocalizeCoreUIStrings() throws {
         let appBundle = Bundle.main
