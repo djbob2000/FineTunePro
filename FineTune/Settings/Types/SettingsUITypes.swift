@@ -105,7 +105,7 @@ enum AppLanguagePreference: String, Codable, CaseIterable, Identifiable, CustomS
         case .malay: return "Malay"
         case .malayalamIndia: return "Malayalam (India)"
         case .marathiIndia: return "Marathi (India)"
-        case .norwegianBokmal: return "Norwegian Bokmal"
+        case .norwegianBokmal: return "Norwegian Bokmål"
         case .odiaIndia: return "Odia (India)"
         case .polish: return "Polish"
         case .portugueseBrazil: return "Portuguese (Brazil)"

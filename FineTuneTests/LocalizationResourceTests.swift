@@ -7,7 +7,10 @@ import Testing
 
 @Suite("Localization resources")
 struct LocalizationResourceTests {
-    private static let appStoreLocaleIdentifiers: [String] = [
+    // Mirrors Apple's 50 App Store localization languages for the app binary.
+    // Norwegian uses the Foundation/Xcode bundle identifier `nb` rather than
+    // the App Store Connect metadata shortcode `no`.
+    private static let mainstreamLocaleIdentifiers: [String] = [
         "ar-SA",
         "bn-BD",
         "ca",
@@ -76,13 +79,14 @@ struct LocalizationResourceTests {
         let strings: [String: Entry]
     }
 
-    @Test("app bundle includes all App Store mainstream localizations")
-    func appBundleIncludesAllAppStoreMainstreamLocalizations() {
+    @Test("app bundle includes all mainstream localizations")
+    func appBundleIncludesAllMainstreamLocalizations() {
         let localizedRegions = Set(Bundle.main.localizations)
 
-        for localeIdentifier in Self.appStoreLocaleIdentifiers {
+        for localeIdentifier in Self.mainstreamLocaleIdentifiers {
             #expect(localizedRegions.contains(localeIdentifier))
         }
+        #expect(!localizedRegions.contains("no"))
     }
 
     @Test("string catalogs include complete translations for every mainstream localization")
@@ -95,14 +99,42 @@ struct LocalizationResourceTests {
         for catalogURL in catalogURLs {
             let data = try Data(contentsOf: catalogURL)
             let catalog = try JSONDecoder().decode(StringCatalog.self, from: data)
+            let expectedLocaleIdentifiers = Set(Self.mainstreamLocaleIdentifiers)
+            let actualLocaleIdentifiers = Set(catalog.strings.values.flatMap { entry in
+                Array((entry.localizations ?? [:]).keys)
+            })
+            #expect(actualLocaleIdentifiers == expectedLocaleIdentifiers)
 
             for (key, entry) in catalog.strings {
                 let localizations = entry.localizations ?? [:]
-                for localeIdentifier in Self.appStoreLocaleIdentifiers {
+                for localeIdentifier in Self.mainstreamLocaleIdentifiers {
                     let value = localizations[localeIdentifier]?.stringUnit.value ?? ""
                     #expect(!value.isEmpty)
                     #expect(Self.formatSpecifiers(in: value) == Self.formatSpecifiers(in: key))
                 }
+            }
+        }
+    }
+
+    @Test("InfoPlist localizations contain user-facing permission copy")
+    func infoPlistLocalizationsContainUserFacingPermissionCopy() throws {
+        let catalogURL = sourceRoot().appending(path: "FineTune/InfoPlist.xcstrings")
+        let data = try Data(contentsOf: catalogURL)
+        let catalog = try JSONDecoder().decode(StringCatalog.self, from: data)
+        let permissionKeys = [
+            "NSAudioCaptureUsageDescription",
+            "NSBluetoothAlwaysUsageDescription",
+            "NSMicrophoneUsageDescription",
+        ]
+
+        for localeIdentifier in Self.mainstreamLocaleIdentifiers {
+            let bundleName = catalog.strings["CFBundleName"]?.localizations?[localeIdentifier]?.stringUnit.value
+            #expect(bundleName == "FineTune")
+
+            for key in permissionKeys {
+                let value = catalog.strings[key]?.localizations?[localeIdentifier]?.stringUnit.value ?? ""
+                #expect(value != key)
+                #expect(value.contains("FineTune"))
             }
         }
     }

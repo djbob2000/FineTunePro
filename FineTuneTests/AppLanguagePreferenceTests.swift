@@ -110,8 +110,8 @@ struct AppLanguagePreferenceTests {
         #expect(persistedDomain["AppleLanguages"] == nil)
     }
 
-    @Test("language selector exposes every App Store mainstream localization")
-    func languageSelectorExposesEveryAppStoreMainstreamLocalization() throws {
+    @Test("language selector exposes every mainstream localization")
+    func languageSelectorExposesEveryMainstreamLocalization() throws {
         let suiteName = "FineTune.AppLanguagePreferenceTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
