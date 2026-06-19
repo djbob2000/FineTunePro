@@ -49,6 +49,10 @@ final class AudioEngine {
     private var staleCleanupTask: Task<Void, Never>?  // Debounced cleanup scheduling
     private var healthMonitorTask: Task<Void, Never>?  // Periodic tap health monitor
     private var tapRecoveryCooldownUntil: [pid_t: Date] = [:]  // Prevents tap recreation thrashing
+    /// Track the applied volume offset (in scalar range 0.0...1.0) per device UID
+    private var appliedLoudnessOffsets: [String: Float] = [:]
+    /// Track active volume ramp tasks per device UID to avoid concurrent overrides
+    private var volumeRampTasks: [String: Task<Void, Never>] = [:]
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "AudioEngine")
 
     // MARK: - Priority State Machine
@@ -319,7 +323,7 @@ final class AudioEngine {
         deviceVolumeMonitor.onVolumeChanged = { [weak self] deviceID, newVolume in
             guard let self else { return }
             guard let deviceUID = self.deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid else { return }
-            let loudnessEnabled = self.settingsManager.appSettings.loudnessCompensationEnabled
+            let loudnessEnabled = self.settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
             for (_, tap) in self.taps {
                 if tap.currentDeviceUID == deviceUID {
                     tap.currentDeviceVolume = newVolume
@@ -327,9 +331,12 @@ final class AudioEngine {
                        self.outputVolumeBackend(for: deviceID) == .software {
                         tap.volume = self.effectiveVolume(for: tap.app.id, deviceUIDs: tap.currentDeviceUIDs)
                     }
+                    let referencePhon = self.settingsManager.getLoudnessReferencePhon(for: deviceUID)
                     tap.updateLoudnessCompensation(
                         volume: self.effectiveLoudnessVolume(for: tap),
-                        enabled: loudnessEnabled
+                        enabled: loudnessEnabled,
+                        referencePhon: referencePhon,
+                        gainScale: loudnessEnabled ? 1.0 : 0.0
                     )
                 }
             }
@@ -587,6 +594,10 @@ final class AudioEngine {
         stopHealthMonitor()
         processMonitor.stop()
         deviceMonitor.stop()
+        for task in volumeRampTasks.values {
+            task.cancel()
+        }
+        volumeRampTasks.removeAll()
         for tap in taps.values {
             tap.invalidate()
         }
@@ -615,6 +626,11 @@ final class AudioEngine {
         appliedPIDs.removeAll()
         appDeviceRouting.removeAll()
         followsDefault.removeAll()
+        for task in volumeRampTasks.values {
+            task.cancel()
+        }
+        volumeRampTasks.removeAll()
+        appliedLoudnessOffsets.removeAll()
 
         // 3. Clear cached per-app audio state
         volumeState.resetAll()
@@ -627,7 +643,12 @@ final class AudioEngine {
             applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: tap.currentDeviceUIDs)
             tap.updateEQSettings(.flat)
             tap.updateAutoEQProfile(nil)
-            tap.updateLoudnessCompensation(volume: effectiveLoudnessVolume(for: tap), enabled: false)
+            tap.updateLoudnessCompensation(
+                volume: effectiveLoudnessVolume(for: tap),
+                enabled: false,
+                referencePhon: 83.0,
+                gainScale: 0.0
+            )
         }
 
         // 6. Re-apply from clean settings (re-establishes routing to system default)
@@ -643,10 +664,14 @@ final class AudioEngine {
         }
         if let tap = taps[app.id] {
             tap.volume = effectiveVolume(for: app.id, deviceUIDs: tap.currentDeviceUIDs)
-            if settingsManager.appSettings.loudnessCompensationEnabled {
+            let loudnessEnabled = tap.currentDeviceUID.map { settingsManager.getLoudnessCompensationEnabled(for: $0) } ?? false
+            if loudnessEnabled, let firstDeviceUID = tap.currentDeviceUID {
+                let referencePhon = settingsManager.getLoudnessReferencePhon(for: firstDeviceUID)
                 tap.updateLoudnessCompensation(
                     volume: effectiveLoudnessVolume(for: tap),
-                    enabled: true
+                    enabled: true,
+                    referencePhon: referencePhon,
+                    gainScale: 1.0
                 )
             }
         }
@@ -693,6 +718,98 @@ final class AudioEngine {
     private func effectiveLoudnessVolume(for tap: any ProcessTapControlling) -> Float {
         tap.currentDeviceVolume * volumeState.getVolume(for: tap.app.id)
     }
+
+    private func computeHeadroomOffsetDB(for deviceUID: String, systemVolume: Float, referencePhon: Double) -> Double {
+        guard let device = deviceMonitor.device(for: deviceUID) else { return 0.0 }
+        let sampleRate = (try? device.id.readNominalSampleRate()) ?? 48000.0
+        
+        let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
+        let gains = LoudnessCompensator.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, sampleRate: sampleRate)
+        let realized = LoudnessCompensator.realizedResponseDB(sectionGains: gains.map(Double.init), sampleRate: sampleRate)
+        
+        let frequencies = LoudnessCompensator.fitGridFrequencies()
+        var peakDB = 0.0
+        for (index, freq) in frequencies.enumerated() {
+            if freq >= 30.0 {
+                peakDB = max(peakDB, realized[index])
+            }
+        }
+        return peakDB
+    }
+
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, gainScale: Float) {
+        for tap in taps.values {
+            guard tap.currentDeviceUID == deviceUID else { continue }
+            tap.updateLoudnessCompensation(
+                volume: effectiveLoudnessVolume(for: tap),
+                enabled: enabled,
+                referencePhon: referencePhon,
+                gainScale: gainScale
+            )
+        }
+    }
+
+    private func rampLoudnessCompensation(
+        for deviceUID: String,
+        deviceID: AudioDeviceID?,
+        fromVolume: Float?,
+        toVolume: Float?,
+        enabling: Bool,
+        referencePhon: Double,
+        backend: VolumeControlTier?
+    ) {
+        // Cancel any existing ramp task for this device
+        volumeRampTasks[deviceUID]?.cancel()
+        
+        let task = Task { @MainActor in
+            let duration: TimeInterval = 0.150
+            // Use 50ms steps (3 steps total) to avoid overloading CoreAudio driver/hardware volume controls
+            let stepInterval: TimeInterval = 0.050
+            let steps = Int(duration / stepInterval)
+            
+            // Only step volume for hardware devices. For slow backends like DDC, only update at transition boundaries
+            let stepVolume = (backend == .hardware)
+            
+            // If disabling and not stepping volume, set the final lower volume immediately at the start of transition
+            if !enabling, !stepVolume, let deviceID, let toVol = toVolume {
+                deviceVolumeMonitor.setVolume(for: deviceID, to: toVol)
+            }
+            
+            for step in 1...steps {
+                guard !Task.isCancelled else { return }
+                
+                let progress = Float(step) / Float(steps)
+                
+                if stepVolume, let deviceID, let fromVol = fromVolume, let toVol = toVolume {
+                    let currentStepVolume = fromVol + (toVol - fromVol) * progress
+                    deviceVolumeMonitor.setVolume(for: deviceID, to: currentStepVolume)
+                }
+                
+                // Update DSP gainScale
+                let gainScale = enabling ? progress : (1.0 - progress)
+                // During the ramp, we keep the filters enabled (true)
+                updateTapsLoudness(deviceUID: deviceUID, enabled: true, referencePhon: referencePhon, gainScale: gainScale)
+                
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            
+            if !Task.isCancelled {
+                // If enabling and not stepping volume, set the final higher volume at the end of transition
+                if enabling, !stepVolume, let deviceID, let toVol = toVolume {
+                    deviceVolumeMonitor.setVolume(for: deviceID, to: toVol)
+                } else if stepVolume, let deviceID, let toVol = toVolume {
+                    deviceVolumeMonitor.setVolume(for: deviceID, to: toVol)
+                }
+                
+                let finalGainScale: Float = enabling ? 1.0 : 0.0
+                updateTapsLoudness(deviceUID: deviceUID, enabled: enabling, referencePhon: referencePhon, gainScale: finalGainScale)
+                
+                volumeRampTasks.removeValue(forKey: deviceUID)
+            }
+        }
+        volumeRampTasks[deviceUID] = task
+    }
+
 
     private func applyTapOutputState(to tap: any ProcessTapControlling, for pid: pid_t, deviceUIDs: [String]? = nil) {
         let resolvedUIDs = deviceUIDs ?? tap.currentDeviceUIDs
@@ -794,19 +911,67 @@ final class AudioEngine {
         }
     }
 
-    func setLoudnessCompensationEnabled(_ enabled: Bool) {
+    func setLoudnessCompensationEnabled(for deviceUID: String, enabled: Bool) {
+        settingsManager.setLoudnessCompensationEnabled(for: deviceUID, to: enabled)
+        let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
+        
+        var startVol: Float? = nil
+        var endVol: Float? = nil
+        var deviceID: AudioDeviceID? = nil
+        var backend: VolumeControlTier? = nil
+        
+        if let device = deviceMonitor.device(for: deviceUID) {
+            let b = outputVolumeBackend(for: device.id)
+            backend = b
+            if b == .hardware || b == .ddc {
+                deviceID = device.id
+                let currentVolume = deviceVolumeMonitor.volumes[device.id] ?? 1.0
+                if enabled {
+                    let offsetScalar: Float
+                    if let existing = appliedLoudnessOffsets[deviceUID] {
+                        offsetScalar = existing
+                    } else {
+                        let peakDB = computeHeadroomOffsetDB(for: deviceUID, systemVolume: currentVolume, referencePhon: referencePhon)
+                        offsetScalar = Float(peakDB / 100.0)
+                        appliedLoudnessOffsets[deviceUID] = offsetScalar
+                    }
+                    startVol = currentVolume
+                    endVol = min(1.0, currentVolume + offsetScalar)
+                } else {
+                    let offsetScalar = appliedLoudnessOffsets[deviceUID] ?? 0.0
+                    appliedLoudnessOffsets[deviceUID] = nil
+                    startVol = currentVolume
+                    endVol = max(0.0, currentVolume - offsetScalar)
+                }
+            }
+        }
+        
+        rampLoudnessCompensation(
+            for: deviceUID,
+            deviceID: deviceID,
+            fromVolume: startVol,
+            toVolume: endVol,
+            enabling: enabled,
+            referencePhon: referencePhon,
+            backend: backend
+        )
+    }
+
+    func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
+        settingsManager.setLoudnessReferencePhon(for: deviceUID, to: referencePhon)
+        let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         for tap in taps.values {
-            tap.updateLoudnessCompensation(volume: effectiveLoudnessVolume(for: tap), enabled: enabled)
+            guard tap.currentDeviceUID == deviceUID else { continue }
+            tap.updateLoudnessCompensation(
+                volume: effectiveLoudnessVolume(for: tap),
+                enabled: enabled,
+                referencePhon: referencePhon,
+                gainScale: enabled ? 1.0 : 0.0
+            )
         }
     }
 
-    func setLoudnessEqualizationEnabled(_ enabled: Bool) {
-        var settings = LoudnessEqualizerSettings()
-        settings.enabled = enabled
-        for tap in taps.values {
-            tap.updateLoudnessEqualization(settings)
-        }
-    }
+
 
     /// Apply AutoEQ profile to all taps currently routed to the given device.
     private func applyAutoEQToTaps(for deviceUID: String) {
@@ -825,13 +990,14 @@ final class AudioEngine {
 
     private func tapInitialState(forApp app: AudioApp, primaryDeviceUID: String, deviceVolume: Float) -> TapInitialState {
         var loudnessEqSettings = LoudnessEqualizerSettings()
-        loudnessEqSettings.enabled = settingsManager.appSettings.loudnessEqualizationEnabled
+        loudnessEqSettings.enabled = false
         return TapInitialState(
             eqSettings: settingsManager.getEQSettings(for: app.persistenceIdentifier),
             autoEQProfile: autoEQProfileForActivation(deviceUID: primaryDeviceUID),
             autoEQPreampEnabled: settingsManager.autoEQPreampEnabled,
             loudnessVolume: deviceVolume * volumeState.getVolume(for: app.id),
-            loudnessCompensationEnabled: settingsManager.appSettings.loudnessCompensationEnabled,
+            loudnessCompensationEnabled: settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID),
+            loudnessReferencePhon: settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID),
             loudnessEqualizerSettings: loudnessEqSettings
         )
     }
@@ -948,6 +1114,8 @@ final class AudioEngine {
                     self.logger.debug("Switched \(app.name) to device: \(targetUID)")
                 } catch {
                     self.logger.error("Failed to switch device for \(app.name): \(error.localizedDescription)")
+                    self.logger.info("Falling back to recreateTap for \(app.name)")
+                    await self.recreateTap(for: app.id)
                 }
             }
         } else {
@@ -1067,7 +1235,6 @@ final class AudioEngine {
             try tap.activate(initial: initial)
             taps[app.id] = tap
 
-            // Catalog AutoEQ may not have been cached yet — kick off async resolve.
             if initial.autoEQProfile == nil {
                 applyAutoEQToTap(tap)
             }
@@ -1183,6 +1350,8 @@ final class AudioEngine {
                         self.applyAutoEQToTap(existingTap)
                     } catch {
                         self.logger.error("Failed to re-route \(app.name) to \(deviceUID): \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(app.name)")
+                        await self.recreateTap(for: app.id)
                     }
                 }
                 appliedPIDs.insert(app.id)
@@ -1228,8 +1397,6 @@ final class AudioEngine {
             try tap.activate(initial: initial)
             taps[app.id] = tap
 
-            // Catalog AutoEQ may not have been cached yet — kick off async resolve.
-            // Imported profiles always hit the synchronous path above.
             if initial.autoEQProfile == nil {
                 applyAutoEQToTap(tap)
             }
@@ -1328,6 +1495,8 @@ final class AudioEngine {
                     self.applyAutoEQToTap(tap)
                 } catch {
                     self.logger.error("Failed to switch \(app.name) to \(targetUID): \(error.localizedDescription)")
+                    self.logger.info("Falling back to recreateTap for \(app.name)")
+                    await self.recreateTap(for: app.id)
                 }
             }
         }
@@ -1408,6 +1577,8 @@ final class AudioEngine {
                         self.applyAutoEQToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) to fallback: \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(tap.app.name)")
+                        await self.recreateTap(for: tap.app.id)
                     }
                 }
 
@@ -1421,6 +1592,8 @@ final class AudioEngine {
                         self.logger.debug("Removed \(deviceName) from \(tap.app.name) multi-device output")
                     } catch {
                         self.logger.error("Failed to update \(tap.app.name) devices: \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(tap.app.name) (multi-mode)")
+                        await self.recreateTap(for: tap.app.id, overridingDeviceUIDs: remainingUIDs)
                     }
                 }
             }
@@ -1480,6 +1653,8 @@ final class AudioEngine {
                         self.applyAutoEQToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) back to \(deviceName): \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(tap.app.name)")
+                        await self.recreateTap(for: tap.app.id)
                     }
                 }
             }
@@ -1543,6 +1718,10 @@ final class AudioEngine {
             // macOS already auto-switched to the lower-priority device — restore
             // what the user was on (not highest priority — they may have chosen a mid-priority device)
             restoreConfirmedDefault()
+        } else if currentDefault == deviceUID {
+            // The reconnected device is the current default (e.g. macOS auto-switched to a higher-priority device)
+            // Route follows-default apps to it in case we deferred it earlier.
+            routeFollowsDefaultApps(to: deviceUID)
         }
 
         // Cancel any existing PENDING_AUTOSWITCH before entering a new one.
@@ -1941,9 +2120,9 @@ final class AudioEngine {
     /// Tears down and recreates a tap for a given PID, preserving routing and settings.
     /// Async: awaits full CoreAudio resource teardown before creating the replacement tap
     /// to prevent orphaned IO procs from accumulating (issue #176).
-    private func recreateTap(for pid: pid_t) async {
+    private func recreateTap(for pid: pid_t, overridingDeviceUIDs: [String]? = nil) async {
         guard let oldTap = taps.removeValue(forKey: pid) else { return }
-        let deviceUIDs = oldTap.currentDeviceUIDs
+        let deviceUIDs = overridingDeviceUIDs ?? oldTap.currentDeviceUIDs
         await oldTap.invalidateAsync()
 
         // Set cooldown to prevent thrashing

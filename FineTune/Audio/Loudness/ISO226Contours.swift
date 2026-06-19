@@ -50,20 +50,24 @@ enum ISO226Contours {
     /// nearly inaudible. Lowering to 80 keeps compensation gains moderate at
     /// typical listening levels while still providing meaningful bass correction
     /// at low volumes.
-    static let defaultReferencePhon: Double = 80.0
+    static let defaultReferencePhon: Double = 83.0
 
     private static let referenceFrequencyIndex = 17
     private static let referenceSoundPressureSquaredPa: Double = 4e-10
-    private static let supportedPhonRange = 20.0...90.0
-    private static let estimatedPhonRange = 20.0...defaultReferencePhon
+    static let supportedPhonRange = 20.0...120.0
 
     // MARK: - Volume → Phon Mapping
 
     /// App-specific system-volume heuristic, not defined by ISO 226.
-    static func estimatedPhon(fromSystemVolume volume: Float) -> Double {
+    static func estimatedPhon(fromSystemVolume volume: Float, referencePhon: Double) -> Double {
         let v = Double(max(0.0, min(1.0, volume)))
-        return estimatedPhonRange.lowerBound
-            + (defaultReferencePhon - estimatedPhonRange.lowerBound) * pow(v, 0.5)
+        let lowerBound = supportedPhonRange.lowerBound
+        return lowerBound + (referencePhon - lowerBound) * v
+    }
+
+    /// App-specific system-volume heuristic, using the default reference phon level.
+    static func estimatedPhon(fromSystemVolume volume: Float) -> Double {
+        return estimatedPhon(fromSystemVolume: volume, referencePhon: defaultReferencePhon)
     }
 
     // MARK: - Normative Contour Computation
@@ -126,7 +130,9 @@ enum ISO226Contours {
     static func interpolateCompensation(_ gains: [Double], atFrequency frequency: Double) -> Double {
         guard gains.count == frequencies.count else { return 0.0 }
 
-        let logFrequency = log(frequency)
+        // Flat shelf below 30 Hz to preserve dynamic range and avoid excessive infrasound boosts
+        let effectiveFrequency = max(frequency, 30.0)
+        let logFrequency = log(effectiveFrequency)
         let logFrequencies = frequencies.map { log($0) }
 
         if logFrequency <= logFrequencies.first! { return gains.first! }
