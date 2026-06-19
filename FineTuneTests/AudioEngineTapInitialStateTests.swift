@@ -64,6 +64,10 @@ final class RecordingProcessTapController: ProcessTapControlling {
         self.currentDeviceUIDs = deviceUIDs
     }
 
+    func clearEvents() {
+        events.removeAll()
+    }
+
     func activate(initial: TapInitialState) throws {
         events.append(.activate(TapInitialStateSnapshot(initial)))
     }
@@ -104,6 +108,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
     func isHealthCheckEligible(minActiveSeconds: Double) -> Bool { false }
 
     func refreshTapSource(_ preferredDeviceUID: String?) async throws {}
+    func recreateForOutputRateChange() async throws {}
 }
 
 // MARK: - Process monitor stub
@@ -235,27 +240,13 @@ struct AudioEngineTapInitialStateTests {
         #expect(snap.autoEQPreampEnabled == value)
     }
 
-    @Test("loudnessCompensationEnabled mirrors appSettings.loudnessCompensationEnabled",
-          arguments: [true, false])
-    func loudnessCompensationFlagMirrored(value: Bool) throws {
-        let fix = makeFixture()
-        var s = fix.settings.appSettings
-        s.loudnessCompensationEnabled = value
-        fix.settings.updateAppSettings(s)
 
-        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
 
-        let snap = try #require(capturedInitial(fix))
-        #expect(snap.loudnessCompensationEnabled == value)
-    }
-
-    @Test("loudnessEqualizerSettings.enabled mirrors appSettings.loudnessEqualizationEnabled",
+    @Test("loudnessEqualizerSettings.enabled mirrors per-device settings",
           arguments: [true, false])
     func loudnessEqualizerFlagMirrored(value: Bool) throws {
         let fix = makeFixture()
-        var s = fix.settings.appSettings
-        s.loudnessEqualizationEnabled = value
-        fix.settings.updateAppSettings(s)
+        fix.settings.setLoudnessEqualizationEnabled(for: fix.device.uid, to: value)
 
         fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
 
@@ -372,10 +363,7 @@ struct AudioEngineTapInitialStateTests {
         )
         let custom = EQSettings(bandGains: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1], isEnabled: true)
         fix.settings.setEQSettings(custom, for: fix.app.persistenceIdentifier)
-        var s = fix.settings.appSettings
-        s.loudnessCompensationEnabled = true
-        s.loudnessEqualizationEnabled = true
-        fix.settings.updateAppSettings(s)
+        fix.settings.setLoudnessEqualizationEnabled(for: fix.device.uid, to: true)
 
         fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
 
