@@ -33,6 +33,8 @@ struct AudioTab: View {
         .onChange(of: settings.appSettings.loudnessCompensationEnabled) { _, newValue in
             if let defaultUID = deviceVolumeMonitor.defaultDeviceUID {
                 audioEngine.setLoudnessCompensationEnabled(for: defaultUID, enabled: newValue)
+            } else if let firstDevice = audioEngine.outputDevices.first {
+                audioEngine.setLoudnessCompensationEnabled(for: firstDevice.uid, enabled: newValue)
             }
         }
 

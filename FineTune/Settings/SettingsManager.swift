@@ -38,7 +38,6 @@ nonisolated struct AppSettings: Codable, Equatable {
 
     // Audio Processing
     var loudnessCompensationEnabled: Bool = false  // ISO 226:2023 equal-loudness contour compensation
-    var loudnessCompensationIntensity: Float = 1.0  // 0.0–3.0, 1.0 = full ISO 226 compensation
     
     // Legacy Migration
     private var unifiedLoudnessEnabled: Bool? = nil
@@ -69,7 +68,6 @@ nonisolated struct AppSettings: Codable, Equatable {
         lockInputDevice = try c.decodeIfPresent(Bool.self, forKey: .lockInputDevice) ?? true
         showDeviceDisconnectAlerts = try c.decodeIfPresent(Bool.self, forKey: .showDeviceDisconnectAlerts) ?? true
         loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false
-        loudnessCompensationIntensity = try c.decodeIfPresent(Float.self, forKey: .loudnessCompensationIntensity) ?? 1.0
         hudStyle = try c.decodeIfPresent(HUDStyle.self, forKey: .hudStyle) ?? .tahoe
         mediaKeyControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaKeyControlEnabled) ?? true
         volumeHotkeyStep = try c.decodeIfPresent(VolumeHotkeyStep.self, forKey: .volumeHotkeyStep) ?? .normal
@@ -784,13 +782,7 @@ final class SettingsManager {
         set { updateAppSettings(newValue) }
     }
 
-    var loudnessCompensationIntensity: Float {
-        get { settings.appSettings.loudnessCompensationIntensity }
-        set {
-            settings.appSettings.loudnessCompensationIntensity = newValue
-            scheduleSave()
-        }
-    }
+
 
 
 
