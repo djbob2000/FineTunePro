@@ -384,4 +384,19 @@ struct PostAgcCompressorTests {
         // Assert that the soft-knee compressor compressed (reduced gain) more than hard-knee.
         #expect(softMaxPeak < hardMaxPeak - 0.001)
     }
+
+    @Test("Non-stereo channel count is safely bypassed without allocating arrays")
+    func nonStereoPassthrough() {
+        let settings = PostAgcCompressorSettings(thresholdDb: -10.0, enabled: true)
+        let compressor = PostAgcCompressor(settings: settings, sampleRate: 48000)
+        
+        let input: [Float] = [0.5, 0.5, 0.5, 0.5]
+        var output = [Float](repeating: 0, count: 4)
+        
+        // Call process with channelCount = 4 (which is not stereo)
+        compressor.process(input: input, output: &output, frameCount: 1, channelCount: 4)
+        
+        // Non-stereo should be bypassed (exact copy of input)
+        #expect(output == input)
+    }
 }

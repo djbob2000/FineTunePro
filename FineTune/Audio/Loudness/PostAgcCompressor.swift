@@ -169,7 +169,7 @@ final class PostAgcCompressor: @unchecked Sendable {
     ///   - input:        Interleaved input: `input[f * channelCount + ch]`
     ///   - output:       Interleaved output: `output[f * channelCount + ch]`
     ///   - frameCount:   Number of frames per channel.
-    ///   - channelCount: Number of channels.
+    ///   - channelCount: Number of channels. Must be 2 (stereo).
     ///
     /// RT-safe: allocation-free, no logging.
     func process(
@@ -185,15 +185,13 @@ final class PostAgcCompressor: @unchecked Sendable {
             return
         }
 
-        // Dynamically match filter and buffer counts to channel count if it doesn't match,
-        // though in practice it is stereo. Since this only mutates properties on change,
-        // it is RT-safe once settled.
-        if crossover200Hz.count != channelCount {
-            crossover200Hz = (0..<channelCount).map { _ in LinkwitzRileyCrossover2(frequency: 200.0, sampleRate: Double(sampleRate)) }
-            crossover77Hz = (0..<channelCount).map { _ in LinkwitzRileyCrossover2(frequency: 77.0, sampleRate: Double(sampleRate)) }
-            band1Samples = [Float](repeating: 0, count: channelCount)
-            band2Samples = [Float](repeating: 0, count: channelCount)
-            band3Samples = [Float](repeating: 0, count: channelCount)
+        // Narrow API contract to strictly 2 channels (stereo). If channelCount is not 2,
+        // bypass and copy input directly to output without performing any heap allocations.
+        guard channelCount == 2 else {
+            if input != UnsafePointer(output) {
+                memcpy(output, input, frameCount * channelCount * MemoryLayout<Float>.size)
+            }
+            return
         }
 
         let globalThresholdDb = settings.thresholdDb
