@@ -31,6 +31,7 @@ final class PostAgcCompressor: @unchecked Sendable {
         let ratio: Float
         let attackMs: Float
         let releaseMs: Float
+        let kneeDb: Float
         let maxReleaseSpeed: Float
         let exponentialRelease: Float
         
@@ -44,11 +45,12 @@ final class PostAgcCompressor: @unchecked Sendable {
         private var releaseCoeff: Float = 0
         private var maxReleaseCoeff: Float = 0
         
-        init(thresholdOffsetDb: Float, ratio: Float, attackMs: Float, releaseMs: Float, maxReleaseSpeed: Float, exponentialRelease: Float, sampleRate: Float) {
+        init(thresholdOffsetDb: Float, ratio: Float, attackMs: Float, releaseMs: Float, kneeDb: Float, maxReleaseSpeed: Float, exponentialRelease: Float, sampleRate: Float) {
             self.thresholdOffsetDb = thresholdOffsetDb
             self.ratio = ratio
             self.attackMs = attackMs
             self.releaseMs = releaseMs
+            self.kneeDb = kneeDb
             self.maxReleaseSpeed = maxReleaseSpeed
             self.exponentialRelease = exponentialRelease
             updateSampleRate(sampleRate)
@@ -56,7 +58,7 @@ final class PostAgcCompressor: @unchecked Sendable {
         
         func updateSampleRate(_ sampleRate: Float) {
             self.slope = 1.0 - 1.0 / max(ratio, 1.0)
-            self.kneeHalfDb = 0.1 * 0.5 // Default knee is 0.1 dB
+            self.kneeHalfDb = kneeDb * 0.5
             let samplePeriodMs: Float = 1000.0 / sampleRate
             let attackTau = attackMs / 1.966
             self.attackCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: attackTau, stepMs: samplePeriodMs)
@@ -68,7 +70,6 @@ final class PostAgcCompressor: @unchecked Sendable {
         func calculateGainReduction(levelDb: Float, globalThresholdDb: Float) -> Float {
             let bandThresholdDb = globalThresholdDb + thresholdOffsetDb
             let desiredGrDb: Float
-            let kneeDb: Float = 0.1
             if levelDb > bandThresholdDb - kneeHalfDb && levelDb < bandThresholdDb + kneeHalfDb {
                 let x = levelDb - bandThresholdDb + kneeHalfDb
                 let kneeFactor = (x * x) / (2.0 * max(kneeDb, 1e-6))
@@ -116,6 +117,7 @@ final class PostAgcCompressor: @unchecked Sendable {
             ratio: 4.0,
             attackMs: 67.0,
             releaseMs: 1080.0,
+            kneeDb: settings.kneeDb,
             maxReleaseSpeed: settings.maxReleaseSpeed,
             exponentialRelease: settings.exponentialRelease,
             sampleRate: sampleRate
@@ -125,6 +127,7 @@ final class PostAgcCompressor: @unchecked Sendable {
             ratio: 4.0,
             attackMs: 52.0,
             releaseMs: 599.0,
+            kneeDb: settings.kneeDb,
             maxReleaseSpeed: settings.maxReleaseSpeed,
             exponentialRelease: settings.exponentialRelease,
             sampleRate: sampleRate
@@ -134,6 +137,7 @@ final class PostAgcCompressor: @unchecked Sendable {
             ratio: settings.ratio,
             attackMs: settings.attackMs,
             releaseMs: settings.releaseMs,
+            kneeDb: settings.kneeDb,
             maxReleaseSpeed: settings.maxReleaseSpeed,
             exponentialRelease: settings.exponentialRelease,
             sampleRate: sampleRate

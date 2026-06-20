@@ -327,4 +327,61 @@ struct PostAgcCompressorTests {
         let trebleOutputDb = LoudnessEqualizerMath.linearToDb(treblePeak)
         #expect(trebleOutputDb < -5.5)
     }
+
+    @Test("Knee width is respected and changes gain reduction curve")
+    func kneeWidthRespected() {
+        // High knee (kneeDb = 6.0) vs hard knee (kneeDb = 0.0)
+        let softSettings = PostAgcCompressorSettings(
+            thresholdDb: -10.0,
+            ratio: 4.0,
+            attackMs: 0.01,
+            kneeDb: 6.0,
+            exponentialRelease: 0.0,
+            maxReleaseSpeed: 1.0,
+            enabled: true
+        )
+        let hardSettings = PostAgcCompressorSettings(
+            thresholdDb: -10.0,
+            ratio: 4.0,
+            attackMs: 0.01,
+            kneeDb: 0.0,
+            exponentialRelease: 0.0,
+            maxReleaseSpeed: 1.0,
+            enabled: true
+        )
+        
+        let softCompressor = PostAgcCompressor(settings: softSettings, sampleRate: 48000)
+        let hardCompressor = PostAgcCompressor(settings: hardSettings, sampleRate: 48000)
+        
+        // Input signal inside knee region: e.g. -8.0 dBFS (which after crossover is around -9.6 dBFS)
+        // With hard knee, this has 0.4 dB overshoot, resulting in -0.3 dB gain reduction.
+        // With soft knee, this is inside the knee region, resulting in -0.72 dB gain reduction.
+        let ampInsideKnee = LoudnessEqualizerMath.dbToLinear(-8.0)
+        var input = [Float](repeating: 0, count: 20)
+        for i in 0..<10 {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / Double(48000.0))
+            let val = ampInsideKnee * sin(phase)
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
+        var softOutput = [Float](repeating: 0, count: 20)
+        var hardOutput = [Float](repeating: 0, count: 20)
+        
+        for _ in 0..<50 {
+            softCompressor.process(input: &input, output: &softOutput, frameCount: 10, channelCount: 2)
+            hardCompressor.process(input: &input, output: &hardOutput, frameCount: 10, channelCount: 2)
+        }
+        
+        var softMaxPeak: Float = 0
+        var hardMaxPeak: Float = 0
+        for i in 0..<20 {
+            let sVal = abs(softOutput[i])
+            let hVal = abs(hardOutput[i])
+            if sVal > softMaxPeak { softMaxPeak = sVal }
+            if hVal > hardMaxPeak { hardMaxPeak = hVal }
+        }
+        
+        // Assert that the soft-knee compressor compressed (reduced gain) more than hard-knee.
+        #expect(softMaxPeak < hardMaxPeak - 0.001)
+    }
 }
