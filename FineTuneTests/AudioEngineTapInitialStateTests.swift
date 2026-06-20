@@ -425,6 +425,7 @@ struct AudioEngineTapInitialStateTests {
             supportsAutoEQ: true
         )
         fix.deviceMonitor.addOutputDevice(secondDevice)
+        fix.deviceVolume.volumes[secondDevice.id] = 0.75
         
         // 1. Initial routing (device is "uid-test", default loudness compensation is false)
         fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)

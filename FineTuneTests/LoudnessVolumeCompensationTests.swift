@@ -103,7 +103,7 @@ struct LoudnessVolumeCompensationTests {
         
         // Volume should have increased to compensate for digital headroom drop immediately
         let volAfterEnable = fix.deviceVolume.volumes[fix.device.id] ?? 0.5
-        #expect(volAfterEnable > 0.5)
+        #expect(volAfterEnable > 0.5, "volAfterEnable was \(volAfterEnable), expected > 0.5")
         
         let enableLoudnessEvents = tap.events.compactMap { event -> (enabled: Bool, gainScale: Float)? in
             if case let .updateLoudnessCompensation(_, enabled, _, gainScale) = event {
@@ -111,14 +111,17 @@ struct LoudnessVolumeCompensationTests {
             }
             return nil
         }
-        #expect(!enableLoudnessEvents.isEmpty)
+        #expect(!enableLoudnessEvents.isEmpty, "enableLoudnessEvents is empty. tap.events was \(tap.events)")
         // No intermediate states (e.g. 0.0 < gainScale < 1.0)
         let intermediateEnables = enableLoudnessEvents.filter { $0.gainScale > 0.0 && $0.gainScale < 1.0 }
-        #expect(intermediateEnables.isEmpty)
+        #expect(intermediateEnables.isEmpty, "Found intermediate enables: \(intermediateEnables)")
         
         // The final event must be fully enabled (gainScale == 1.0)
-        #expect(enableLoudnessEvents.last?.enabled == true)
-        #expect(enableLoudnessEvents.last?.gainScale == 1.0)
+        #expect(enableLoudnessEvents.last?.enabled == true, "Last event enabled was \(String(describing: enableLoudnessEvents.last?.enabled)), expected true")
+        #expect(enableLoudnessEvents.last?.gainScale == 1.0, "Last event gainScale was \(String(describing: enableLoudnessEvents.last?.gainScale)), expected 1.0")
+        
+        let offsetBeforeDisable = fix.engine.appliedLoudnessOffsets[fix.device.uid] ?? 0.0
+        #expect(offsetBeforeDisable > 0.0, "offsetBeforeDisable was \(offsetBeforeDisable), expected > 0.0")
         
         tap.clearEvents()
         
@@ -130,7 +133,7 @@ struct LoudnessVolumeCompensationTests {
         
         // Volume should return back to original 0.5 immediately
         let volAfterDisable = fix.deviceVolume.volumes[fix.device.id] ?? 0.5
-        #expect(abs(volAfterDisable - 0.5) < 0.001)
+        #expect(abs(volAfterDisable - 0.5) < 0.001, "volAfterDisable was \(volAfterDisable), expected 0.5. tap.events was \(tap.events)")
         
         let disableLoudnessEvents = tap.events.compactMap { event -> (enabled: Bool, gainScale: Float)? in
             if case let .updateLoudnessCompensation(_, enabled, _, gainScale) = event {
@@ -138,13 +141,13 @@ struct LoudnessVolumeCompensationTests {
             }
             return nil
         }
-        #expect(!disableLoudnessEvents.isEmpty)
+        #expect(!disableLoudnessEvents.isEmpty, "disableLoudnessEvents is empty. tap.events was \(tap.events)")
         let intermediateDisables = disableLoudnessEvents.filter { $0.gainScale > 0.0 && $0.gainScale < 1.0 }
-        #expect(intermediateDisables.isEmpty)
+        #expect(intermediateDisables.isEmpty, "Found intermediate disables: \(intermediateDisables)")
         
         // The final event must be fully disabled (enabled == false, gainScale == 0.0)
-        #expect(disableLoudnessEvents.last?.enabled == false)
-        #expect(disableLoudnessEvents.last?.gainScale == 0.0)
+        #expect(disableLoudnessEvents.last?.enabled == false, "Last event enabled was \(String(describing: disableLoudnessEvents.last?.enabled)), expected false")
+        #expect(disableLoudnessEvents.last?.gainScale == 0.0, "Last event gainScale was \(String(describing: disableLoudnessEvents.last?.gainScale)), expected 0.0")
     }
     
     @Test("Toggling loudness on software device does NOT adjust system volume and updates filter gains instantly")
@@ -174,7 +177,6 @@ struct LoudnessVolumeCompensationTests {
             }
             return nil
         }
-        
         // Filter scale events should show instant update to 1.0 without intermediate steps
         #expect(!enableEvents.isEmpty)
         #expect(!enableEvents.contains { $0 > 0.0 && $0 < 1.0 })
@@ -194,10 +196,44 @@ struct LoudnessVolumeCompensationTests {
             }
             return nil
         }
-        
         #expect(!disableEvents.isEmpty)
         #expect(!disableEvents.contains { $0.gainScale > 0.0 && $0.gainScale < 1.0 })
         #expect(disableEvents.last?.enabled == false)
         #expect(disableEvents.last?.gainScale == 0.0)
+    }
+
+    @Test("Dynamic loudness offset converges to zero at 100% volume")
+    func dynamicOffsetConvergesToZero() async throws {
+        let fix = makeFixture(backend: .hardware)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        
+        // 1. Enable loudness at 50% volume (0.5)
+        fix.deviceVolume.volumes[fix.device.id] = 0.5
+        fix.engine.setLoudnessCompensationEnabled(for: fix.device.uid, enabled: true)
+        try await Task.sleep(nanoseconds: 10_000_000)
+        
+        // Verify that offset was computed and system volume was boosted
+        let volAfterEnable = fix.deviceVolume.volumes[fix.device.id] ?? 0.5
+        #expect(volAfterEnable > 0.5)
+        
+        // 2. Set hardware volume to 1.0 (representing dragging the slider to 100%)
+        // Trigger the onVolumeChanged callback (mocking OS notification)
+        fix.deviceVolume.volumes[fix.device.id] = 1.0
+        fix.deviceVolume.onVolumeChanged?(fix.device.id, 1.0)
+        try await Task.sleep(nanoseconds: 10_000_000)
+        
+        // Offset should have updated dynamically to 0.0, and DSP should be bypassed
+        let tap = try #require(fix.lastTap())
+        let loudnessEvents = tap.events.compactMap { event -> (enabled: Bool, volume: Float)? in
+            if case let .updateLoudnessCompensation(vol, enabled, _, _) = event {
+                return (enabled, vol)
+            }
+            return nil
+        }
+        
+        #expect(!loudnessEvents.isEmpty)
+        let lastEvent = try #require(loudnessEvents.last)
+        #expect(lastEvent.enabled == false) // Bypassed
+        #expect(abs(lastEvent.volume - 1.0) < 0.001) // Original volume is 1.0
     }
 }
