@@ -413,6 +413,42 @@ struct AudioEngineTapInitialStateTests {
         }
         #expect(postActivateAutoEQ.contains(where: { $0 == nil }))
     }
+
+    @Test("Loudness Compensation settings are re-applied to tap after device switches")
+    func loudnessCompensationReappliedOnSwitch() async throws {
+        let fix = makeFixture()
+        let secondDevice = AudioDevice(
+            id: AudioDeviceID(100),
+            uid: "uid-second-device",
+            name: "Second Output",
+            icon: nil,
+            supportsAutoEQ: true
+        )
+        fix.deviceMonitor.addOutputDevice(secondDevice)
+        
+        // 1. Initial routing (device is "uid-test", default loudness compensation is false)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.clearEvents()
+        
+        // 2. Enable loudness compensation for the second device
+        fix.settings.setLoudnessCompensationEnabled(for: secondDevice.uid, to: true)
+        
+        // 3. Switch device to the second device
+        fix.engine.setDevice(for: fix.app, deviceUID: secondDevice.uid)
+        
+        // Allow tasks to run
+        try await Task.sleep(nanoseconds: 50_000_000)
+        
+        // 4. Verify that updateLoudnessCompensation(enabled: true) was called on the tap
+        let loudnessEvents = tap.events.compactMap { event -> (volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float)? in
+            if case let .updateLoudnessCompensation(volume, enabled, referencePhon, gainScale) = event {
+                return (volume, enabled, referencePhon, gainScale)
+            }
+            return nil
+        }
+        #expect(loudnessEvents.contains(where: { $0.enabled == true }))
+    }
 }
 
 // MARK: - Helpers
