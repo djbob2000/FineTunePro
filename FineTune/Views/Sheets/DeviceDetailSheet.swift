@@ -202,7 +202,7 @@ struct DeviceDetailSheet: View {
                 .scaleEffect(0.8)
                 .labelsHidden()
             }
-            Text("Normalize volume across apps and content for this device.")
+            Text("Keep volume levels consistent across all apps and media.")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

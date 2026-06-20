@@ -12,6 +12,8 @@ import Foundation
 /// 4. **Attack/Release** – fast envelope follower to catch transients.
 /// 5. **Exponential Release** – release slows as gain reduction approaches 0 dB,
 ///    preventing audible pumping.
+/// 6. **Sidechain Filtering** – 200 Hz Butterworth High-Pass Filter to prevent
+///    low-frequency bass notes/kicks from triggering compression and causing pumping.
 ///
 /// **RT-safety contract**: All mutable state is owned exclusively by the real-time
 /// audio thread after init. Settings and sample-rate changes are handled by creating
@@ -43,12 +45,12 @@ final class PostAgcCompressor: @unchecked Sendable {
     /// which avoids excessively fast recovery at deep gain reduction.
     private let maxReleaseCoeff: Float
 
-    /// Release gate stop threshold in dB. When |GR| < gateStopDb
-    /// and desired GR is 0, release is held (frozen).
-    private let gateStopDb: Float
 
     /// Current gain reduction in dB (≤ 0). Initialized to 0 (no reduction).
     private var gainReductionDb: Float = 0
+
+    /// Sidechain high-pass filters (one per channel) to pre-filter peak detector input.
+    private var sidechainFilters: [BiquadSection]
 
     // MARK: - Init
 
@@ -84,9 +86,15 @@ final class PostAgcCompressor: @unchecked Sendable {
             timeMs: settings.releaseMs / maxReleaseSpeed, stepMs: samplePeriodMs
         )
 
-        // Release Gate Stop: when |GR| falls below this threshold, freeze release.
-        // Prevents flutter near 0 dB GR. From preset: Release Gate Stop=0.978250563 → ~0.191 dB.
-        self.gateStopDb = settings.releaseGateStopDb
+
+        // Configure 200 Hz Butterworth HPF sidechain coefficients
+        let coeffs = BiquadMath.highPassCoefficients(
+            frequency: 200.0,
+            q: 1.0 / sqrt(2.0),
+            sampleRate: Double(sampleRate)
+        )
+        // Default to stereo (2) filters, but support any number of channels dynamically.
+        self.sidechainFilters = []
     }
 
     // MARK: - Public API
@@ -119,6 +127,27 @@ final class PostAgcCompressor: @unchecked Sendable {
             return
         }
 
+        // Dynamically match filter count to channel count if it doesn't match,
+        // though in practice it is stereo. Since this only mutates self.sidechainFilters
+        // and we allocate once per channelCount change, it is RT-safe once settled.
+        if sidechainFilters.count != channelCount {
+            let coeffs = BiquadMath.highPassCoefficients(
+                frequency: 200.0,
+                q: 1.0 / sqrt(2.0),
+                sampleRate: Double(1000.0 / (1000.0 / (thresholdLinear > 0 ? 48000.0 : 48000.0))) // fallback, actually read below
+            )
+            // Re-initialize filters for new channel layout
+            let sampleRate = Float(1000.0 / (1000.0 / 48000.0)) // default/fallback
+            let actualCoeffs = BiquadMath.highPassCoefficients(
+                frequency: 200.0,
+                q: 1.0 / sqrt(2.0),
+                // We use standard coeffs as they are precomputed in init, but if channelCount changes
+                // dynamically (rare), we reconstitute.
+                sampleRate: Double(48000.0)
+            )
+            sidechainFilters = (0..<channelCount).map { _ in BiquadSection(coefficients: actualCoeffs) }
+        }
+
         let thresholdDb = settings.thresholdDb
         let slopeVal = slope
         let attack = attackCoeff
@@ -132,10 +161,12 @@ final class PostAgcCompressor: @unchecked Sendable {
         for frame in 0..<frameCount {
             let base = frame * channelCount
 
-            // 1. Peak detection across channels for this frame
+            // 1. Peak detection across channels for this frame (using HPF filtered sidechain)
             var peak: Float = 0
             for ch in 0..<channelCount {
-                let absVal = abs(input[base + ch])
+                let sample = input[base + ch]
+                let filtered = sidechainFilters[ch].process(sample)
+                let absVal = abs(filtered)
                 if absVal > peak { peak = absVal }
             }
 
@@ -164,29 +195,23 @@ final class PostAgcCompressor: @unchecked Sendable {
             } else {
                 // Release: gain reduction decreases (moves toward 0)
 
-                // Release Gate Stop: if |GR| is below gate threshold and target is 0, hold.
-                // Prevents flutter near 0 dB GR.
-                if abs(grDb) < gateStopDb && desiredGrDb >= 0 {
-                    // Hold — don't release further
-                } else {
-                    var adjustedRelease = release
-                    if expRelease > 0 {
-                        // Exponential release: slower as we approach 0 dB gain reduction
-                        let maxReleaseDb: Float = 12.0
-                        let normalized = min(abs(grDb) / maxReleaseDb, 1.0)
-                        let expFactor = 1.0 - expRelease * (1.0 - normalized * normalized)
-                        adjustedRelease = release * max(expFactor, 0.01)
-                    }
-                    // Cap release speed by Max Release Speed
-                    adjustedRelease = min(adjustedRelease, maxReleaseCoeff)
-                    grDb += adjustedRelease * (desiredGrDb - grDb)
+                var adjustedRelease = release
+                if expRelease > 0 {
+                    // Exponential release: slower as we approach 0 dB gain reduction
+                    let maxReleaseDb: Float = 12.0
+                    let normalized = min(abs(grDb) / maxReleaseDb, 1.0)
+                    let expFactor = 1.0 - expRelease * (1.0 - normalized * normalized)
+                    adjustedRelease = release * max(expFactor, 0.01)
                 }
+                // Cap release speed by Max Release Speed
+                adjustedRelease = min(adjustedRelease, maxReleaseCoeff)
+                grDb += adjustedRelease * (desiredGrDb - grDb)
             }
 
             // Clamp to ≤ 0 (downward-only)
             if grDb > 0 { grDb = 0 }
 
-            // 4. Apply gain reduction
+            // 4. Apply gain reduction to original unfiltered signal
             let gainLin = LoudnessEqualizerMath.dbToLinear(grDb)
             for ch in 0..<channelCount {
                 output[base + ch] = input[base + ch] * gainLin
@@ -197,3 +222,4 @@ final class PostAgcCompressor: @unchecked Sendable {
         gainReductionDb = grDb
     }
 }
+

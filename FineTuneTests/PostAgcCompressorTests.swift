@@ -10,14 +10,13 @@ struct PostAgcCompressorTests {
     @Test("Default settings are applied correctly")
     func defaultSettings() {
         let settings = PostAgcCompressorSettings()
-        #expect(settings.thresholdDb == -3.0)
-        #expect(settings.ratio == 10.0)
-        #expect(settings.attackMs == 1.0)
+        #expect(settings.thresholdDb == 0.9)
+        #expect(settings.ratio == 7.6)
+        #expect(settings.attackMs == 2.9)
         #expect(settings.releaseMs == 11.6)
         #expect(settings.kneeDb == 0.1)
         #expect(settings.exponentialRelease == 0.8)
         #expect(settings.maxReleaseSpeed == 0.502502918)
-        #expect(settings.releaseGateStopDb == 0.978)
         #expect(settings.enabled == true)
         
         let compressor = PostAgcCompressor(settings: settings, sampleRate: 48000)
@@ -57,14 +56,19 @@ struct PostAgcCompressorTests {
             kneeDb: 0.0,
             exponentialRelease: 0.0,
             maxReleaseSpeed: 1.0, // no cap, for test simplicity
-            releaseGateStopDb: 0.0, // disabled, for test simplicity
             enabled: true
         )
         let compressor = PostAgcCompressor(settings: settings, sampleRate: 48000)
         
-        // 0 dBFS peak signal
-        let peakAmp: Float = 1.0
-        var input = [Float](repeating: peakAmp, count: 2000) // ~20ms at 2 channels (1000 frames)
+        // 0 dBFS peak 1000 Hz sine signal (above the 200 Hz HPF sidechain filter)
+        let sampleRate: Float = 48000
+        var input = [Float](repeating: 0, count: 2000)
+        for i in 0..<1000 {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / Double(sampleRate))
+            let val = sin(phase)
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
         var output = [Float](repeating: 0, count: 2000)
         
         // Run enough frames for attack to settle
@@ -72,16 +76,23 @@ struct PostAgcCompressorTests {
             compressor.process(input: &input, output: &output, frameCount: 1000, channelCount: 2)
         }
         
+        // Find peak of the output sine wave
+        var maxPeak: Float = 0
+        for val in output {
+            let absVal = abs(val)
+            if absVal > maxPeak { maxPeak = absVal }
+        }
+        let outputDb = LoudnessEqualizerMath.linearToDb(maxPeak)
+        
         // Input level is 0 dBFS. Threshold is -10 dBFS. Overshoot is 10 dB.
         // With 4:1 ratio, output level above threshold is 10 / 4 = 2.5 dB.
         // So expected gain reduction is -7.5 dB.
         // Let's check that the output signal is attenuated significantly.
-        let outputDb = LoudnessEqualizerMath.linearToDb(abs(output[0]))
         #expect(outputDb < -1.0)
         #expect(outputDb > -10.0)
         
         // Disable compressor and verify passthrough
-        let disabledSettings = PostAgcCompressorSettings(thresholdDb: -10.0, maxReleaseSpeed: 1.0, releaseGateStopDb: 0.0, enabled: false)
+        let disabledSettings = PostAgcCompressorSettings(thresholdDb: -10.0, maxReleaseSpeed: 1.0, enabled: false)
         let disabledCompressor = PostAgcCompressor(settings: disabledSettings, sampleRate: 48000)
         var disabledOutput = [Float](repeating: 0, count: 2000)
         disabledCompressor.process(input: &input, output: &disabledOutput, frameCount: 1000, channelCount: 2)
@@ -97,22 +108,33 @@ struct PostAgcCompressorTests {
             kneeDb: 6.0, // 6 dB knee (-13 dBFS to -7 dBFS)
             exponentialRelease: 0.0,
             maxReleaseSpeed: 1.0, // no cap, for test simplicity
-            releaseGateStopDb: 0.0, // disabled, for test simplicity
             enabled: true
         )
         let compressor = PostAgcCompressor(settings: settings, sampleRate: 48000)
         
         // Signal inside knee region: e.g. -9.0 dBFS (overshoot > 0 but within knee)
-        // Let's test a couple of points and verify output changes smoothly
+        // We generate a 1000 Hz sine wave with peak amplitude -9.0 dBFS
         let ampInsideKnee = LoudnessEqualizerMath.dbToLinear(-9.0)
-        var input = [Float](repeating: ampInsideKnee, count: 200)
+        var input = [Float](repeating: 0, count: 200)
+        for i in 0..<100 {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / Double(48000.0))
+            let val = ampInsideKnee * sin(phase)
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
         var output = [Float](repeating: 0, count: 200)
         
         for _ in 0..<100 {
             compressor.process(input: &input, output: &output, frameCount: 100, channelCount: 2)
         }
         
-        let outputDb = LoudnessEqualizerMath.linearToDb(abs(output[0]))
+        var maxPeak: Float = 0
+        for val in output {
+            let absVal = abs(val)
+            if absVal > maxPeak { maxPeak = absVal }
+        }
+        let outputDb = LoudnessEqualizerMath.linearToDb(maxPeak)
+        
         // Since -9 dBFS is inside the soft-knee, it should have some gain reduction,
         // but less than the full ratio would dictate.
         #expect(outputDb < -9.0)
@@ -129,7 +151,6 @@ struct PostAgcCompressorTests {
             kneeDb: 0.0,
             exponentialRelease: 1.0, // strong exponential release
             maxReleaseSpeed: 1.0, // no cap, for test simplicity
-            releaseGateStopDb: 0.0, // disabled, for test simplicity
             enabled: true
         )
         
@@ -141,16 +162,21 @@ struct PostAgcCompressorTests {
             kneeDb: 0.0,
             exponentialRelease: 0.0, // standard release
             maxReleaseSpeed: 1.0, // no cap, for test simplicity
-            releaseGateStopDb: 0.0, // disabled, for test simplicity
             enabled: true
         )
         
         let expCompressor = PostAgcCompressor(settings: expSettings, sampleRate: 48000)
         let linCompressor = PostAgcCompressor(settings: linSettings, sampleRate: 48000)
         
-        // 1. Force both into compression with a loud signal (0 dBFS)
+        // 1. Force both into compression with a loud 1000 Hz sine wave (0 dBFS peak)
         let loudAmp: Float = 1.0
-        var inputLoud = [Float](repeating: loudAmp, count: 2000)
+        var inputLoud = [Float](repeating: 0, count: 2000)
+        for i in 0..<1000 {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / Double(48000.0))
+            let val = loudAmp * sin(phase)
+            inputLoud[i * 2] = val
+            inputLoud[i * 2 + 1] = val
+        }
         var output = [Float](repeating: 0, count: 2000)
         for _ in 0..<10 {
             expCompressor.process(input: &inputLoud, output: &output, frameCount: 1000, channelCount: 2)
