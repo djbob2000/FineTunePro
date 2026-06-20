@@ -51,8 +51,6 @@ final class AudioEngine {
     private var tapRecoveryCooldownUntil: [pid_t: Date] = [:]  // Prevents tap recreation thrashing
     /// Track the applied volume offset (in scalar range 0.0...1.0) per device UID
     private var appliedLoudnessOffsets: [String: Float] = [:]
-    /// Track active volume ramp tasks per device UID to avoid concurrent overrides
-    private var volumeRampTasks: [String: Task<Void, Never>] = [:]
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "AudioEngine")
 
     // MARK: - Priority State Machine
@@ -594,10 +592,6 @@ final class AudioEngine {
         stopHealthMonitor()
         processMonitor.stop()
         deviceMonitor.stop()
-        for task in volumeRampTasks.values {
-            task.cancel()
-        }
-        volumeRampTasks.removeAll()
         for tap in taps.values {
             tap.invalidate()
         }
@@ -626,10 +620,6 @@ final class AudioEngine {
         appliedPIDs.removeAll()
         appDeviceRouting.removeAll()
         followsDefault.removeAll()
-        for task in volumeRampTasks.values {
-            task.cancel()
-        }
-        volumeRampTasks.removeAll()
         appliedLoudnessOffsets.removeAll()
 
         // 3. Clear cached per-app audio state
@@ -749,66 +739,6 @@ final class AudioEngine {
         }
     }
 
-    private func rampLoudnessCompensation(
-        for deviceUID: String,
-        deviceID: AudioDeviceID?,
-        fromVolume: Float?,
-        toVolume: Float?,
-        enabling: Bool,
-        referencePhon: Double,
-        backend: VolumeControlTier?
-    ) {
-        // Cancel any existing ramp task for this device
-        volumeRampTasks[deviceUID]?.cancel()
-        
-        let task = Task { @MainActor in
-            let duration: TimeInterval = 0.150
-            // Use 50ms steps (3 steps total) to avoid overloading CoreAudio driver/hardware volume controls
-            let stepInterval: TimeInterval = 0.050
-            let steps = Int(duration / stepInterval)
-            
-            // Only step volume for hardware devices. For slow backends like DDC, only update at transition boundaries
-            let stepVolume = (backend == .hardware)
-            
-            // If disabling and not stepping volume, set the final lower volume immediately at the start of transition
-            if !enabling, !stepVolume, let deviceID, let toVol = toVolume {
-                deviceVolumeMonitor.setVolume(for: deviceID, to: toVol)
-            }
-            
-            for step in 1...steps {
-                guard !Task.isCancelled else { return }
-                
-                let progress = Float(step) / Float(steps)
-                
-                if stepVolume, let deviceID, let fromVol = fromVolume, let toVol = toVolume {
-                    let currentStepVolume = fromVol + (toVol - fromVol) * progress
-                    deviceVolumeMonitor.setVolume(for: deviceID, to: currentStepVolume)
-                }
-                
-                // Update DSP gainScale
-                let gainScale = enabling ? progress : (1.0 - progress)
-                // During the ramp, we keep the filters enabled (true)
-                updateTapsLoudness(deviceUID: deviceUID, enabled: true, referencePhon: referencePhon, gainScale: gainScale)
-                
-                try? await Task.sleep(for: .milliseconds(50))
-            }
-            
-            if !Task.isCancelled {
-                // If enabling and not stepping volume, set the final higher volume at the end of transition
-                if enabling, !stepVolume, let deviceID, let toVol = toVolume {
-                    deviceVolumeMonitor.setVolume(for: deviceID, to: toVol)
-                } else if stepVolume, let deviceID, let toVol = toVolume {
-                    deviceVolumeMonitor.setVolume(for: deviceID, to: toVol)
-                }
-                
-                let finalGainScale: Float = enabling ? 1.0 : 0.0
-                updateTapsLoudness(deviceUID: deviceUID, enabled: enabling, referencePhon: referencePhon, gainScale: finalGainScale)
-                
-                volumeRampTasks.removeValue(forKey: deviceUID)
-            }
-        }
-        volumeRampTasks[deviceUID] = task
-    }
 
 
     private func applyTapOutputState(to tap: any ProcessTapControlling, for pid: pid_t, deviceUIDs: [String]? = nil) {
@@ -915,16 +845,9 @@ final class AudioEngine {
         settingsManager.setLoudnessCompensationEnabled(for: deviceUID, to: enabled)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         
-        var startVol: Float? = nil
-        var endVol: Float? = nil
-        var deviceID: AudioDeviceID? = nil
-        var backend: VolumeControlTier? = nil
-        
         if let device = deviceMonitor.device(for: deviceUID) {
             let b = outputVolumeBackend(for: device.id)
-            backend = b
             if b == .hardware || b == .ddc {
-                deviceID = device.id
                 let currentVolume = deviceVolumeMonitor.volumes[device.id] ?? 1.0
                 if enabled {
                     let offsetScalar: Float
@@ -935,26 +858,18 @@ final class AudioEngine {
                         offsetScalar = Float(peakDB / 100.0)
                         appliedLoudnessOffsets[deviceUID] = offsetScalar
                     }
-                    startVol = currentVolume
-                    endVol = min(1.0, currentVolume + offsetScalar)
+                    let endVol = min(1.0, currentVolume + offsetScalar)
+                    deviceVolumeMonitor.setVolume(for: device.id, to: endVol)
                 } else {
                     let offsetScalar = appliedLoudnessOffsets[deviceUID] ?? 0.0
                     appliedLoudnessOffsets[deviceUID] = nil
-                    startVol = currentVolume
-                    endVol = max(0.0, currentVolume - offsetScalar)
+                    let endVol = max(0.0, currentVolume - offsetScalar)
+                    deviceVolumeMonitor.setVolume(for: device.id, to: endVol)
                 }
             }
         }
         
-        rampLoudnessCompensation(
-            for: deviceUID,
-            deviceID: deviceID,
-            fromVolume: startVol,
-            toVolume: endVol,
-            enabling: enabled,
-            referencePhon: referencePhon,
-            backend: backend
-        )
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0)
     }
 
     func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
