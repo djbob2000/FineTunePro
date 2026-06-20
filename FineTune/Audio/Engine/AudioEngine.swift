@@ -825,6 +825,8 @@ final class AudioEngine {
     }
 
     private func tapInitialState(forApp app: AudioApp, primaryDeviceUID: String, deviceVolume: Float) -> TapInitialState {
+        // Build initial LoudnessEqualizerSettings (Smart Volume).
+        // Note: Populate other settings here if they become customizable per-device.
         var loudnessEqSettings = LoudnessEqualizerSettings()
         loudnessEqSettings.enabled = settingsManager.getLoudnessEqualizationEnabled(for: primaryDeviceUID)
         return TapInitialState(
@@ -879,6 +881,10 @@ final class AudioEngine {
         }
     }
 
+    /// Applies loudness equalization (Smart Volume) settings to the tap.
+    /// - Note: Currently, only the `enabled` field is loaded from the settings manager
+    ///   as other `LoudnessEqualizerSettings` fields are not customizable per-device.
+    ///   If per-device tuning fields are introduced in the future, populate them here.
     private func applyLoudnessEqualizationToTap(_ tap: any ProcessTapControlling) {
         guard let deviceUID = tap.currentDeviceUID else { return }
         var settings = LoudnessEqualizerSettings()
