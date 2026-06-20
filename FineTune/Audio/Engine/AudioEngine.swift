@@ -879,6 +879,13 @@ final class AudioEngine {
         }
     }
 
+    private func applyLoudnessEqualizationToTap(_ tap: any ProcessTapControlling) {
+        guard let deviceUID = tap.currentDeviceUID else { return }
+        var settings = LoudnessEqualizerSettings()
+        settings.enabled = settingsManager.getLoudnessEqualizationEnabled(for: deviceUID)
+        tap.updateLoudnessEqualization(settings)
+    }
+
     /// Sets the system default output device, routes followsDefault apps, and registers
     /// an echo so the resulting CoreAudio callback is consumed rather than treated as
     /// an external change.
@@ -946,6 +953,7 @@ final class AudioEngine {
                     try await tap.switchDevice(to: targetUID, preferredTapSourceDeviceUID: preferredTapSourceUID)
                     self.applyTapOutputState(to: tap, for: app.id, deviceUIDs: [targetUID])
                     self.applyAutoEQToTap(tap)
+                    self.applyLoudnessEqualizationToTap(tap)
                     self.logger.debug("Switched \(app.name) to device: \(targetUID)")
                 } catch {
                     self.logger.error("Failed to switch device for \(app.name): \(error.localizedDescription)")
@@ -1040,6 +1048,8 @@ final class AudioEngine {
                     let preferredTapSourceUID = preferredTapSourceDeviceUID(forOutputUIDs: deviceUIDs, isFollowsDefault: followsDefault.contains(app.id))
                     try await tap.updateDevices(to: deviceUIDs, preferredTapSourceDeviceUID: preferredTapSourceUID)
                     applyTapOutputState(to: tap, for: app.id, deviceUIDs: deviceUIDs)
+                    applyAutoEQToTap(tap)
+                    applyLoudnessEqualizationToTap(tap)
                     logger.debug("Updated \(app.name) to \(deviceUIDs.count) device(s)")
                 } catch {
                     logger.error("Failed to update devices for \(app.name): \(error.localizedDescription)")
@@ -1183,6 +1193,7 @@ final class AudioEngine {
                         try await existingTap.switchDevice(to: deviceUID, preferredTapSourceDeviceUID: preferredSource)
                         self.applyTapOutputState(to: existingTap, for: app.id, deviceUIDs: [deviceUID])
                         self.applyAutoEQToTap(existingTap)
+                        self.applyLoudnessEqualizationToTap(existingTap)
                     } catch {
                         self.logger.error("Failed to re-route \(app.name) to \(deviceUID): \(error.localizedDescription)")
                         self.logger.info("Falling back to recreateTap for \(app.name)")
@@ -1328,6 +1339,7 @@ final class AudioEngine {
                     try await tap.switchDevice(to: targetUID, preferredTapSourceDeviceUID: preferredTapSourceUID)
                     self.applyTapOutputState(to: tap, for: app.id, deviceUIDs: [targetUID])
                     self.applyAutoEQToTap(tap)
+                    self.applyLoudnessEqualizationToTap(tap)
                 } catch {
                     self.logger.error("Failed to switch \(app.name) to \(targetUID): \(error.localizedDescription)")
                     self.logger.info("Falling back to recreateTap for \(app.name)")
@@ -1410,6 +1422,7 @@ final class AudioEngine {
                         try await tap.switchDevice(to: fallbackUID, preferredTapSourceDeviceUID: preferredTapSourceUID, sourceDeviceDead: true)
                         self.applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: [fallbackUID])
                         self.applyAutoEQToTap(tap)
+                        self.applyLoudnessEqualizationToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) to fallback: \(error.localizedDescription)")
                         self.logger.info("Falling back to recreateTap for \(tap.app.name)")
@@ -1424,6 +1437,8 @@ final class AudioEngine {
                         let preferredTapSourceUID = self.preferredTapSourceDeviceUID(forOutputUIDs: remainingUIDs, isFollowsDefault: self.followsDefault.contains(tap.app.id))
                         try await tap.updateDevices(to: remainingUIDs, preferredTapSourceDeviceUID: preferredTapSourceUID, sourceDeviceDead: true)
                         self.applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: remainingUIDs)
+                        self.applyAutoEQToTap(tap)
+                        self.applyLoudnessEqualizationToTap(tap)
                         self.logger.debug("Removed \(deviceName) from \(tap.app.name) multi-device output")
                     } catch {
                         self.logger.error("Failed to update \(tap.app.name) devices: \(error.localizedDescription)")
@@ -1486,6 +1501,7 @@ final class AudioEngine {
                         try await tap.switchDevice(to: deviceUID, preferredTapSourceDeviceUID: preferredTapSourceUID)
                         self.applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: [deviceUID])
                         self.applyAutoEQToTap(tap)
+                        self.applyLoudnessEqualizationToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) back to \(deviceName): \(error.localizedDescription)")
                         self.logger.info("Falling back to recreateTap for \(tap.app.name)")
