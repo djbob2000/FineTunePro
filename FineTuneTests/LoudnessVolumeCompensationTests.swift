@@ -98,7 +98,7 @@ struct LoudnessVolumeCompensationTests {
         // 2. Enable loudness
         fix.engine.setLoudnessCompensationEnabled(for: fix.device.uid, enabled: true)
         
-        // Wait for the 300ms volume ramp task to complete dynamically (up to 10 seconds)
+        // Wait for the 150ms volume ramp task to complete dynamically (up to 10 seconds)
         let enableStart = Date()
         var enableLoudnessEvents: [(enabled: Bool, gainScale: Float)] = []
         while Date().timeIntervalSince(enableStart) < 10.0 {
@@ -132,7 +132,7 @@ struct LoudnessVolumeCompensationTests {
         // 3. Disable loudness
         fix.engine.setLoudnessCompensationEnabled(for: fix.device.uid, enabled: false)
         
-        // Wait for the 300ms volume ramp task to complete dynamically
+        // Wait for the 150ms volume ramp task to complete dynamically
         let disableStart = Date()
         var disableLoudnessEvents: [(enabled: Bool, gainScale: Float)] = []
         while Date().timeIntervalSince(disableStart) < 10.0 {
@@ -176,7 +176,7 @@ struct LoudnessVolumeCompensationTests {
         // 2. Enable loudness
         fix.engine.setLoudnessCompensationEnabled(for: fix.device.uid, enabled: true)
         
-        // Wait for the 300ms transition to complete dynamically (up to 10 seconds)
+        // Wait for the 150ms transition to complete dynamically (up to 10 seconds)
         let enableStart = Date()
         var enableEvents: [Float] = []
         while Date().timeIntervalSince(enableStart) < 10.0 {
