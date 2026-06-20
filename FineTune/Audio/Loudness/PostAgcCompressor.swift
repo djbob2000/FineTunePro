@@ -32,6 +32,7 @@ final class PostAgcCompressor: @unchecked Sendable {
         let attackMs: Float
         let releaseMs: Float
         let maxReleaseSpeed: Float
+        let exponentialRelease: Float
         
         // Mutable state (RT thread only)
         var gainReductionDb: Float = 0
@@ -43,12 +44,13 @@ final class PostAgcCompressor: @unchecked Sendable {
         private var releaseCoeff: Float = 0
         private var maxReleaseCoeff: Float = 0
         
-        init(thresholdOffsetDb: Float, ratio: Float, attackMs: Float, releaseMs: Float, maxReleaseSpeed: Float, sampleRate: Float) {
+        init(thresholdOffsetDb: Float, ratio: Float, attackMs: Float, releaseMs: Float, maxReleaseSpeed: Float, exponentialRelease: Float, sampleRate: Float) {
             self.thresholdOffsetDb = thresholdOffsetDb
             self.ratio = ratio
             self.attackMs = attackMs
             self.releaseMs = releaseMs
             self.maxReleaseSpeed = maxReleaseSpeed
+            self.exponentialRelease = exponentialRelease
             updateSampleRate(sampleRate)
         }
         
@@ -82,8 +84,7 @@ final class PostAgcCompressor: @unchecked Sendable {
                 gainReductionDb += attackCoeff * (desiredGrDb - gainReductionDb)
             } else {
                 var adjustedRelease = releaseCoeff
-                // Exponential release: factor is 0.8
-                let expRelease: Float = 0.8
+                let expRelease = exponentialRelease
                 let maxReleaseDb: Float = 12.0
                 let normalized = min(abs(gainReductionDb) / maxReleaseDb, 1.0)
                 let expFactor = 1.0 - expRelease * (1.0 - normalized * normalized)
@@ -116,6 +117,7 @@ final class PostAgcCompressor: @unchecked Sendable {
             attackMs: 67.0,
             releaseMs: 1080.0,
             maxReleaseSpeed: settings.maxReleaseSpeed,
+            exponentialRelease: settings.exponentialRelease,
             sampleRate: sampleRate
         )
         self.band2 = CompressorBand(
@@ -124,6 +126,7 @@ final class PostAgcCompressor: @unchecked Sendable {
             attackMs: 52.0,
             releaseMs: 599.0,
             maxReleaseSpeed: settings.maxReleaseSpeed,
+            exponentialRelease: settings.exponentialRelease,
             sampleRate: sampleRate
         )
         self.band3 = CompressorBand(
@@ -132,6 +135,7 @@ final class PostAgcCompressor: @unchecked Sendable {
             attackMs: settings.attackMs,
             releaseMs: settings.releaseMs,
             maxReleaseSpeed: settings.maxReleaseSpeed,
+            exponentialRelease: settings.exponentialRelease,
             sampleRate: sampleRate
         )
     }
@@ -191,7 +195,10 @@ final class PostAgcCompressor: @unchecked Sendable {
             var peakBand3: Float = 0
 
             for ch in 0..<channelCount {
-                let sample = input[base + ch]
+                var sample = input[base + ch]
+                if sample.isNaN {
+                    sample = 0.0
+                }
                 let (low200, high200) = crossover200Hz[ch].process(sample)
                 let (low77, high77) = crossover77Hz[ch].process(low200)
 

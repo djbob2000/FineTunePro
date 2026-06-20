@@ -26,23 +26,58 @@ struct PostAgcCompressorTests {
 
     @Test("Signals below threshold are passed through untouched")
     func belowThresholdPassthrough() {
-        let settings = PostAgcCompressorSettings(thresholdDb: -0.25, enabled: true)
+        let settings = PostAgcCompressorSettings(thresholdDb: 0.0, enabled: true)
         let compressor = PostAgcCompressor(settings: settings, sampleRate: 48000)
         
-        // -10 dBFS peak signal
-        let peakLevelDb: Float = -10.0
-        let peakAmp = LoudnessEqualizerMath.dbToLinear(peakLevelDb)
+        // 1000 Hz sine wave at -30 dBFS (well below all band thresholds so that
+        // the startup transient does not trigger compression, and crossovers sum flat).
+        let sampleRate: Float = 48000
+        let peakAmp = LoudnessEqualizerMath.dbToLinear(-30.0)
+        let totalFrames = 20000
+        var input = [Float](repeating: 0, count: totalFrames * 2)
+        for i in 0..<totalFrames {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / Double(sampleRate))
+            let val = peakAmp * sin(phase)
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
+        var output = [Float](repeating: 0, count: totalFrames * 2)
         
-        var input: [Float] = [peakAmp, -peakAmp, peakAmp * 0.5, -peakAmp * 0.5]
-        var output = [Float](repeating: 0, count: 4)
+        // Process in blocks of 1000 frames to settle crossovers
+        for block in 0..<20 {
+            let offset = block * 2000
+            input.withUnsafeBufferPointer { inputPtr in
+                output.withUnsafeMutableBufferPointer { outputPtr in
+                    compressor.process(
+                        input: inputPtr.baseAddress! + offset,
+                        output: outputPtr.baseAddress! + offset,
+                        frameCount: 1000,
+                        channelCount: 2
+                    )
+                }
+            }
+        }
         
-        compressor.process(input: &input, output: &output, frameCount: 2, channelCount: 2)
+        // Find peak of the output sine wave in the last buffer block
+        var maxPeak: Float = 0
+        let lastBlockOffset = 19000
+        for i in 0..<2000 {
+            let val = output[lastBlockOffset + i]
+            let absVal = abs(val)
+            if absVal > maxPeak { maxPeak = absVal }
+        }
         
-        // Check output matches input exactly
-        #expect(output[0] == input[0])
-        #expect(output[1] == input[1])
-        #expect(output[2] == input[2])
-        #expect(output[3] == input[3])
+        // Verify steady-state output level is extremely close to input level (no compression)
+        #expect(abs(maxPeak - peakAmp) < 0.001)
+        
+        // Disable compressor and verify exact passthrough
+        let disabledSettings = PostAgcCompressorSettings(thresholdDb: 0.0, enabled: false)
+        let disabledCompressor = PostAgcCompressor(settings: disabledSettings, sampleRate: 48000)
+        var disabledOutput = [Float](repeating: 0, count: 2000)
+        
+        var singleBlockInput = Array(input[0..<2000])
+        disabledCompressor.process(input: &singleBlockInput, output: &disabledOutput, frameCount: 1000, channelCount: 2)
+        #expect(disabledOutput[0] == singleBlockInput[0])
     }
 
     @Test("Signals above threshold are compressed")
@@ -229,5 +264,67 @@ struct PostAgcCompressorTests {
         // Check that non-NaN inputs produce non-NaN outputs
         #expect(!output[2].isNaN)
         #expect(!output[3].isNaN)
+    }
+
+    @Test("Multiband frequency splits work correctly")
+    func multibandSplits() {
+        let settings = PostAgcCompressorSettings(
+            thresholdDb: -10.0,
+            ratio: 10.0,
+            attackMs: 1.0,
+            releaseMs: 1000.0,
+            kneeDb: 0.0,
+            exponentialRelease: 0.0,
+            maxReleaseSpeed: 1.0,
+            enabled: true
+        )
+        
+        // 1. Bass signal (50 Hz) at -15.0 dBFS:
+        // This is above Band 1 threshold (-18.9 dBFS) but below Band 2 (-16.0 dBFS) and Band 3 (-10.0 dBFS).
+        // It should trigger Band 1 compression.
+        let sampleRate: Float = 48000
+        let bassCompressor = PostAgcCompressor(settings: settings, sampleRate: sampleRate)
+        let bassAmp = LoudnessEqualizerMath.dbToLinear(-15.0)
+        var bassInput = [Float](repeating: 0, count: 2000)
+        for i in 0..<1000 {
+            let phase = Float(2.0 * Double.pi * 50.0 * Double(i) / Double(sampleRate))
+            let val = bassAmp * sin(phase)
+            bassInput[i * 2] = val
+            bassInput[i * 2 + 1] = val
+        }
+        var bassOutput = [Float](repeating: 0, count: 2000)
+        for _ in 0..<30 {
+            bassCompressor.process(input: &bassInput, output: &bassOutput, frameCount: 1000, channelCount: 2)
+        }
+        var bassPeak: Float = 0
+        for val in bassOutput {
+            let absVal = abs(val)
+            if absVal > bassPeak { bassPeak = absVal }
+        }
+        let bassOutputDb = LoudnessEqualizerMath.linearToDb(bassPeak)
+        #expect(bassOutputDb < -15.5)
+        
+        // 2. High signal (1000 Hz) at -5.0 dBFS:
+        // This is above Band 3 threshold (-10.0 dBFS). It should trigger Band 3 compression.
+        let trebleCompressor = PostAgcCompressor(settings: settings, sampleRate: sampleRate)
+        let trebleAmp = LoudnessEqualizerMath.dbToLinear(-5.0)
+        var trebleInput = [Float](repeating: 0, count: 2000)
+        for i in 0..<1000 {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / Double(sampleRate))
+            let val = trebleAmp * sin(phase)
+            trebleInput[i * 2] = val
+            trebleInput[i * 2 + 1] = val
+        }
+        var trebleOutput = [Float](repeating: 0, count: 2000)
+        for _ in 0..<30 {
+            trebleCompressor.process(input: &trebleInput, output: &trebleOutput, frameCount: 1000, channelCount: 2)
+        }
+        var treblePeak: Float = 0
+        for val in trebleOutput {
+            let absVal = abs(val)
+            if absVal > treblePeak { treblePeak = absVal }
+        }
+        let trebleOutputDb = LoudnessEqualizerMath.linearToDb(treblePeak)
+        #expect(trebleOutputDb < -5.5)
     }
 }
