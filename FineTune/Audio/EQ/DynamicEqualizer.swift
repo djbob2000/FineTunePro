@@ -61,7 +61,7 @@ final class DynamicEqualizer: @unchecked Sendable {
     static let targets: [Float] = [-2.0, 2.0, 1.0, -4.0, -8.0]
     
     // Silence threshold
-    static let silenceThresholdDB: Float = -20.0
+    static let silenceThresholdDB: Float = -50.0
     
     // Strength (amount of correction, default 0.5)
     var strength: Float = 0.5

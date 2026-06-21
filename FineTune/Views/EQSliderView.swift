@@ -113,10 +113,12 @@ struct EQSliderView: View {
             }
 
             VStack(spacing: 0) {
-                Text(frequency)
+                let displayFreq = frequency.hasSuffix("k") ? String(frequency.dropLast()) : frequency
+                let unit = frequency.hasSuffix("k") ? "kHz" : "Hz"
+                Text(displayFreq)
                     .font(DesignTokens.Typography.eqLabel)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
-                Text("Hz")
+                Text(unit)
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
@@ -125,7 +127,9 @@ struct EQSliderView: View {
             localGain = gain  // Initialize from binding
         }
         .onChange(of: gain) { _, newValue in
-            localGain = newValue  // Sync from external changes
+            withAnimation(.linear(duration: 0.05)) {
+                localGain = newValue  // Sync and animate external changes
+            }
         }
     }
 }

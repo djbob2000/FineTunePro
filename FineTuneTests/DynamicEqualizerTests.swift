@@ -63,15 +63,15 @@ struct DynamicEqualizerTests {
         }
     }
 
-    @Test("Silence gate threshold behavior (moves to 0dB gain below -20dBFS)")
+    @Test("Silence gate threshold behavior (moves to 0dB gain below -50dBFS)")
     func silenceGateBehavior() {
         let eq = DynamicEqualizer(sampleRate: 48000.0)
         
-        // 1. One band below -20 dBFS
-        // E.g. band 4 is at -40 dBFS (amplitude 0.01)
+        // 1. One band below -50 dBFS
+        // E.g. band 4 is at -60 dBFS (amplitude 0.001)
         // bands 0..3 are at -10 dBFS (amplitude 0.1)
         // Band 4 should be silent-gated (target gain = 0.0)
-        eq.envelopes = [0.1, 0.1, 0.1, 0.1, 0.01]
+        eq.envelopes = [0.1, 0.1, 0.1, 0.1, 0.001]
         let targets = eq.calculateTargetGains()
         #expect(targets[4] == 0.0)
         
@@ -84,8 +84,8 @@ struct DynamicEqualizerTests {
             #expect(abs(targets[i] - expected[i]) < 1e-4)
         }
         
-        // 2. All bands below silence threshold (-20 dBFS)
-        eq.envelopes = [0.005, 0.005, 0.005, 0.005, 0.005] // all -46 dBFS
+        // 2. All bands below silence threshold (-50 dBFS)
+        eq.envelopes = [0.001, 0.001, 0.001, 0.001, 0.001] // all -60 dBFS
         let allSilentTargets = eq.calculateTargetGains()
         for i in 0..<5 {
             #expect(allSilentTargets[i] == 0.0)
