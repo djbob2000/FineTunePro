@@ -148,4 +148,77 @@ struct DynamicEqualizerTests {
         // Output should be exactly equal to input
         #expect(output == input)
     }
+
+    @Test("Dynamic EQ response on different frequencies with different intensities")
+    func dynamicEQIntensityAndContinuity() {
+        let eq = DynamicEqualizer(sampleRate: 48000.0)
+        let frequencies = DynamicEqualizer.frequencies
+        
+        // We will test each target frequency
+        for (i, f0) in frequencies.enumerated() {
+            // Generate test signals at f0 with different intensities/amplitudes:
+            // 1. High intensity (amplitude 0.8)
+            // 2. Low intensity (amplitude 0.1)
+            
+            // To allow envelope and gains to settle, we run multiple blocks
+            let blockSize = 512
+            let blockCount = 30
+            
+            // --- 1. High Intensity ---
+            eq.reset()
+            for _ in 0..<blockCount {
+                var input = [Float](repeating: 0, count: blockSize * 2)
+                for frame in 0..<blockSize {
+                    let val = Float(0.8 * sin(2.0 * .pi * f0 * Double(frame) / 48000.0))
+                    input[frame * 2] = val
+                    input[frame * 2 + 1] = val
+                }
+                var output = [Float](repeating: 0, count: blockSize * 2)
+                eq.process(input: input, output: &output, frameCount: blockSize)
+            }
+            let gainHigh = eq.currentGains[i]
+            
+            // --- 2. Low Intensity ---
+            eq.reset()
+            for _ in 0..<blockCount {
+                var input = [Float](repeating: 0, count: blockSize * 2)
+                for frame in 0..<blockSize {
+                    let val = Float(0.1 * sin(2.0 * .pi * f0 * Double(frame) / 48000.0))
+                    input[frame * 2] = val
+                    input[frame * 2 + 1] = val
+                }
+                var output = [Float](repeating: 0, count: blockSize * 2)
+                eq.process(input: input, output: &output, frameCount: blockSize)
+            }
+            let gainLow = eq.currentGains[i]
+            
+            // Verify that the EQ adjusts (i.e. gain is different for different intensities)
+            #expect(abs(gainHigh - gainLow) > 0.05, "Gain for frequency \(f0) at high intensity (\(gainHigh) dB) should be different from low intensity (\(gainLow) dB)")
+            
+            // --- 3. Gating/Silence Test ---
+            // If we feed silence after high intensity, the EQ should not immediately/suddenly jump/reset to 0.
+            // It should equalize continuously or at least decay smoothly without sudden gating discontinuities.
+            eq.reset()
+            // First feed high intensity to establish a gain offset
+            for _ in 0..<blockCount {
+                var input = [Float](repeating: 0, count: blockSize * 2)
+                for frame in 0..<blockSize {
+                    let val = Float(0.8 * sin(2.0 * .pi * f0 * Double(frame) / 48000.0))
+                    input[frame * 2] = val
+                    input[frame * 2 + 1] = val
+                }
+                var output = [Float](repeating: 0, count: blockSize * 2)
+                eq.process(input: input, output: &output, frameCount: blockSize)
+            }
+            
+            // Now process a block of pure silence
+            var inputSilence = [Float](repeating: 0.0, count: blockSize * 2)
+            var outputSilence = [Float](repeating: 0, count: blockSize * 2)
+            eq.process(input: inputSilence, output: &outputSilence, frameCount: blockSize)
+            let gainAfterSilence = eq.currentGains[i]
+            
+            // Verify it did not suddenly reset to exactly 0.0 due to a hard silence gate
+            #expect(abs(gainAfterSilence) > 0.01, "EQ should continuously equalize and not suddenly drop to 0 on silence. Got \(gainAfterSilence) dB")
+        }
+    }
 }

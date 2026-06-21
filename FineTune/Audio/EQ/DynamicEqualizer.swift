@@ -164,29 +164,29 @@ final class DynamicEqualizer: @unchecked Sendable {
             return 20.0 * log10(env)
         }
         
-        // Find active bands above silence threshold
-        var activeIndices: [Int] = []
-        var activeSum: Float = 0.0
-        for i in 0..<5 {
-            if envDBs[i] >= Self.silenceThresholdDB {
-                activeIndices.append(i)
-                activeSum += envDBs[i]
-            }
+        let silenceThreshold = Self.silenceThresholdDB
+        let nominalLevel: Float = -20.0
+        let levelRange = nominalLevel - silenceThreshold
+        
+        // Calculate per-band continuous weight (allow it to exceed 1.0 for high volume levels)
+        let weights = envDBs.map { db -> Float in
+            max(0.0, min(1.5, (db - silenceThreshold) / levelRange))
         }
         
-        var targetGains: [Float] = [0, 0, 0, 0, 0]
-        if !activeIndices.isEmpty {
-            let avgDB = activeSum / Float(activeIndices.count)
-            for i in 0..<5 {
-                if activeIndices.contains(i) {
-                    let relativeLevel = envDBs[i] - avgDB
-                    let diff = Self.targets[i] - relativeLevel
-                    let target = diff * strength
-                    targetGains[i] = max(maxCutDB, min(maxBoostDB, target))
-                } else {
-                    targetGains[i] = 0.0
-                }
-            }
+        // Calculate weighted average DB
+        let weightedSum = zip(envDBs, weights).reduce(0.0) { $0 + $1.0 * $1.1 }
+        let weightSum = weights.reduce(0.0, +)
+        let avgDB = weightSum > 0.0 ? weightedSum / weightSum : silenceThreshold
+        
+        var targetGains = [Float](repeating: 0.0, count: 5)
+        for i in 0..<5 {
+            let relativeLevel = envDBs[i] - avgDB
+            let diff = Self.targets[i] - relativeLevel
+            let target = diff * strength
+            
+            // Scale target gain and clamp limits by the weight
+            let limitScale = weights[i]
+            targetGains[i] = max(maxCutDB * limitScale, min(maxBoostDB * limitScale, target * limitScale))
         }
         return targetGains
     }
