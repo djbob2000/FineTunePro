@@ -54,6 +54,9 @@ final class DynamicEqualizer: @unchecked Sendable {
     // 5 bands frequencies
     static let frequencies: [Double] = [38.0, 230.0, 4464.0, 5628.0, 17740.0]
     
+    // Live debug gains shared with the UI
+    nonisolated(unsafe) static var debugGains: [Float] = [0, 0, 0, 0, 0]
+    
     // Relative targets (StereoTool)
     static let targets: [Float] = [-2.0, 2.0, 1.0, -4.0, -8.0]
     
@@ -236,6 +239,9 @@ final class DynamicEqualizer: @unchecked Sendable {
                 sampleRate: sampleRate
             )
         }
+        
+        // Update shared debug gains for the UI
+        Self.debugGains = currentGains
         
         // 4. Process the peaking filter cascade on the input/output buffer
         if input != UnsafePointer(output) {

@@ -1,5 +1,6 @@
 // FineTune/Views/EQPanelView.swift
 import SwiftUI
+import Combine
 
 struct EQPanelView: View {
     @Binding var settings: EQSettings
@@ -20,7 +21,15 @@ struct EQPanelView: View {
     @State private var renamingPresetID: UUID?
     @FocusState private var isRenameFieldFocused: Bool
 
+    @State private var liveGains: [Float] = [0, 0, 0, 0, 0]
+
     private let frequencyLabels = ["32", "64", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+
+    private func frequencyLabel5Band(_ index: Int) -> String {
+        let labels = ["38Hz", "230Hz", "4.4kHz", "5.6kHz", "17.7kHz"]
+        guard index >= 0 && index < labels.count else { return "" }
+        return labels[index]
+    }
 
     // MARK: - Preset Matching
 
@@ -116,6 +125,30 @@ struct EQPanelView: View {
                 }
             }
             .zIndex(1)  // Ensure dropdown renders above sliders
+
+            if settings.isAutoEQEnabled {
+                HStack(spacing: 8) {
+                    Text("AutoEQ:")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    
+                    ForEach(0..<5, id: \.self) { i in
+                        Text(String(format: "%@: %+.1f dB", frequencyLabel5Band(i), liveGains[i]))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(liveGains[i] >= 0.1 ? Color.green : (liveGains[i] <= -0.1 ? Color.red : DesignTokens.Colors.textTertiary))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.black.opacity(0.2))
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
+                    self.liveGains = DynamicEqualizer.debugGains
+                }
+            }
 
             HStack(spacing: 0) {
                 ForEach(0..<10, id: \.self) { index in
