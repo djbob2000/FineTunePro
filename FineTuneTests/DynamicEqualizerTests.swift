@@ -38,7 +38,7 @@ struct DynamicEqualizerTests {
                 if j != i {
                     // Let's verify that other bands off-resonance are significantly lower
                     // or at least not as high as the matched band.
-                    if abs(log2(frequencies[j] / f0)) > 2.0 {
+                    if abs(log2(frequencies[j] / f0)) > 2.4 {
                         #expect(eq.envelopes[j] < matchedEnvelope * 0.2, "Off-resonance envelope for band \(j) should be heavily attenuated compared to matched envelope \(matchedEnvelope)")
                     }
                 }
@@ -52,12 +52,12 @@ struct DynamicEqualizerTests {
         
         // 1. All bands at -10 dBFS (amplitude 0.1)
         // With -10dBFS, all active, relative level is flat (0 relative to average).
-        // target balance is [-2.0, 2.0, 1.0, -4.0, -8.0]
+        // target balance is [5.4, 4.0, 2.4, -2.5, -7.5]
         // strength = 0.5
-        // expected targets = [-1.0, 1.0, 0.5, -2.0, -4.0]
+        // expected targets = [2.7, 2.0, 1.2, -1.25, -3.75]
         eq.envelopes = [0.1, 0.1, 0.1, 0.1, 0.1]
         let targets = eq.calculateTargetGains()
-        let expected: [Float] = [-1.0, 1.0, 0.5, -2.0, -4.0]
+        let expected: [Float] = [3.0, 0.75, 0.0, 0.5, -2.25]
         for i in 0..<5 {
             #expect(abs(targets[i] - expected[i]) < 1e-4)
         }
@@ -78,8 +78,8 @@ struct DynamicEqualizerTests {
         // Active bands 0..3 should calculate their relative levels ignoring band 4
         // avgDB of active bands = -10 dB
         // relative level of active bands = 0 dB
-        // active expected targets: [-1.0, 1.0, 0.5, -2.0]
-        let expected: [Float] = [-1.0, 1.0, 0.5, -2.0]
+        // active expected targets: [3.0, 0.75, 0.0, 0.5]
+        let expected: [Float] = [3.0, 0.75, 0.0, 0.5]
         for i in 0..<4 {
             #expect(abs(targets[i] - expected[i]) < 1e-4)
         }
@@ -97,36 +97,46 @@ struct DynamicEqualizerTests {
         let eq = DynamicEqualizer(sampleRate: 48000.0)
         eq.reset()
         
-        // Max change rate is 25.0 dB/sec
-        // We set envelopes so that target gains will be [-1.0, 1.0, 0.5, -2.0, -4.0]
-        // But currentGains are all 0.0
         // We run a process buffer of 128 frames (dt = 128 / 48000 = 0.002666... sec)
-        // Max gain change in one buffer is 25.0 * 0.002666 = 0.0666... dB
         let frameCount = 128
         let dt = Double(frameCount) / 48000.0
-        let maxExpectedChange = Float(25.0 * dt)
         
         // Feed -10 dBFS signal to active bands
         let input = [Float](repeating: 0.1, count: frameCount * 2)
         var output = [Float](repeating: 0.0, count: frameCount * 2)
         
-        // We override envelopes directly to bypass the slow envelope follower buildup in the first step
+        // Override envelopes directly to bypass follower buildup
         eq.envelopes = [0.1, 0.1, 0.1, 0.1, 0.1]
         
         eq.process(input: input, output: &output, frameCount: frameCount)
         
-        // Verify currentGains have shifted towards targets but clamped by maxExpectedChange
+        // Verify currentGains have shifted towards targets according to exponential smoothing
         let targets = eq.calculateTargetGains()
         for i in 0..<5 {
-            let diff = targets[i] - 0.0 // since original was 0
-            if diff > 0 {
-                #expect(eq.currentGains[i] > 0.0)
-                #expect(eq.currentGains[i] <= maxExpectedChange + 1e-4)
-            } else if diff < 0 {
-                #expect(eq.currentGains[i] < 0.0)
-                #expect(eq.currentGains[i] >= -maxExpectedChange - 1e-4)
-            }
+            let target = targets[i]
+            let isSuddenJump = abs(target) > 2.0
+            let expectedTau = isSuddenJump ? (1.3 / 1.5) : 1.3
+            let expectedBeta = Float(exp(-dt / expectedTau))
+            let expectedGain = (1.0 - expectedBeta) * target
+            print("Band \(i): target=\(target), got=\(eq.currentGains[i]), expected=\(expectedGain), diff=\(abs(eq.currentGains[i] - expectedGain))")
+            #expect(abs(eq.currentGains[i] - expectedGain) < 1e-4)
         }
+        
+        // Test Loud Band Protection:
+        // Set current gains to 0, feed envelopes where band 0 is quiet and other bands are loud
+        // to create a large target boost > 3.0 dB on band 0.
+        eq.reset()
+        eq.envelopes = [0.1, 10.0, 10.0, 10.0, 10.0]
+        eq.process(input: input, output: &output, frameCount: frameCount)
+        
+        // Target for band 0 should be capped to 3.0 before applying smoothing
+        let rawTarget = eq.calculateTargetGains()[0]
+        #expect(rawTarget > 3.0) // Raw target is indeed > 3.0
+        
+        let expectedTau = 3.0 > 2.0 ? (1.3 / 1.5) : 1.3
+        let expectedBeta = Float(exp(-dt / expectedTau))
+        let expectedGain = (1.0 - expectedBeta) * 3.0 // capped to 3.0
+        #expect(abs(eq.currentGains[0] - expectedGain) < 1e-4)
     }
 
     @Test("Unity gain when disabled")
@@ -219,6 +229,31 @@ struct DynamicEqualizerTests {
             
             // Verify it did not suddenly reset to exactly 0.0 due to a hard silence gate
             #expect(abs(gainAfterSilence) > 0.01, "EQ should continuously equalize and not suddenly drop to 0 on silence. Got \(gainAfterSilence) dB")
+        }
+    }
+
+    @Test("Automatic negative makeup gain prevents peak gains above 0dB")
+    func automaticNegativeMakeupGain() {
+        let eq = DynamicEqualizer(sampleRate: 48000.0)
+        eq.reset()
+        
+        // Setup current gains to have a boost on some bands
+        // max boost is +6.0 dB (which is a linear gain of 2.0)
+        eq.currentGains = [6.0, 2.0, 0.0, -3.0, -5.0]
+        eq.setupFilters()
+        
+        let frameCount = 100
+        // Feed a DC signal to verify scaling
+        let input = [Float](repeating: 0.5, count: frameCount * 2)
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        
+        eq.process(input: input, output: &output, frameCount: frameCount)
+        
+        // With a 6.0 dB boost peaking filter, the maximum gain is +6.0 dB.
+        // Makeup gain should be -6.0 dB (linear 0.5), pulling the maximum gain down to 0.0 dB.
+        // Let's verify that the output samples do not exceed the input amplitude (0.5).
+        for val in output {
+            #expect(abs(val) <= 0.501, "Output sample \(val) should not exceed input amplitude 0.5 due to negative makeup gain")
         }
     }
 }

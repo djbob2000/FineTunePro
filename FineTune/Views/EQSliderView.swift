@@ -4,7 +4,11 @@ import SwiftUI
 struct EQSliderView: View {
     let frequency: String
     @Binding var gain: Float
-    let range: ClosedRange<Float> = -12...12
+    let isAutoEQ: Bool
+
+    var range: ClosedRange<Float> {
+        isAutoEQ ? -6...6 : -12...12
+    }
 
     // Local state for smooth visual updates
     @State private var localGain: Float = 0
@@ -21,6 +25,10 @@ struct EQSliderView: View {
     private func formatGain(_ gain: Float) -> String {
         let rounded = Int(gain.rounded())
         return rounded >= 0 ? "+\(rounded)dB" : "\(rounded)dB"
+    }
+
+    private func formatGainValue(_ gain: Float) -> String {
+        return String(format: "%+.1f", gain)
     }
 
     var body: some View {
@@ -90,22 +98,33 @@ struct EQSliderView: View {
                             // Knob-style thumb (themed background with center dot)
                             ZStack {
                                 Circle()
-                                    .fill(DesignTokens.Colors.thumbBackground)
-                                Circle()
-                                    .fill(DesignTokens.Colors.thumbDot)
-                                    .frame(width: thumbSize * 0.35, height: thumbSize * 0.35)
+                                    .fill(isAutoEQ ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.thumbBackground)
+                                if !isAutoEQ {
+                                    Circle()
+                                        .fill(DesignTokens.Colors.thumbDot)
+                                        .frame(width: thumbSize * 0.35, height: thumbSize * 0.35)
+                                }
                             }
                             .frame(width: thumbSize, height: thumbSize)
                             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
                             .position(x: geo.size.width / 2, y: thumbY)
 
-                            // dB value label (appears during drag)
-                            if isDragging {
-                                Text(formatGain(localGain))
-                                    .font(.system(size: 9, weight: .medium).monospacedDigit())
-                                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                                    .fixedSize()
-                                    .position(x: geo.size.width / 2, y: thumbY - thumbSize / 2 - 10)
+                            // Dynamic/Persistent value next to moving thumb
+                            if isAutoEQ {
+                                Text(formatGainValue(localGain))
+                                    .font(.system(size: 8, weight: .regular).monospacedDigit())
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                    .frame(width: 24, alignment: .leading)
+                                    .position(x: geo.size.width / 2 + 23, y: thumbY)
+                            } else {
+                                // dB value label (appears during drag in manual mode)
+                                if isDragging {
+                                    Text(formatGain(localGain))
+                                        .font(.system(size: 9, weight: .medium).monospacedDigit())
+                                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                        .fixedSize()
+                                        .position(x: geo.size.width / 2, y: thumbY - thumbSize / 2 - 10)
+                                }
                             }
                         }
                         .allowsHitTesting(false)
@@ -136,9 +155,9 @@ struct EQSliderView: View {
 
 #Preview {
     HStack(spacing: 8) {
-        EQSliderView(frequency: "32", gain: .constant(6))
-        EQSliderView(frequency: "1k", gain: .constant(0))
-        EQSliderView(frequency: "16k", gain: .constant(-6))
+        EQSliderView(frequency: "32", gain: .constant(6), isAutoEQ: false)
+        EQSliderView(frequency: "1k", gain: .constant(0), isAutoEQ: false)
+        EQSliderView(frequency: "16k", gain: .constant(-6), isAutoEQ: false)
     }
     .frame(width: 120, height: 120)
     .padding()

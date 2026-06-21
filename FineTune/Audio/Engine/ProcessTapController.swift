@@ -244,10 +244,12 @@ final class ProcessTapController: ProcessTapControlling {
     // MARK: - Public Methods
 
     func updateEQSettings(_ settings: EQSettings) {
-        eqProcessor?.updateSettings(settings)
-        secondaryEQProcessor?.updateSettings(settings)
-        dynamicEqualizer?.isEnabled = settings.isAutoEQEnabled
-        secondaryDynamicEqualizer?.isEnabled = settings.isAutoEQEnabled
+        var manualSettings = settings
+        manualSettings.isEnabled = settings.isEnabled && !settings.isAutoEQEnabled
+        eqProcessor?.updateSettings(manualSettings)
+        secondaryEQProcessor?.updateSettings(manualSettings)
+        dynamicEqualizer?.isEnabled = settings.isEnabled && settings.isAutoEQEnabled
+        secondaryDynamicEqualizer?.isEnabled = settings.isEnabled && settings.isAutoEQEnabled
     }
 
     func updateAutoEQProfile(_ profile: AutoEQProfile?) {
@@ -650,8 +652,7 @@ final class ProcessTapController: ProcessTapControlling {
 
         // Apply persisted state to fresh processors before AudioDeviceStart so the
         // first IOProc callback sees correct EQ/AutoEQ/Loudness coefficients.
-        eqProcessor?.updateSettings(initial.eqSettings)
-        dynamicEqualizer?.isEnabled = initial.eqSettings.isAutoEQEnabled
+        updateEQSettings(initial.eqSettings)
         autoEQProcessor?.setPreampEnabled(initial.autoEQPreampEnabled)
         if let profile = initial.autoEQProfile {
             autoEQProcessor?.updateProfile(profile)

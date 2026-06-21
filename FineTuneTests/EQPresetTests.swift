@@ -11,9 +11,9 @@ import Foundation
 @Suite("EQPreset — Catalog")
 struct EQPresetCatalogTests {
 
-    @Test("allCases count is 20")
+    @Test("allCases count is 21")
     func allCasesCount() {
-        #expect(EQPreset.allCases.count == 20)
+        #expect(EQPreset.allCases.count == 21)
     }
 
     @Test("Every preset has a non-empty name")

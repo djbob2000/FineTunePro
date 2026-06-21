@@ -52,13 +52,13 @@ struct StereoBiquad {
 
 final class DynamicEqualizer: @unchecked Sendable {
     // 5 bands frequencies
-    static let frequencies: [Double] = [38.0, 230.0, 4464.0, 5628.0, 17740.0]
+    static let frequencies: [Double] = [68.0, 350.0, 1410.0, 4520.0, 9540.0]
     
     // Live debug gains shared with the UI
     nonisolated(unsafe) static var debugGains: [Float] = [0, 0, 0, 0, 0]
     
     // Relative targets (StereoTool)
-    static let targets: [Float] = [-2.0, 2.0, 1.0, -4.0, -8.0]
+    static let targets: [Float] = [6.0, 1.5, 0.0, 1.0, -4.5]
     
     // Silence threshold
     static let silenceThresholdDB: Float = -50.0
@@ -66,12 +66,14 @@ final class DynamicEqualizer: @unchecked Sendable {
     // Strength (amount of correction, default 0.5)
     var strength: Float = 0.5
     
-    // Max cut/boost limits
-    var maxBoostDB: Float = 6.0
-    var maxCutDB: Float = -6.0
+    // Max cut/boost limits per band
+    var maxBoostDBs: [Float] = [6.0, 5.0, 4.0, 3.0, 3.0]
+    var maxCutDBs: [Float] = [-6.0, -6.0, -6.0, -6.0, -6.0]
     
-    // Speed of cut/boost in dB/sec
-    var maxChangeRate: Float = 25.0
+    // Response speed and protection configurations
+    var adjustmentTime: Double = 1.3
+    var jumpAcceleration: Double = 1.5
+    var loudBandThreshold: Float = 3.0
     
     var sampleRate: Double = 48000.0
     
@@ -186,7 +188,7 @@ final class DynamicEqualizer: @unchecked Sendable {
             
             // Scale target gain and clamp limits by the weight
             let limitScale = weights[i]
-            targetGains[i] = max(maxCutDB * limitScale, min(maxBoostDB * limitScale, target * limitScale))
+            targetGains[i] = max(maxCutDBs[i] * limitScale, min(maxBoostDBs[i] * limitScale, target * limitScale))
         }
         return targetGains
     }
@@ -218,19 +220,24 @@ final class DynamicEqualizer: @unchecked Sendable {
         // 2. Recalculate target gains based on envelopes
         let targetGains = calculateTargetGains()
         
-        // 3. Ramp current gains towards target gains
+        // 3. Smooth current gains towards target gains using exponential smoothing
         let dt = Double(frameCount) / sampleRate
-        let maxChange = maxChangeRate * Float(dt)
         
         for i in 0..<5 {
-            let diff = targetGains[i] - currentGains[i]
-            if diff > maxChange {
-                currentGains[i] += maxChange
-            } else if diff < -maxChange {
-                currentGains[i] -= maxChange
-            } else {
-                currentGains[i] = targetGains[i]
+            var target = targetGains[i]
+            let diff = target - currentGains[i]
+            
+            // Loud band protection: Reduce boost at sudden jumps above loudBandThreshold dB
+            if diff > loudBandThreshold {
+                target = currentGains[i] + loudBandThreshold
             }
+            
+            // Sudden jump acceleration (use 2.0 dB as the jump detection threshold)
+            let isSuddenJump = abs(diff) > 2.0
+            let tau = isSuddenJump ? (adjustmentTime / jumpAcceleration) : adjustmentTime
+            
+            let beta = Float(exp(-dt / tau))
+            currentGains[i] = beta * currentGains[i] + (1.0 - beta) * target
             
             // Recompute peaking filter coefficients with currentGains[i]
             peakingFilters[i].coeffs = peakingCoefficients(
@@ -248,6 +255,10 @@ final class DynamicEqualizer: @unchecked Sendable {
             memcpy(output, input, frameCount * 2 * MemoryLayout<Float>.size)
         }
         
+        // Calculate makeup gain to ensure the maximum peak gain of the EQ does not exceed 0 dB
+        let maxGain = currentGains.max() ?? 0.0
+        let makeupGain = maxGain > 0.0 ? Double(pow(10.0, -maxGain / 20.0)) : 1.0
+        
         for frame in 0..<frameCount {
             let idx = frame * 2
             var xL = Double(output[idx])
@@ -259,8 +270,8 @@ final class DynamicEqualizer: @unchecked Sendable {
                 xR = out.right
             }
             
-            output[idx] = Float(xL)
-            output[idx + 1] = Float(xR)
+            output[idx] = Float(xL * makeupGain)
+            output[idx + 1] = Float(xR * makeupGain)
         }
     }
 }
