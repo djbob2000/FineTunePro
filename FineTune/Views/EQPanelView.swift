@@ -52,18 +52,33 @@ struct EQPanelView: View {
         VStack(spacing: 12) {
             // Header: Toggle left, save field or spacer in middle, Preset right
             HStack {
-                // EQ toggle on left
-                HStack(spacing: 6) {
-                    Toggle("", isOn: $settings.isEnabled)
-                        .toggleStyle(.switch)
-                        .scaleEffect(0.7)
-                        .labelsHidden()
-                        .onChange(of: settings.isEnabled) { _, _ in
-                            onSettingsChanged(settings)
-                        }
-                    Text("EQ")
-                        .font(DesignTokens.Typography.pickerText)
-                        .foregroundStyle(.primary)
+                // EQ and AutoEQ toggles on left
+                HStack(spacing: 12) {
+                    HStack(spacing: 6) {
+                        Toggle("", isOn: $settings.isEnabled)
+                            .toggleStyle(.switch)
+                            .scaleEffect(0.7)
+                            .labelsHidden()
+                            .onChange(of: settings.isEnabled) { _, _ in
+                                onSettingsChanged(settings)
+                            }
+                        Text("EQ")
+                            .font(DesignTokens.Typography.pickerText)
+                            .foregroundStyle(.primary)
+                    }
+
+                    HStack(spacing: 6) {
+                        Toggle("", isOn: $settings.isAutoEQEnabled)
+                            .toggleStyle(.switch)
+                            .scaleEffect(0.7)
+                            .labelsHidden()
+                            .onChange(of: settings.isAutoEQEnabled) { _, _ in
+                                onSettingsChanged(settings)
+                            }
+                        Text("AutoEQ")
+                            .font(DesignTokens.Typography.pickerText)
+                            .foregroundStyle(.primary)
+                    }
                 }
 
                 if isRenaming {
