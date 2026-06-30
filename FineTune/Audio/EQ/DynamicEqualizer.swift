@@ -57,8 +57,8 @@ final class DynamicEqualizer: @unchecked Sendable {
     // Live debug gains shared with the UI
     nonisolated(unsafe) static var debugGains: [Float] = [0, 0, 0, 0, 0]
     
-    // Relative targets (StereoTool)
-    static let targets: [Float] = [6.0, 1.5, 0.0, 1.0, -4.5]
+    // Relative targets (Harman In-Ear 2019)
+    static let targets: [Float] = [8.5, 1.0, 3.5, 2.5, -2.0]
     
     // Silence threshold
     static let silenceThresholdDB: Float = -50.0

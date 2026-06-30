@@ -52,12 +52,12 @@ struct DynamicEqualizerTests {
         
         // 1. All bands at -10 dBFS (amplitude 0.1)
         // With -10dBFS, all active, relative level is flat (0 relative to average).
-        // target balance is [5.4, 4.0, 2.4, -2.5, -7.5]
+        // target balance is [8.5, 1.0, 3.5, 2.5, -2.0]
         // strength = 0.5
-        // expected targets = [2.7, 2.0, 1.2, -1.25, -3.75]
+        // expected targets = [4.25, 0.5, 1.75, 1.25, -1.0]
         eq.envelopes = [0.1, 0.1, 0.1, 0.1, 0.1]
         let targets = eq.calculateTargetGains()
-        let expected: [Float] = [3.0, 0.75, 0.0, 0.5, -2.25]
+        let expected: [Float] = [4.25, 0.5, 1.75, 1.25, -1.0]
         for i in 0..<5 {
             #expect(abs(targets[i] - expected[i]) < 1e-4)
         }
@@ -76,10 +76,10 @@ struct DynamicEqualizerTests {
         #expect(targets[4] == 0.0)
         
         // Active bands 0..3 should calculate their relative levels ignoring band 4
-        // avgDB of active bands = -10 dB
+        // avgDB of active bands = -20 dB
         // relative level of active bands = 0 dB
-        // active expected targets: [3.0, 0.75, 0.0, 0.5]
-        let expected: [Float] = [3.0, 0.75, 0.0, 0.5]
+        // active expected targets: [4.25, 0.5, 1.75, 1.25]
+        let expected: [Float] = [4.25, 0.5, 1.75, 1.25]
         for i in 0..<4 {
             #expect(abs(targets[i] - expected[i]) < 1e-4)
         }
@@ -96,6 +96,7 @@ struct DynamicEqualizerTests {
     func gainChangeRateLimits() {
         let eq = DynamicEqualizer(sampleRate: 48000.0)
         eq.reset()
+        eq.strength = 0.3 // Set strength to 0.3 so targets do not exceed loudBandThreshold (3.0 dB)
         
         // We run a process buffer of 128 frames (dt = 128 / 48000 = 0.002666... sec)
         let frameCount = 128
@@ -126,6 +127,7 @@ struct DynamicEqualizerTests {
         // Set current gains to 0, feed envelopes where band 0 is quiet and other bands are loud
         // to create a large target boost > 3.0 dB on band 0.
         eq.reset()
+        eq.strength = 0.5 // Restore strength to 0.5
         eq.envelopes = [0.1, 10.0, 10.0, 10.0, 10.0]
         eq.process(input: input, output: &output, frameCount: frameCount)
         
