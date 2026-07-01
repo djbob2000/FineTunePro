@@ -55,6 +55,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _currentDigitalVolume: Float = 1.0
     /// Gain scale used for the last coefficient computation.
     private var _currentGainScale: Float = 1.0
+    /// Mode used for the last coefficient computation.
+    private var _currentMode: LoudnessMode? = nil
 
     // Crossover Filter States (RT-Safe)
     private nonisolated(unsafe) var _lpL = BiquadState()
@@ -100,12 +102,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
         // Coalesce rapid updates, but never skip a disabled processor because re-enabling
         // loudness from the UI must rebuild coefficients immediately even at the same volume.
-        guard !isEnabled || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 else { return }
+        guard !isEnabled || _currentMode != mode || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 else { return }
         _currentPhon = phon
         _currentReferencePhon = referencePhon
         _currentSystemVolume = systemVolume
         _currentDigitalVolume = digitalVolume
         _currentGainScale = gainScale
+        _currentMode = mode
 
         let gains: [Float]
         if mode == .classic {
@@ -117,10 +120,17 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         } else {
             // Modern mode: 0% linear EQ boost (flat), 100% harmonic exciter
             gains = [Float](repeating: 0.0, count: Self.bandCount)
-            let volume = max(0.0, min(1.0, Double(systemVolume)))
-            let intensity = 1.0 - volume
-            _lowExciterWet = Float(intensity * 0.15)
-            _highExciterWet = Float(intensity * 0.15)
+            
+            // Calculate the target ISO-226 gains to get the required low/high boost
+            let rawGains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, amount: 1.0, sampleRate: sampleRate)
+            let lowBoostDB = Double(rawGains[0])
+            let highBoostDB = Double(rawGains[3])
+            
+            let lowLinear = pow(10.0, max(0.0, lowBoostDB) / 20.0)
+            let highLinear = pow(10.0, max(0.0, highBoostDB) / 20.0)
+            
+            _lowExciterWet = Float(lowLinear - 1.0)
+            _highExciterWet = Float(highLinear - 1.0)
             _outputGainCorrection = Float(1.0 / (1.0 + Double(_lowExciterWet) + Double(_highExciterWet)))
         }
 
@@ -244,8 +254,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     override func recomputeCoefficients() -> (coefficients: [Double], sectionCount: Int)? {
         // Called by updateSampleRate() — recompute for current phon at new sample rate
-        let gains = computeBandGains(phon: _currentPhon, referencePhon: _currentReferencePhon, digitalVolume: _currentDigitalVolume, gainScale: _currentGainScale)
-        let allNegligible = gains.allSatisfy { abs($0) < 0.1 }
+        let gains: [Float]
+        if _currentMode == .classic {
+            gains = computeBandGains(phon: _currentPhon, referencePhon: _currentReferencePhon, digitalVolume: _currentDigitalVolume, gainScale: _currentGainScale, amount: 1.0)
+        } else {
+            gains = [Float](repeating: 0.0, count: Self.bandCount)
+        }
+        let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
         guard !allNegligible else { return nil }
         let coefficients = Self.coefficientsForBands(gains: gains, sampleRate: sampleRate)
         return (coefficients, Self.bandCount)
