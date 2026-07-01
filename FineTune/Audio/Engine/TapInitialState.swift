@@ -11,4 +11,5 @@ struct TapInitialState {
     var loudnessReferencePhon: Double = ISO226Contours.defaultReferencePhon
     var loudnessEqualizerSettings: LoudnessEqualizerSettings = .init()
     var loudnessMode: LoudnessMode = .modern
+    var loudnessBassCrossover: Double = 100.0
 }
