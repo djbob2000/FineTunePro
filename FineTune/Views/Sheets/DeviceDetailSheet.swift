@@ -15,6 +15,8 @@ struct DeviceDetailSheet: View {
     let onLoudnessReferencePhonChange: (Double) -> Void
     let loudnessMode: LoudnessMode
     let onLoudnessModeChange: (LoudnessMode) -> Void
+    let loudnessBassCrossover: Double
+    let onLoudnessBassCrossoverChange: (Double) -> Void
     let onDismiss: () -> Void
 
     @State private var viewModel: DeviceInspectorViewModel
@@ -34,6 +36,8 @@ struct DeviceDetailSheet: View {
         onLoudnessReferencePhonChange: @escaping (Double) -> Void,
         loudnessMode: LoudnessMode,
         onLoudnessModeChange: @escaping (LoudnessMode) -> Void,
+        loudnessBassCrossover: Double,
+        onLoudnessBassCrossoverChange: @escaping (Double) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.device = device
@@ -47,6 +51,8 @@ struct DeviceDetailSheet: View {
         self.onLoudnessReferencePhonChange = onLoudnessReferencePhonChange
         self.loudnessMode = loudnessMode
         self.onLoudnessModeChange = onLoudnessModeChange
+        self.loudnessBassCrossover = loudnessBassCrossover
+        self.onLoudnessBassCrossoverChange = onLoudnessBassCrossoverChange
         self.onDismiss = onDismiss
         self._viewModel = State(
             initialValue: DeviceInspectorViewModel(
@@ -234,6 +240,30 @@ struct DeviceDetailSheet: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .padding(.top, 4)
+
+                    if loudnessMode == .modern {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Bass Crossover Freq")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                Spacer()
+                                Text("\(Int(loudnessBassCrossover)) Hz")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            }
+                            Slider(
+                                value: Binding(
+                                    get: { loudnessBassCrossover },
+                                    set: { onLoudnessBassCrossoverChange($0) }
+                                ),
+                                in: 40...150,
+                                step: 5
+                            )
+                            .controlSize(.mini)
+                        }
+                        .padding(.top, 4)
+                    }
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {

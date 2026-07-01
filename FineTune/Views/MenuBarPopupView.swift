@@ -698,6 +698,10 @@ struct MenuBarPopupView: View {
                         onLoudnessModeChange: { mode in
                             audioEngine.setLoudnessMode(for: device.uid, to: mode)
                         },
+                        loudnessBassCrossover: audioEngine.settingsManager.getLoudnessBassCrossover(for: device.uid),
+                        onLoudnessBassCrossoverChange: { frequency in
+                            audioEngine.setLoudnessBassCrossover(for: device.uid, to: frequency)
+                        },
                         onDismiss: {}
                     )
                 }
