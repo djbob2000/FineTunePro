@@ -20,7 +20,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         case updateEQSettings(EQSettings)
         case updateAutoEQProfile(profileID: String?)
         case setAutoEQPreampEnabled(Bool)
-        case updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode)
+        case updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode, bassCrossover: Double)
         case updateLoudnessEqualization(LoudnessEqualizerSettings)
         case invalidate
     }
@@ -36,6 +36,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         var loudnessReferencePhon: Double
         var loudnessEqualizerSettings: LoudnessEqualizerSettings
         var loudnessMode: LoudnessMode
+        var loudnessBassCrossover: Double
 
         @MainActor
         init(_ s: TapInitialState) {
@@ -47,6 +48,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
             self.loudnessReferencePhon = s.loudnessReferencePhon
             self.loudnessEqualizerSettings = s.loudnessEqualizerSettings
             self.loudnessMode = s.loudnessMode
+            self.loudnessBassCrossover = s.loudnessBassCrossover
         }
     }
 
@@ -92,8 +94,8 @@ final class RecordingProcessTapController: ProcessTapControlling {
         events.append(.setAutoEQPreampEnabled(enabled))
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode) {
-        events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, mode: mode))
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode, bassCrossover: Double) {
+        events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, mode: mode, bassCrossover: bassCrossover))
     }
 
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {
@@ -444,13 +446,13 @@ struct AudioEngineTapInitialStateTests {
         try await Task.sleep(nanoseconds: 50_000_000)
         
         // 4. Verify that updateLoudnessCompensation(enabled: true) was called on the tap
-        let loudnessEvents = tap.events.compactMap { event -> (volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float)? in
-            if case let .updateLoudnessCompensation(volume, enabled, referencePhon, gainScale, _) = event {
-                return (volume, enabled, referencePhon, gainScale)
+        let match = tap.events.contains { event in
+            if case let .updateLoudnessCompensation(volume, enabled, referencePhon, gainScale, _, _) = event {
+                return enabled == true
             }
-            return nil
+            return false
         }
-        #expect(loudnessEvents.contains(where: { $0.enabled == true }))
+        #expect(match)
     }
 }
 

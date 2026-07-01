@@ -46,6 +46,8 @@ struct DeviceDetailSheetToggleTests {
             onLoudnessReferencePhonChange: { _ in },
             loudnessMode: .modern,
             onLoudnessModeChange: { _ in },
+            loudnessBassCrossover: 100.0,
+            onLoudnessBassCrossoverChange: { _ in },
             onDismiss: {}
         )
     }
