@@ -44,6 +44,8 @@ struct DeviceDetailSheetToggleTests {
             onLoudnessCompensationToggle: { _ in },
             loudnessReferencePhon: ISO226Contours.defaultReferencePhon,
             onLoudnessReferencePhonChange: { _ in },
+            loudnessMode: .modern,
+            onLoudnessModeChange: { _ in },
             onDismiss: {}
         )
     }

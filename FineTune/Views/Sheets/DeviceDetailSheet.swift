@@ -13,6 +13,8 @@ struct DeviceDetailSheet: View {
     let onLoudnessCompensationToggle: (Bool) -> Void
     let loudnessReferencePhon: Double
     let onLoudnessReferencePhonChange: (Double) -> Void
+    let loudnessMode: LoudnessMode
+    let onLoudnessModeChange: (LoudnessMode) -> Void
     let onDismiss: () -> Void
 
     @State private var viewModel: DeviceInspectorViewModel
@@ -30,6 +32,8 @@ struct DeviceDetailSheet: View {
         onLoudnessCompensationToggle: @escaping (Bool) -> Void,
         loudnessReferencePhon: Double,
         onLoudnessReferencePhonChange: @escaping (Double) -> Void,
+        loudnessMode: LoudnessMode,
+        onLoudnessModeChange: @escaping (LoudnessMode) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.device = device
@@ -41,6 +45,8 @@ struct DeviceDetailSheet: View {
         self.onLoudnessCompensationToggle = onLoudnessCompensationToggle
         self.loudnessReferencePhon = loudnessReferencePhon
         self.onLoudnessReferencePhonChange = onLoudnessReferencePhonChange
+        self.loudnessMode = loudnessMode
+        self.onLoudnessModeChange = onLoudnessModeChange
         self.onDismiss = onDismiss
         self._viewModel = State(
             initialValue: DeviceInspectorViewModel(
@@ -218,6 +224,17 @@ struct DeviceDetailSheet: View {
 
             if isLoudnessCompensationEnabled {
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                    Picker("Loudness Mode", selection: Binding(
+                        get: { loudnessMode },
+                        set: { onLoudnessModeChange($0) }
+                    )) {
+                        Text("Classic").tag(LoudnessMode.classic)
+                        Text("Modern").tag(LoudnessMode.modern)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .padding(.top, 4)
+
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showAdvanced.toggle()

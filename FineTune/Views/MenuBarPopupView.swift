@@ -694,6 +694,10 @@ struct MenuBarPopupView: View {
                         onLoudnessReferencePhonChange: { referencePhon in
                             audioEngine.setLoudnessReferencePhon(for: device.uid, to: referencePhon)
                         },
+                        loudnessMode: audioEngine.settingsManager.getLoudnessMode(for: device.uid),
+                        onLoudnessModeChange: { mode in
+                            audioEngine.setLoudnessMode(for: device.uid, to: mode)
+                        },
                         onDismiss: {}
                     )
                 }
