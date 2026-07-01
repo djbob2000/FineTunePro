@@ -143,6 +143,7 @@ final class SettingsManager {
         // Per-device loudness settings
         var deviceLoudnessCompensationEnabled: [String: Bool] = [:] // deviceUID -> enabled
         var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> referencePhon (default: ISO226Contours.defaultReferencePhon)
+        var deviceLoudnessMode: [String: LoudnessMode] = [:] // deviceUID -> mode
 
         // User-created EQ presets (named EQ curves)
         var userEQPresets: [UserEQPreset] = []
@@ -194,6 +195,7 @@ final class SettingsManager {
             autoEQPreampEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoEQPreampEnabled) ?? true
             deviceLoudnessCompensationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessCompensationEnabled) ?? [:]
             deviceLoudnessReferencePhon = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessReferencePhon) ?? [:]
+            deviceLoudnessMode = try c.decodeIfPresent([String: LoudnessMode].self, forKey: .deviceLoudnessMode) ?? [:]
             userEQPresets = try c.decodeIfPresent([UserEQPreset].self, forKey: .userEQPresets) ?? []
         }
     }
@@ -808,6 +810,15 @@ final class SettingsManager {
         scheduleSave()
     }
 
+    func getLoudnessMode(for deviceUID: String) -> LoudnessMode {
+        settings.deviceLoudnessMode[deviceUID] ?? .modern
+    }
+
+    func setLoudnessMode(for deviceUID: String, to mode: LoudnessMode) {
+        settings.deviceLoudnessMode[deviceUID] = mode
+        scheduleSave()
+    }
+
     func updateAppSettings(_ newSettings: AppSettings) {
         // Handle launch at login separately via ServiceManagement
         if newSettings.launchAtLogin != settings.appSettings.launchAtLogin {
@@ -867,6 +878,7 @@ final class SettingsManager {
         settings.autoEQPreampEnabled = true
         settings.deviceLoudnessCompensationEnabled.removeAll()
         settings.deviceLoudnessReferencePhon.removeAll()
+        settings.deviceLoudnessMode.removeAll()
         settings.deviceAutoEQ.removeAll()
         settings.favoriteAutoEQProfiles.removeAll()
         settings.appDeviceSelectionMode.removeAll()
