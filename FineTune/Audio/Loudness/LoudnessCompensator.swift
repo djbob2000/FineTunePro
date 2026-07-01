@@ -94,6 +94,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
     func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = ISO226Contours.defaultReferencePhon, gainScale: Float = 1.0) {
+        // Update exciter parameters directly from system volume
+        let volume = max(0.0, min(1.0, Double(systemVolume)))
+        let intensity = 1.0 - volume
+        _lowExciterWet = Float(intensity * 0.15)
+        _highExciterWet = Float(intensity * 0.15)
+        _outputGainCorrection = Float(1.0 / (1.0 + Double(_lowExciterWet) + Double(_highExciterWet)))
+
         // Volume-based phon estimation (primary — tracks user's intended listening level,
         // matching Dolby Volume Modeler / THX Loudness Plus architecture).
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
@@ -282,11 +289,26 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     private static func targetCurveDB(forPhon phon: Double, referencePhon: Double) -> [Double] {
-        let compensation = ISO226Contours.compensationGains(atPhon: phon, referencePhon: referencePhon)
+        let compensation = ISO226Contours.compensationGains(atPhon: phon, referencePhon: referencePhon, amount: 0.5)
         let fitFrequencies = fitGridFrequencies()
         return fitFrequencies.map { frequency in
             ISO226Contours.interpolateCompensation(compensation, atFrequency: frequency)
         }
+    }
+
+    @inline(__always)
+    private func softClipLow(_ x: Float) -> Float {
+        // Cubic soft-clipper: x - x^3 / 3
+        let clamped = max(-1.0, min(1.0, x * 1.5))
+        return clamped - (clamped * clamped * clamped) / 3.0
+    }
+
+    @inline(__always)
+    private func softClipHigh(_ x: Float) -> Float {
+        // Asymmetrical soft clipper (mix of 2nd and 3rd harmonics)
+        let distorted = x > 0 ? (1.0 - exp(-x)) : (exp(x) - 1.0) * 0.8
+        // Fast-acting peak limiter/clipper to clamp high transients cleanly
+        return max(-0.8, min(0.8, distorted))
     }
 
     static func basisResponsesDB(sampleRate: Double) -> [[Double]] {
