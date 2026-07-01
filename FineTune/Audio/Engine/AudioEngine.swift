@@ -330,11 +330,13 @@ final class AudioEngine {
                         tap.volume = self.effectiveVolume(for: tap.app.id, deviceUIDs: tap.currentDeviceUIDs)
                     }
                     let referencePhon = self.settingsManager.getLoudnessReferencePhon(for: deviceUID)
+                    let mode = self.settingsManager.getLoudnessMode(for: deviceUID)
                     tap.updateLoudnessCompensation(
                         volume: self.effectiveLoudnessVolume(for: tap),
                         enabled: loudnessEnabled,
                         referencePhon: referencePhon,
-                        gainScale: loudnessEnabled ? 1.0 : 0.0
+                        gainScale: loudnessEnabled ? 1.0 : 0.0,
+                        mode: mode
                     )
                 }
             }
@@ -636,7 +638,8 @@ final class AudioEngine {
                 volume: effectiveLoudnessVolume(for: tap),
                 enabled: false,
                 referencePhon: ISO226Contours.defaultReferencePhon,
-                gainScale: 0.0
+                gainScale: 0.0,
+                mode: .modern
             )
         }
 
@@ -656,11 +659,13 @@ final class AudioEngine {
             let loudnessEnabled = tap.currentDeviceUID.map { settingsManager.getLoudnessCompensationEnabled(for: $0) } ?? false
             if loudnessEnabled, let firstDeviceUID = tap.currentDeviceUID {
                 let referencePhon = settingsManager.getLoudnessReferencePhon(for: firstDeviceUID)
+                let mode = settingsManager.getLoudnessMode(for: firstDeviceUID)
                 tap.updateLoudnessCompensation(
                     volume: effectiveLoudnessVolume(for: tap),
                     enabled: loudnessEnabled,
                     referencePhon: referencePhon,
-                    gainScale: 1.0
+                    gainScale: 1.0,
+                    mode: mode
                 )
             }
         }
@@ -709,14 +714,15 @@ final class AudioEngine {
     }
 
 
-    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, gainScale: Float) {
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode) {
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
             tap.updateLoudnessCompensation(
                 volume: effectiveLoudnessVolume(for: tap),
                 enabled: enabled,
                 referencePhon: referencePhon,
-                gainScale: gainScale
+                gainScale: gainScale,
+                mode: mode
             )
         }
     }
@@ -826,13 +832,22 @@ final class AudioEngine {
     func setLoudnessCompensationEnabled(for deviceUID: String, enabled: Bool) {
         settingsManager.setLoudnessCompensationEnabled(for: deviceUID, to: enabled)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0)
+        let mode = settingsManager.getLoudnessMode(for: deviceUID)
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0, mode: mode)
     }
 
     func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
         settingsManager.setLoudnessReferencePhon(for: deviceUID, to: referencePhon)
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0)
+        let mode = settingsManager.getLoudnessMode(for: deviceUID)
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0, mode: mode)
+    }
+
+    func setLoudnessMode(for deviceUID: String, to mode: LoudnessMode) {
+        settingsManager.setLoudnessMode(for: deviceUID, to: mode)
+        let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
+        let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0, mode: mode)
     }
 
 
@@ -857,6 +872,7 @@ final class AudioEngine {
         loudnessEqSettings.enabled = false
         let loudnessEnabled = settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID)
+        let mode = settingsManager.getLoudnessMode(for: primaryDeviceUID)
         return TapInitialState(
             eqSettings: settingsManager.getEQSettings(for: app.persistenceIdentifier),
             autoEQProfile: autoEQProfileForActivation(deviceUID: primaryDeviceUID),
@@ -864,7 +880,8 @@ final class AudioEngine {
             loudnessVolume: deviceVolume * volumeState.getVolume(for: app.id),
             loudnessCompensationEnabled: loudnessEnabled,
             loudnessReferencePhon: referencePhon,
-            loudnessEqualizerSettings: loudnessEqSettings
+            loudnessEqualizerSettings: loudnessEqSettings,
+            loudnessMode: mode
         )
     }
 
@@ -914,11 +931,13 @@ final class AudioEngine {
         guard let deviceUID = tap.currentDeviceUID else { return }
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
+        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         tap.updateLoudnessCompensation(
             volume: effectiveLoudnessVolume(for: tap),
             enabled: enabled,
             referencePhon: referencePhon,
-            gainScale: enabled ? 1.0 : 0.0
+            gainScale: enabled ? 1.0 : 0.0,
+            mode: mode
         )
     }
 
