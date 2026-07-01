@@ -93,14 +93,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = ISO226Contours.defaultReferencePhon, gainScale: Float = 1.0) {
-        // Update exciter parameters directly from system volume
-        let volume = max(0.0, min(1.0, Double(systemVolume)))
-        let intensity = 1.0 - volume
-        _lowExciterWet = Float(intensity * 0.15)
-        _highExciterWet = Float(intensity * 0.15)
-        _outputGainCorrection = Float(1.0 / (1.0 + Double(_lowExciterWet) + Double(_highExciterWet)))
-
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = ISO226Contours.defaultReferencePhon, gainScale: Float = 1.0, mode: LoudnessMode = .modern) {
         // Volume-based phon estimation (primary — tracks user's intended listening level,
         // matching Dolby Volume Modeler / THX Loudness Plus architecture).
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
@@ -114,10 +107,25 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _currentDigitalVolume = digitalVolume
         _currentGainScale = gainScale
 
-        let gains = computeBandGains(phon: phon, referencePhon: referencePhon, digitalVolume: digitalVolume, gainScale: gainScale)
+        let gains: [Float]
+        if mode == .classic {
+            // Classic mode: 100% linear EQ boost, no exciter
+            gains = computeBandGains(phon: phon, referencePhon: referencePhon, digitalVolume: digitalVolume, gainScale: gainScale, amount: 1.0)
+            _lowExciterWet = 0.0
+            _highExciterWet = 0.0
+            _outputGainCorrection = 1.0 // Headroom is already inside linear gains
+        } else {
+            // Modern mode: 0% linear EQ boost (flat), 100% harmonic exciter
+            gains = [Float](repeating: 0.0, count: Self.bandCount)
+            let volume = max(0.0, min(1.0, Double(systemVolume)))
+            let intensity = 1.0 - volume
+            _lowExciterWet = Float(intensity * 0.15)
+            _highExciterWet = Float(intensity * 0.15)
+            _outputGainCorrection = Float(1.0 / (1.0 + Double(_lowExciterWet) + Double(_highExciterWet)))
+        }
 
-        // Bypass when all gains are negligible (near reference level)
-        let allNegligible = gains.allSatisfy { abs($0) < 0.1 }
+        // Bypass when all gains are negligible (near reference level) and exciter is off
+        let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
         if allNegligible {
             setEnabled(false)
             swapSetup(nil)
@@ -139,8 +147,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Post-processes the fitted gains by computing the realized cascade response,
     /// finding its peak (the "headroom" needed), and subtracting that peak from all
     /// band gains so the cascade never clips.
-    private func computeBandGains(phon: Double, referencePhon: Double, digitalVolume: Float, gainScale: Float = 1.0) -> [Float] {
-        let gains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, sampleRate: sampleRate)
+    private func computeBandGains(phon: Double, referencePhon: Double, digitalVolume: Float, gainScale: Float = 1.0, amount: Double = 0.5) -> [Float] {
+        let gains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, amount: amount, sampleRate: sampleRate)
         let scaledGains = gains.map { $0 * gainScale }
         let realized = Self.realizedResponseDB(sectionGains: scaledGains.map(Double.init), sampleRate: sampleRate)
         
@@ -165,8 +173,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     /// Fit the fixed four-section loudness topology to the ISO-derived target curve.
-    static func fittedSectionGains(forPhon phon: Double, referencePhon: Double = ISO226Contours.defaultReferencePhon, sampleRate: Double) -> [Float] {
-        let targetCurve = targetCurveDB(forPhon: phon, referencePhon: referencePhon)
+    static func fittedSectionGains(forPhon phon: Double, referencePhon: Double = ISO226Contours.defaultReferencePhon, amount: Double = 0.5, sampleRate: Double) -> [Float] {
+        let targetCurve = targetCurveDB(forPhon: phon, referencePhon: referencePhon, amount: amount)
         let basisResponses = basisResponsesDB(sampleRate: sampleRate)
         let gramMatrix = gramMatrix(for: basisResponses)
 
@@ -338,8 +346,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         return magnitude
     }
 
-    private static func targetCurveDB(forPhon phon: Double, referencePhon: Double) -> [Double] {
-        let compensation = ISO226Contours.compensationGains(atPhon: phon, referencePhon: referencePhon, amount: 0.5)
+    private static func targetCurveDB(forPhon phon: Double, referencePhon: Double, amount: Double = 0.5) -> [Double] {
+        let compensation = ISO226Contours.compensationGains(atPhon: phon, referencePhon: referencePhon, amount: amount)
         let fitFrequencies = fitGridFrequencies()
         return fitFrequencies.map { frequency in
             ISO226Contours.interpolateCompensation(compensation, atFrequency: frequency)
