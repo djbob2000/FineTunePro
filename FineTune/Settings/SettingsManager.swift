@@ -144,6 +144,7 @@ final class SettingsManager {
         var deviceLoudnessCompensationEnabled: [String: Bool] = [:] // deviceUID -> enabled
         var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> referencePhon (default: ISO226Contours.defaultReferencePhon)
         var deviceLoudnessMode: [String: LoudnessMode] = [:] // deviceUID -> mode
+        var deviceLoudnessBassCrossover: [String: Double] = [:] // deviceUID -> crossover frequency
 
         // User-created EQ presets (named EQ curves)
         var userEQPresets: [UserEQPreset] = []
@@ -196,6 +197,7 @@ final class SettingsManager {
             deviceLoudnessCompensationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessCompensationEnabled) ?? [:]
             deviceLoudnessReferencePhon = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessReferencePhon) ?? [:]
             deviceLoudnessMode = try c.decodeIfPresent([String: LoudnessMode].self, forKey: .deviceLoudnessMode) ?? [:]
+            deviceLoudnessBassCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassCrossover) ?? [:]
             userEQPresets = try c.decodeIfPresent([UserEQPreset].self, forKey: .userEQPresets) ?? []
         }
     }
@@ -819,6 +821,15 @@ final class SettingsManager {
         scheduleSave()
     }
 
+    func getLoudnessBassCrossover(for deviceUID: String) -> Double {
+        settings.deviceLoudnessBassCrossover[deviceUID] ?? 100.0
+    }
+
+    func setLoudnessBassCrossover(for deviceUID: String, to frequency: Double) {
+        settings.deviceLoudnessBassCrossover[deviceUID] = frequency
+        scheduleSave()
+    }
+
     func updateAppSettings(_ newSettings: AppSettings) {
         // Handle launch at login separately via ServiceManagement
         if newSettings.launchAtLogin != settings.appSettings.launchAtLogin {
@@ -879,6 +890,7 @@ final class SettingsManager {
         settings.deviceLoudnessCompensationEnabled.removeAll()
         settings.deviceLoudnessReferencePhon.removeAll()
         settings.deviceLoudnessMode.removeAll()
+        settings.deviceLoudnessBassCrossover.removeAll()
         settings.deviceAutoEQ.removeAll()
         settings.favoriteAutoEQProfiles.removeAll()
         settings.appDeviceSelectionMode.removeAll()
