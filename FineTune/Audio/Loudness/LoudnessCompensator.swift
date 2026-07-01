@@ -56,6 +56,19 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Gain scale used for the last coefficient computation.
     private var _currentGainScale: Float = 1.0
 
+    // Crossover Filter States (RT-Safe)
+    private nonisolated(unsafe) var _lpL = BiquadState()
+    private nonisolated(unsafe) var _lpR = BiquadState()
+    private nonisolated(unsafe) var _hpL = BiquadState()
+    private nonisolated(unsafe) var _hpR = BiquadState()
+    private nonisolated(unsafe) var _hpPostL = BiquadState()
+    private nonisolated(unsafe) var _hpPostR = BiquadState()
+
+    // Exciter wet gains and dynamic gain correction
+    private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
+    private nonisolated(unsafe) var _highExciterWet: Float = 0.0
+    private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
+
 
     // MARK: - Init
 
@@ -66,6 +79,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             category: "LoudnessCompensator",
             initiallyEnabled: false
         )
+        updateCrossoverCoefficients()
     }
 
     // MARK: - Volume Update
@@ -222,6 +236,30 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         return (coefficients, Self.bandCount)
     }
 
+    override func updateSampleRate(_ newRate: Double) {
+        super.updateSampleRate(newRate)
+        updateCrossoverCoefficients()
+    }
+
+    private func updateCrossoverCoefficients() {
+        let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: 100.0, q: 0.707, sampleRate: sampleRate)
+        let hpCoeffs = BiquadMath.highPassCoefficients(frequency: 3000.0, q: 0.707, sampleRate: sampleRate)
+
+        _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
+        _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
+        _hpL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+        _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+        _hpPostL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+        _hpPostR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+
+        _lpL.reset()
+        _lpR.reset()
+        _hpL.reset()
+        _hpR.reset()
+        _hpPostL.reset()
+        _hpPostR.reset()
+    }
+
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
         let cosW = cos(omega)
         let sinW = sin(omega)
@@ -346,4 +384,36 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         return (0..<size).map { augmented[$0][size] }
     }
 
+}
+
+// MARK: - RT-Safe Biquad State Struct
+
+struct BiquadState {
+    var b0: Double = 1.0, b1: Double = 0.0, b2: Double = 0.0
+    var a1: Double = 0.0, a2: Double = 0.0
+    
+    var x1: Float = 0.0, x2: Float = 0.0
+    var y1: Float = 0.0, y2: Float = 0.0
+    
+    mutating func updateCoefficients(b0: Double, b1: Double, b2: Double, a1: Double, a2: Double) {
+        self.b0 = b0
+        self.b1 = b1
+        self.b2 = b2
+        self.a1 = a1
+        self.a2 = a2
+    }
+    
+    @inline(__always)
+    mutating func process(_ x: Float) -> Float {
+        let y = Float(b0) * x + Float(b1) * x1 + Float(b2) * x2 - Float(a1) * y1 - Float(a2) * y2
+        x2 = x1
+        x1 = x
+        y2 = y1
+        y1 = y
+        return y
+    }
+    
+    mutating func reset() {
+        x1 = 0; x2 = 0; y1 = 0; y2 = 0
+    }
 }
