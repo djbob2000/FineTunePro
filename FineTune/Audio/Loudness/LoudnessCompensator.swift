@@ -57,6 +57,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _currentGainScale: Float = 1.0
     /// Mode used for the last coefficient computation.
     private var _currentMode: LoudnessMode? = nil
+    /// Crossover frequency for low-frequency band (Hz).
+    private var _bassCrossoverFrequency: Double = 100.0
 
     // Crossover Filter States (RT-Safe)
     private nonisolated(unsafe) var _lpL = BiquadState()
@@ -95,14 +97,20 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = ISO226Contours.defaultReferencePhon, gainScale: Float = 1.0, mode: LoudnessMode = .modern) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = ISO226Contours.defaultReferencePhon, gainScale: Float = 1.0, mode: LoudnessMode = .modern, bassCrossoverFrequency: Double = 100.0) {
         // Volume-based phon estimation (primary — tracks user's intended listening level,
         // matching Dolby Volume Modeler / THX Loudness Plus architecture).
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
 
         // Coalesce rapid updates, but never skip a disabled processor because re-enabling
         // loudness from the UI must rebuild coefficients immediately even at the same volume.
-        guard !isEnabled || _currentMode != mode || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 else { return }
+        guard !isEnabled || _currentMode != mode || _bassCrossoverFrequency != bassCrossoverFrequency || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 else { return }
+        
+        if _bassCrossoverFrequency != bassCrossoverFrequency {
+            _bassCrossoverFrequency = bassCrossoverFrequency
+            updateCrossoverCoefficients()
+        }
+        
         _currentPhon = phon
         _currentReferencePhon = referencePhon
         _currentSystemVolume = systemVolume
@@ -322,7 +330,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
 
     private func updateCrossoverCoefficients() {
-        let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: 100.0, q: 0.707, sampleRate: sampleRate)
+        let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: 3000.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
