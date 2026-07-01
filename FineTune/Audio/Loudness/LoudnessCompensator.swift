@@ -248,6 +248,56 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         updateCrossoverCoefficients()
     }
 
+    override func process(input: UnsafePointer<Float>, output: UnsafeMutablePointer<Float>, frameCount: Int) {
+        // 1. Process linear loudness biquad filters first
+        super.process(input: input, output: output, frameCount: frameCount)
+        
+        let lowWet = _lowExciterWet
+        let highWet = _highExciterWet
+        let correction = _outputGainCorrection
+        
+        guard isEnabled, (lowWet > 0.0 || highWet > 0.0) else {
+            // Apply linear correction headroom even if exciter is off
+            if correction != 1.0 {
+                var scale = correction
+                vDSP_vsmul(output, 1, &scale, output, 1, vDSP_Length(frameCount * 2))
+            }
+            return
+        }
+        
+        // Crossover and non-linear processing (Stereo Interleaved)
+        for frame in 0..<frameCount {
+            let idxL = frame * 2
+            let idxR = frame * 2 + 1
+            
+            let xL = output[idxL]
+            let xR = output[idxR]
+            
+            // Crossover split
+            let lowL = _lpL.process(xL)
+            let lowR = _lpR.process(xR)
+            
+            let highL = _hpL.process(xL)
+            let highR = _hpR.process(xR)
+            
+            // Saturations
+            let satLowL = softClipLow(lowL)
+            let satLowR = softClipLow(lowR)
+            
+            let satHighL = softClipHigh(highL)
+            let satHighR = softClipHigh(highR)
+            
+            // HPF post-processing to clean up low/mid harmonics from ВЧ
+            let filteredSatHighL = _hpPostL.process(satHighL)
+            let filteredSatHighR = _hpPostR.process(satHighR)
+            
+            // Sum Dry + Wet, and apply gain correction factor to guarantee peak <= 0 dBFS
+            output[idxL] = (xL + (satLowL * lowWet) + (filteredSatHighL * highWet)) * correction
+            output[idxR] = (xR + (satLowR * lowWet) + (filteredSatHighR * highWet)) * correction
+        }
+    }
+
+
     private func updateCrossoverCoefficients() {
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: 100.0, q: 0.707, sampleRate: sampleRate)
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: 3000.0, q: 0.707, sampleRate: sampleRate)
