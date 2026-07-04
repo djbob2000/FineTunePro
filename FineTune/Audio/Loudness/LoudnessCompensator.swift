@@ -168,31 +168,28 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             _outputGainCorrection = 1.0
         } else {
             // Clean ISO 226 low-frequency EQ curve (+5.0 dB shelf / +1.0 dB peak at max K)
-            let bassEQ0 = 5.0 * Double(bassLinearWet) * K
-            let bassEQ1 = 1.0 * Double(bassLinearWet) * K
+            let bassEQ0 = 5.0 * K
+            let bassEQ1 = 1.0 * K
+            let trebleEQ2 = 0.0
+            let trebleEQ3 = 3.0 * Double(_trebleGainScale) * K
             
             eqGains = [
                 bassEQ0,
                 bassEQ1,
-                Double(scaledGains[2] * Float(K)),
-                Double(scaledGains[3] * Float(K))
+                trebleEQ2,
+                trebleEQ3
             ]
 
-            // Multi-harmonic exciter capped at 30% wet mix, linearly scaled by bassExciterWet slider (0..1)
-            let lowBoostDB = 12.0 * Double(gainScale) * K
-            let lowLinear = pow(10.0, lowBoostDB / 20.0)
-            let maxHarmonicWet: Float = 0.30
-            let exciterRatio = min(1.0, Float((lowLinear - 1.0) / 2.981))
-            _lowExciterWet = maxHarmonicWet * bassExciterWet * exciterRatio
+            // Multi-harmonic exciter fixed at 30% max wet mix, scaled dynamically by K
+            _lowExciterWet = 0.30 * Float(K)
 
-            // High exciter and treble boost capped at +3.0 dB
-            let highBoostDB = 3.0 * Double(_trebleGainScale) * K
+            // High exciter scaled dynamically by K
+            let highBoostDB = trebleEQ3
             let highLinear = pow(10.0, highBoostDB / 20.0)
             _highExciterWet = Float(highLinear - 1.0) * 0.05
             
-            // Dynamic headroom correction factor
-            let maxPotentialHarmonicPeak = 1.0 + (0.35 * Double(_lowExciterWet)) + (0.4 * Double(_highExciterWet))
-            _outputGainCorrection = Float(1.0 / max(1.0, maxPotentialHarmonicPeak))
+            // Output gain correction factor (BrickwallLimiter handles headroom downstream)
+            _outputGainCorrection = 1.0
         }
 
         // Calculate realized response and headroom based on actual EQ gains
