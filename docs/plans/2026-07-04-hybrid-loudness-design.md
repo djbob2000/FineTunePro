@@ -18,12 +18,12 @@ This eliminates waveshaping distortion ("farting/buzzing") and unnatural over-sa
 ### Low Frequencies (Bass)
 1. **Clean ISO 226 Low-Frequency EQ**:
    - Uses authentic ISO 226:2023 curve topology spanning 20 Hz to 1000 Hz.
-   - **Band 0 (80 Hz Low-Shelf)**: scaled by $K$ up to `+4.0 dB`.
-   - **Band 1 (180 Hz Peaking)**: scaled by $K$ up to `+0.8 dB`.
+   - **Band 0 (80 Hz Low-Shelf)**: scaled by $K$ up to `+5.0 dB`.
+   - **Band 1 (180 Hz Peaking)**: scaled by $K$ up to `+1.0 dB`.
 2. **Multi-Harmonic Exciter (2nd, 3rd, 4th, 5th Harmonics)**:
    - Saturation polynomial generates a full harmonic series ($2f_0, 3f_0, 4f_0, 5f_0$) spanning 100 Hz to 400 Hz.
    - **Hard Cap at 30% (`_lowExciterWet <= 0.30`)**: Ensures the exciter wet mix never exceeds 30%, keeping the sound 100% clean and transparent even at ultra-low volumes.
-   - Adds `+8.0 dB` of perceived acoustic bass presence on small speakers.
+   - Adds `+7.0 dB` of perceived acoustic bass presence on small speakers.
 
 ### High Frequencies (Treble)
 1. **Max Treble Boost Limit**:
@@ -31,7 +31,7 @@ This eliminates waveshaping distortion ("farting/buzzing") and unnatural over-sa
    - Band 2 (3.2 kHz Peaking) and Band 3 (10 kHz High-Shelf) scale smoothly with $K$ up to +3.0 dB.
 
 ### Total Target Boost
-- Total perceived low-end boost: **`+12.0 dB`** (+4 dB clean ISO 226 curve + 30% multi-harmonic exciter = +12 dB perceived).
+- Total perceived low-end boost: **`+12.0 dB`** (+5 dB clean ISO 226 curve + 30% multi-harmonic exciter = +12 dB perceived).
 - Total high-frequency boost: **`+3.0 dB`**.
 
 ---
@@ -43,8 +43,8 @@ This eliminates waveshaping distortion ("farting/buzzing") and unnatural over-sa
 let K = pow(K_linear, 1.8)
 
 // 1. Clean ISO 226 Bass EQ (Bands 0 and 1)
-let bassEQ0 = 4.0 * Double(bassLinearWet) * K
-let bassEQ1 = 0.8 * Double(bassLinearWet) * K
+let bassEQ0 = 5.0 * Double(bassLinearWet) * K
+let bassEQ1 = 1.0 * Double(bassLinearWet) * K
 
 // 2. Capped Multi-Harmonic Exciter (Max 30% wet mix)
 let lowBoostDB = 12.0 * Double(gainScale) * K

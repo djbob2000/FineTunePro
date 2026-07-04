@@ -19,8 +19,8 @@
 
 ```swift
 // 1. Clean ISO 226 Bass EQ (Bands 0 and 1)
-let bassEQ0 = 4.0 * Double(bassLinearWet) * K
-let bassEQ1 = 0.8 * Double(bassLinearWet) * K
+let bassEQ0 = 5.0 * Double(bassLinearWet) * K
+let bassEQ1 = 1.0 * Double(bassLinearWet) * K
 
 eqGains = [
     bassEQ0,
