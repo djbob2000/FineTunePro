@@ -2,6 +2,7 @@
 import AudioToolbox
 import Foundation
 import os
+import Accelerate
 
 // MARK: - Threading Model
 //
@@ -64,6 +65,10 @@ final class ProcessTapController: ProcessTapControlling {
     private nonisolated(unsafe) var _peakLevel: Float = 0.0
     /// Separate peak level for secondary tap during crossfade (avoids torn RMW from concurrent callbacks)
     private nonisolated(unsafe) var _secondaryPeakLevel: Float = 0.0
+    private nonisolated(unsafe) var _limiterIntensity: Float = 0.0
+    private nonisolated(unsafe) var _outputPeakLevel: Float = 0.0
+    private nonisolated(unsafe) var _primaryBrickwallLimiter = BrickwallLimiter()
+    private nonisolated(unsafe) var _secondaryBrickwallLimiter = BrickwallLimiter()
     private nonisolated(unsafe) var _currentDeviceVolume: Float = 1.0
     private nonisolated(unsafe) var _isDeviceMuted: Bool = false
     private nonisolated(unsafe) var _primaryPreferredStereoLeftChannel: Int = 0
@@ -136,6 +141,11 @@ final class ProcessTapController: ProcessTapControlling {
     private var _lastLoudnessMode: LoudnessMode = .modern
     /// Last effective loudness bass crossover frequency passed to updateLoudnessCompensation.
     private var _lastLoudnessBassCrossover: Double = 100.0
+    private var _lastLoudnessTrebleCrossover: Double = 3000.0
+    private var _lastLoudnessTrebleGainScale: Float = 1.0
+    private var _lastLoudnessBassExciterWet: Float = 0.20
+    private var _lastLoudnessBassLinearWet: Float = 1.0
+    private var _lastLoudnessMaxDB: Double = -30.0
     private nonisolated(unsafe) var secondaryEQProcessor: EQProcessor?
     private nonisolated(unsafe) var secondaryAutoEQProcessor: AutoEQProcessor?
     private nonisolated(unsafe) var secondaryLoudnessCompensator: LoudnessCompensator?
@@ -165,6 +175,8 @@ final class ProcessTapController: ProcessTapControlling {
     // MARK: - Public Properties
 
     var audioLevel: Float { crossfadeState.isActive ? max(_peakLevel, _secondaryPeakLevel) : _peakLevel }
+    var outputAudioLevel: Float { _outputPeakLevel }
+    var limiterIntensity: Float { _limiterIntensity }
 
     private static let hostTimeNanosScale: Double = {
         var info = mach_timebase_info_data_t()
@@ -261,15 +273,15 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryAutoEQProcessor?.setPreampEnabled(enabled)
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode, bassCrossover: Double) {
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, mode: LoudnessMode = .modern, bassCrossover: Double = 180.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         _lastLoudnessVolume = volume
         _lastLoudnessReferencePhon = referencePhon
         _lastLoudnessGainScale = gainScale
         _lastLoudnessMode = mode
         _lastLoudnessBassCrossover = bassCrossover
         if enabled {
-            loudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, gainScale: gainScale, mode: mode, bassCrossoverFrequency: bassCrossover)
-            secondaryLoudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, gainScale: gainScale, mode: mode, bassCrossoverFrequency: bassCrossover)
+            loudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, mode: mode, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet)
+            secondaryLoudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, mode: mode, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet)
         } else {
             loudnessCompensator?.setEnabled(false)
             secondaryLoudnessCompensator?.setEnabled(false)
@@ -661,13 +673,30 @@ final class ProcessTapController: ProcessTapControlling {
         }
         loudnessCompensator?.setEnabled(initial.loudnessCompensationEnabled)
         if initial.loudnessCompensationEnabled {
-            loudnessCompensator?.updateForVolume(initial.loudnessVolume, digitalVolume: _volume, referencePhon: initial.loudnessReferencePhon, gainScale: 1.0, mode: initial.loudnessMode, bassCrossoverFrequency: initial.loudnessBassCrossover)
+            loudnessCompensator?.updateForVolume(
+                initial.loudnessVolume,
+                digitalVolume: _volume,
+                referencePhon: initial.loudnessReferencePhon,
+                maxDB: -30.0,
+                gainScale: Float(initial.loudnessGainScale),
+                mode: initial.loudnessMode,
+                bassCrossoverFrequency: initial.loudnessBassCrossover,
+                trebleCrossoverFrequency: initial.loudnessTrebleCrossover,
+                trebleGainScale: Float(initial.loudnessTrebleGainScale),
+                bassExciterWet: Float(initial.loudnessBassExciterWet),
+                bassLinearWet: Float(initial.loudnessBassLinearWet)
+            )
         }
         _lastLoudnessVolume = initial.loudnessVolume
         _lastLoudnessReferencePhon = initial.loudnessReferencePhon
-        _lastLoudnessGainScale = 1.0
+        _lastLoudnessGainScale = Float(initial.loudnessGainScale)
         _lastLoudnessMode = initial.loudnessMode
         _lastLoudnessBassCrossover = initial.loudnessBassCrossover
+        _lastLoudnessTrebleCrossover = initial.loudnessTrebleCrossover
+        _lastLoudnessTrebleGainScale = Float(initial.loudnessTrebleGainScale)
+        _lastLoudnessBassExciterWet = Float(initial.loudnessBassExciterWet)
+        _lastLoudnessBassLinearWet = Float(initial.loudnessBassLinearWet)
+        _lastLoudnessMaxDB = -30.0
 
         // Create IO proc with gain processing
         nextCallbackID += 1
@@ -1044,7 +1073,19 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryLoudnessEqualizerProcessor = secLoudnessEqualizer
 
         let secLoudness = LoudnessCompensator(sampleRate: sampleRate)
-        secLoudness.updateForVolume(_lastLoudnessVolume, digitalVolume: _volume, referencePhon: _lastLoudnessReferencePhon, gainScale: _lastLoudnessGainScale, mode: _lastLoudnessMode, bassCrossoverFrequency: _lastLoudnessBassCrossover)
+        secLoudness.updateForVolume(
+            _lastLoudnessVolume,
+            digitalVolume: _volume,
+            referencePhon: _lastLoudnessReferencePhon,
+            maxDB: _lastLoudnessMaxDB,
+            gainScale: _lastLoudnessGainScale,
+            mode: _lastLoudnessMode,
+            bassCrossoverFrequency: _lastLoudnessBassCrossover,
+            trebleCrossoverFrequency: _lastLoudnessTrebleCrossover,
+            trebleGainScale: _lastLoudnessTrebleGainScale,
+            bassExciterWet: _lastLoudnessBassExciterWet,
+            bassLinearWet: _lastLoudnessBassLinearWet
+        )
         if !(loudnessCompensator?.isEnabled ?? false) { secLoudness.setEnabled(false) }
         secondaryLoudnessCompensator = secLoudness
 
@@ -1344,10 +1385,14 @@ final class ProcessTapController: ProcessTapControlling {
         eqProc: EQProcessor?,
         autoEQProc: AutoEQProcessor?,
         loudnessEqualizerProc: LoudnessEqualizer?,
-        loudnessCompensatorProc: LoudnessCompensator?
-    ) {
+        loudnessCompensatorProc: LoudnessCompensator?,
+        brickwallLimiter: BrickwallLimiter?,
+        sampleRate: Double
+    ) -> (Float, Bool) {
         let inputBufferCount = inputBuffers.count
         let outputBufferCount = outputBuffers.count
+        var maxOutputPeak: Float = 0.0
+        var limiterTriggered = false
 
         for outputIndex in 0..<outputBufferCount {
             let outputBuffer = outputBuffers[outputIndex]
@@ -1483,8 +1528,20 @@ final class ProcessTapController: ProcessTapControlling {
             }
 
             let writtenSampleCount = frameCount * outputChannels
-            SoftLimiter.processBuffer(outputSamples, sampleCount: writtenSampleCount)
+            
+            // Track peak level of processed output before limiting
+            var outputPeak: Float = 0.0
+            vDSP_maxmgv(outputSamples, 1, &outputPeak, vDSP_Length(writtenSampleCount))
+            if outputPeak > maxOutputPeak { maxOutputPeak = outputPeak }
+            if outputPeak > SoftLimiter.threshold { limiterTriggered = true }
+            
+            if let brickwallLimiter = brickwallLimiter {
+                brickwallLimiter.process(outputSamples, sampleCount: writtenSampleCount, sampleRate: sampleRate)
+            } else {
+                SoftLimiter.processBuffer(outputSamples, sampleCount: writtenSampleCount)
+            }
         }
+        return (maxOutputPeak, limiterTriggered)
     }
 
     // MARK: - RT-Safe Audio Callback (DO NOT MODIFY WITHOUT RT-SAFETY REVIEW)
@@ -1633,7 +1690,7 @@ final class ProcessTapController: ProcessTapControlling {
             loudnessCompensatorProc = secondaryLoudnessCompensator
         }
 
-        Self.processMappedBuffers(
+        let (outputPeak, limiterTriggered) = Self.processMappedBuffers(
             inputBuffers: inputBuffers,
             outputBuffers: outputBuffers,
             targetVol: targetVol,
@@ -1646,11 +1703,22 @@ final class ProcessTapController: ProcessTapControlling {
             eqProc: eqProc,
             autoEQProc: autoEQProc,
             loudnessEqualizerProc: loudnessEqualizerProc,
-            loudnessCompensatorProc: loudnessCompensatorProc
+            loudnessCompensatorProc: loudnessCompensatorProc,
+            brickwallLimiter: isPrimary ? _primaryBrickwallLimiter : _secondaryBrickwallLimiter,
+            sampleRate: loudnessCompensatorProc?.sampleRate ?? 48000.0
         )
 
         if isPrimary {
             _primaryCurrentVolume = currentVol
+            _outputPeakLevel = _outputPeakLevel + levelSmoothingFactor * (min(outputPeak, 2.0) - _outputPeakLevel)
+            if limiterTriggered {
+                _limiterIntensity = 1.0
+            } else {
+                _limiterIntensity *= 0.95
+                if _limiterIntensity < 0.01 {
+                    _limiterIntensity = 0.0
+                }
+            }
         } else {
             _secondaryCurrentVolume = currentVol
         }
