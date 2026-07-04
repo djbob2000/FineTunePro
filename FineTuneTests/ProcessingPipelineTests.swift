@@ -1189,3 +1189,72 @@ struct LoudnessIntegrationTests {
                 "Adding loudness equalizer should change output beyond compensator alone")
     }
 }
+@Suite("ProcessTapController - Output Metering")
+struct OutputMeteringTests {
+
+    @Test("Brickwall path returns pre-limiter peak and limiter trigger")
+    func brickwallPeakAndTrigger() {
+        let frames = 256
+        let input = TestABL(buffers: [(channels: 2, frames: frames)])
+        let output = TestABL(buffers: [(channels: 2, frames: frames)])
+        fill(input, bufferIndex: 0, value: 1.25)
+
+        var vol: Float = 1.0
+        let limiter = BrickwallLimiter()
+
+        let (peak, limiterTriggered) = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            loudnessEqualizerProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: limiter,
+            sampleRate: 48000.0
+        )
+
+        #expect(peak == 1.25)
+        #expect(peak > BrickwallLimiter.ceiling)
+        #expect(limiterTriggered)
+    }
+
+    @Test("Brickwall path does not trigger below ceiling")
+    func brickwallBelowCeilingDoesNotTrigger() {
+        let frames = 256
+        let input = TestABL(buffers: [(channels: 2, frames: frames)])
+        let output = TestABL(buffers: [(channels: 2, frames: frames)])
+        fill(input, bufferIndex: 0, value: 0.50)
+
+        var vol: Float = 1.0
+        let limiter = BrickwallLimiter()
+
+        let (peak, limiterTriggered) = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            loudnessEqualizerProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: limiter,
+            sampleRate: 48000.0
+        )
+
+        #expect(peak == 0.50)
+        #expect(!limiterTriggered)
+    }
+}
+
