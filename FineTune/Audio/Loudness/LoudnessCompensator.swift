@@ -58,7 +58,17 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Mode used for the last coefficient computation.
     private var _currentMode: LoudnessMode? = nil
     /// Crossover frequency for low-frequency band (Hz).
-    private var _bassCrossoverFrequency: Double = 100.0
+    private var _bassCrossoverFrequency: Double = 67.0
+    /// Crossover frequency for high-frequency band (Hz).
+    private var _trebleCrossoverFrequency: Double = 3000.0
+    /// Treble gain scale (amount) for the exciter.
+    private var _trebleGainScale: Float = 1.0
+    /// Maximum DB for the target curve.
+    private var _currentMaxDB: Double = -30.0
+    /// Bass exciter wet amount (0.0 to 1.0).
+    private var _currentBassExciterWet: Float = 0.20
+    /// Bass linear EQ amount (0.0 to 1.0).
+    private var _currentBassLinearWet: Float = 1.0
 
     // Crossover Filter States (RT-Safe)
     private nonisolated(unsafe) var _lpL = BiquadState()
@@ -67,12 +77,16 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _hpR = BiquadState()
     private nonisolated(unsafe) var _hpPostL = BiquadState()
     private nonisolated(unsafe) var _hpPostR = BiquadState()
+    private nonisolated(unsafe) var _lowPostHPFL = BiquadState()
+    private nonisolated(unsafe) var _lowPostHPFR = BiquadState()
 
-    // Exciter wet gains and dynamic gain correction
     private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
     private nonisolated(unsafe) var _highExciterWet: Float = 0.0
     private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
-
+    private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
+    var lowExciterWet: Float { _lowExciterWet }
+    var highExciterWet: Float { _highExciterWet }
+    var outputGainCorrection: Float { _outputGainCorrection }
 
     // MARK: - Init
 
@@ -97,19 +111,28 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = ISO226Contours.defaultReferencePhon, gainScale: Float = 1.0, mode: LoudnessMode = .modern, bassCrossoverFrequency: Double = 100.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, mode: LoudnessMode = .modern, bassCrossoverFrequency: Double = 70.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         // Volume-based phon estimation (primary — tracks user's intended listening level,
         // matching Dolby Volume Modeler / THX Loudness Plus architecture).
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
 
         // Coalesce rapid updates, but never skip a disabled processor because re-enabling
         // loudness from the UI must rebuild coefficients immediately even at the same volume.
-        guard !isEnabled || _currentMode != mode || _bassCrossoverFrequency != bassCrossoverFrequency || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 else { return }
+        guard !isEnabled || _currentMode != mode || _bassCrossoverFrequency != bassCrossoverFrequency || _trebleCrossoverFrequency != trebleCrossoverFrequency || _trebleGainScale != trebleGainScale || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 || _currentMaxDB != maxDB || _currentBassExciterWet != bassExciterWet || _currentBassLinearWet != bassLinearWet else { return }
         
+        var crossoverChanged = false
         if _bassCrossoverFrequency != bassCrossoverFrequency {
             _bassCrossoverFrequency = bassCrossoverFrequency
+            crossoverChanged = true
+        }
+        if _trebleCrossoverFrequency != trebleCrossoverFrequency {
+            _trebleCrossoverFrequency = trebleCrossoverFrequency
+            crossoverChanged = true
+        }
+        if crossoverChanged {
             updateCrossoverCoefficients()
         }
+        _trebleGainScale = trebleGainScale
         
         _currentPhon = phon
         _currentReferencePhon = referencePhon
@@ -117,30 +140,78 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _currentDigitalVolume = digitalVolume
         _currentGainScale = gainScale
         _currentMode = mode
+        _currentMaxDB = maxDB
+        _currentBassExciterWet = bassExciterWet
+        _currentBassLinearWet = bassLinearWet
 
-        let gains: [Float]
+        // Calculate raw ISO-226 gains
+        let rawGains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, amount: 1.0, sampleRate: sampleRate)
+        let scaledGains = [
+            rawGains[0] * gainScale,
+            rawGains[1] * gainScale,
+            rawGains[2] * _trebleGainScale,
+            rawGains[3] * _trebleGainScale
+        ]
+
+        // RME ADI-2 Style Dual-Point Decibel-Linear Loudness Transition (needed for treble)
+        let linearVol = max(Double(systemVolume), 0.0001)
+        let volDB = 40.0 * (linearVol - 1.0) // 100% -> 0 dB, 50% -> -20 dB, 0% -> -40 dB
+        let mDB = (maxDB >= -40.0 && maxDB <= -20.0) ? maxDB : -30.0
+        let K_linear = min(1.0, max(0.0, -volDB / abs(mDB)))
+        let K = pow(K_linear, 1.8)
+
+        let eqGains: [Double]
         if mode == .classic {
-            // Classic mode: 100% linear EQ boost, no exciter
-            gains = computeBandGains(phon: phon, referencePhon: referencePhon, digitalVolume: digitalVolume, gainScale: gainScale, amount: 1.0)
+            eqGains = scaledGains.map(Double.init)
             _lowExciterWet = 0.0
             _highExciterWet = 0.0
-            _outputGainCorrection = 1.0 // Headroom is already inside linear gains
+            _outputGainCorrection = 1.0
         } else {
-            // Modern mode: 0% linear EQ boost (flat), 100% harmonic exciter
-            gains = [Float](repeating: 0.0, count: Self.bandCount)
+            // Clean ISO 226 low-frequency EQ curve (+5.0 dB shelf / +1.0 dB peak at max K)
+            let bassEQ0 = 5.0 * Double(bassLinearWet) * K
+            let bassEQ1 = 1.0 * Double(bassLinearWet) * K
             
-            // Calculate the target ISO-226 gains to get the required low/high boost
-            let rawGains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, amount: 1.0, sampleRate: sampleRate)
-            let lowBoostDB = Double(rawGains[0])
-            let highBoostDB = Double(rawGains[3])
+            eqGains = [
+                bassEQ0,
+                bassEQ1,
+                Double(scaledGains[2] * Float(K)),
+                Double(scaledGains[3] * Float(K))
+            ]
+
+            // Multi-harmonic exciter capped at 30% wet mix
+            let lowBoostDB = 12.0 * Double(gainScale) * K
+            let lowLinear = pow(10.0, lowBoostDB / 20.0)
+            _lowExciterWet = min(0.30, Float((lowLinear - 1.0) * 0.15) * bassExciterWet)
+
+            // High exciter and treble boost capped at +3.0 dB
+            let highBoostDB = 3.0 * Double(_trebleGainScale) * K
+            let highLinear = pow(10.0, highBoostDB / 20.0)
+            _highExciterWet = Float(highLinear - 1.0) * 0.05
             
-            let lowLinear = pow(10.0, max(0.0, lowBoostDB) / 20.0)
-            let highLinear = pow(10.0, max(0.0, highBoostDB) / 20.0)
-            
-            _lowExciterWet = Float(lowLinear - 1.0)
-            _highExciterWet = Float(highLinear - 1.0)
-            _outputGainCorrection = Float(1.0 / (1.0 + Double(_lowExciterWet) + Double(_highExciterWet)))
+            // Dynamic headroom correction factor
+            let maxPotentialHarmonicPeak = 1.0 + (0.35 * Double(_lowExciterWet)) + (0.4 * Double(_highExciterWet))
+            _outputGainCorrection = Float(1.0 / max(1.0, maxPotentialHarmonicPeak))
         }
+
+        // Calculate realized response and headroom based on actual EQ gains
+        let realized = Self.realizedResponseDB(sectionGains: eqGains, sampleRate: sampleRate)
+        let frequencies = Self.fitGridFrequencies()
+        var peakDB = 0.0
+        for (index, freq) in frequencies.enumerated() {
+            if freq >= 30.0 {
+                peakDB = max(peakDB, realized[index])
+            }
+        }
+        
+        let linearVolume = max(Double(digitalVolume), 1e-4)
+        let volumeAttenuationDB = -20.0 * log10(linearVolume)
+        
+        // In modern mode, we do NOT subtract headroom from the EQ gains to allow a standard bass boost behavior
+        // (the downstream SoftLimiter handles any digital clipping).
+        // In classic mode, we preserve the 0 dBFS peak constraint.
+        let headroomToSubtract = mode == .classic ? max(0.0, peakDB - volumeAttenuationDB) : 0.0
+
+        let gains = eqGains.map { Float($0) - Float(headroomToSubtract) }
 
         // Bypass when all gains are negligible (near reference level) and exciter is off
         let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
@@ -157,6 +228,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         swapSetup(newSetup)
         setEnabled(true)
     }
+
+    #if DEBUG
+    var testHighExciterWet: Float { _highExciterWet }
+    var testLowExciterWet: Float { _lowExciterWet }
+    var testBassLinearWet: Float { _currentBassLinearWet }
+    #endif
 
     // MARK: - Coefficient Computation
 
@@ -261,13 +338,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     // MARK: - BiquadProcessor Overrides
 
     override func recomputeCoefficients() -> (coefficients: [Double], sectionCount: Int)? {
-        // Called by updateSampleRate() — recompute for current phon at new sample rate
-        let gains: [Float]
-        if _currentMode == .classic {
-            gains = computeBandGains(phon: _currentPhon, referencePhon: _currentReferencePhon, digitalVolume: _currentDigitalVolume, gainScale: _currentGainScale, amount: 1.0)
-        } else {
-            gains = [Float](repeating: 0.0, count: Self.bandCount)
-        }
+        let gains = computeBandGains(phon: _currentPhon, referencePhon: _currentReferencePhon, digitalVolume: _currentDigitalVolume, gainScale: _currentGainScale, amount: 1.0)
         let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
         guard !allNegligible else { return nil }
         let coefficients = Self.coefficientsForBands(gains: gains, sampleRate: sampleRate)
@@ -311,6 +382,19 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let highL = _hpL.process(xL)
             let highR = _hpR.process(xR)
             
+            // Fast De-Esser / Sibilant Tamer: track peak envelope of high frequencies (>3 kHz)
+            let hfInstant = max(abs(highL), abs(highR))
+            // Fast attack (~1 ms), medium release (~30 ms) envelope follower
+            if hfInstant > _hfEnvelope {
+                _hfEnvelope = _hfEnvelope * 0.8 + hfInstant * 0.2
+            } else {
+                _hfEnvelope = _hfEnvelope * 0.998
+            }
+            
+            // Smoothly duck high exciter wet gain on sharp sibilant bursts ('S', 'TS', 'SH') above 0.25 peak
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
+            let effectiveHighWet = highWet * sibilantDucking
+            
             // Saturations
             let satLowL = softClipLow(lowL)
             let satLowR = softClipLow(lowR)
@@ -318,20 +402,24 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let satHighL = softClipHigh(highL)
             let satHighR = softClipHigh(highR)
             
+            // Post-HPF to keep only harmonics above crossover and block DC
+            let filteredSatLowL = _lowPostHPFL.process(satLowL)
+            let filteredSatLowR = _lowPostHPFR.process(satLowR)
+            
             // HPF post-processing to clean up low/mid harmonics from ВЧ
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
             
             // Sum Dry + Wet, and apply gain correction factor to guarantee peak <= 0 dBFS
-            output[idxL] = (xL + (satLowL * lowWet) + (filteredSatHighL * highWet)) * correction
-            output[idxR] = (xR + (satLowR * lowWet) + (filteredSatHighR * highWet)) * correction
+            output[idxL] = (xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)) * correction
+            output[idxR] = (xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)) * correction
         }
     }
 
-
     private func updateCrossoverCoefficients() {
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
-        let hpCoeffs = BiquadMath.highPassCoefficients(frequency: 3000.0, q: 0.707, sampleRate: sampleRate)
+        let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
+        let lpPostCoeffs = BiquadMath.highPassCoefficients(frequency: 25.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
@@ -339,6 +427,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
         _hpPostL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
         _hpPostR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+        
+        _lowPostHPFL.updateCoefficients(b0: lpPostCoeffs[0], b1: lpPostCoeffs[1], b2: lpPostCoeffs[2], a1: lpPostCoeffs[3], a2: lpPostCoeffs[4])
+        _lowPostHPFR.updateCoefficients(b0: lpPostCoeffs[0], b1: lpPostCoeffs[1], b2: lpPostCoeffs[2], a1: lpPostCoeffs[3], a2: lpPostCoeffs[4])
 
         _lpL.reset()
         _lpR.reset()
@@ -346,6 +437,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _hpR.reset()
         _hpPostL.reset()
         _hpPostR.reset()
+        _lowPostHPFL.reset()
+        _lowPostHPFR.reset()
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
@@ -379,17 +472,26 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func softClipLow(_ x: Float) -> Float {
-        // Cubic soft-clipper: x - x^3 / 3
-        let clamped = max(-1.0, min(1.0, x * 1.5))
-        return clamped - (clamped * clamped * clamped) / 3.0
+        // Multi-harmonic saturator generating 2nd, 3rd, 4th, and 5th harmonics
+        let c = max(-1.0, min(1.0, x * 1.2))
+        let c2 = c * c
+        let c3 = c2 * c
+        let c4 = c3 * c
+        let c5 = c4 * c
+        return c - 0.25 * c2 - 0.15 * c3 + 0.10 * c4 - 0.05 * c5
     }
 
     @inline(__always)
     private func softClipHigh(_ x: Float) -> Float {
-        // Asymmetrical soft clipper (mix of 2nd and 3rd harmonics)
-        let distorted = x > 0 ? (1.0 - exp(-x)) : (exp(x) - 1.0) * 0.8
-        // Fast-acting peak limiter/clipper to clamp high transients cleanly
-        return max(-0.8, min(0.8, distorted))
+        // Multi-harmonic HF exciter (2nd, 3rd, 4th, and 5th harmonics)
+        // Even harmonics (2nd, 4th) add silky warmth and air; odd harmonics (3rd, 5th) are
+        // heavily attenuated to prevent harsh sibilance ("зиканье/песок").
+        let c = max(-1.0, min(1.0, x * 1.1))
+        let c2 = c * c
+        let c3 = c2 * c
+        let c4 = c3 * c
+        let c5 = c4 * c
+        return c - 0.20 * c2 - 0.06 * c3 + 0.08 * c4 - 0.02 * c5
     }
 
     static func basisResponsesDB(sampleRate: Double) -> [[Double]] {
