@@ -992,7 +992,7 @@ final class AudioEngine {
     func getLoudnessOutputLevel(for deviceUID: String) -> Float {
         var maxLevel: Float = 0.0
         for tap in taps.values {
-            if tap.currentDeviceUID == deviceUID || tap.currentDeviceUID == nil {
+            if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
                 maxLevel = max(maxLevel, tap.outputAudioLevel)
             }
         }
@@ -1002,7 +1002,7 @@ final class AudioEngine {
     func getLoudnessLimiterIntensity(for deviceUID: String) -> Float {
         var maxIntensity: Float = 0.0
         for tap in taps.values {
-            if tap.currentDeviceUID == deviceUID || tap.currentDeviceUID == nil {
+            if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
                 maxIntensity = max(maxIntensity, tap.limiterIntensity)
             }
         }
@@ -1014,7 +1014,7 @@ final class AudioEngine {
         var maxLimiterIntensity: Float = 0.0
 
         for tap in taps.values {
-            if tap.currentDeviceUID == deviceUID || tap.currentDeviceUID == nil {
+            if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
                 maxLevel = max(maxLevel, tap.outputAudioLevel)
                 maxLimiterIntensity = max(maxLimiterIntensity, tap.limiterIntensity)
             }

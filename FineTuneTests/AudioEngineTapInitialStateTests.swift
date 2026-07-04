@@ -499,6 +499,27 @@ struct AudioEngineTapInitialStateTests {
         #expect(snapshot.isRedActive)
     }
 
+    @Test("Output meter snapshot matches secondary device UID in multi-output taps")
+    func outputMeterSnapshotMatchesSecondaryDeviceUID() async throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        try await tap.updateDevices(
+            to: ["uid-secondary", fix.device.uid],
+            preferredTapSourceDeviceUID: nil,
+            sourceDeviceDead: false
+        )
+        tap.outputAudioLevel = 0.81
+        tap.limiterIntensity = 0.12
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.level == 0.81)
+        #expect(snapshot.limiterIntensity == 0.12)
+        #expect(snapshot.isRedActive)
+    }
+
     @Test("Output meter snapshot ignores taps routed to other devices")
     func outputMeterSnapshotIgnoresOtherDevices() throws {
         let fix = makeFixture()
