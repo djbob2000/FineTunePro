@@ -126,6 +126,64 @@ private struct VUMeterBar: View {
     }
 }
 
+/// Horizontal output meter for the popup header.
+/// Red only lights when output reaches/exceeds 0 dBFS or limiter state is active.
+struct OutputLevelMeter: View {
+    let level: Float
+    let limiterIntensity: Float
+
+    private let segmentCount = 30
+    private let minDB: Float = -40
+    private let maxDB: Float = 0
+
+    private var levelDB: Float {
+        guard level > 0 else { return minDB }
+        return min(maxDB, max(minDB, 20 * log10f(level)))
+    }
+
+    private var isRedActive: Bool {
+        level >= 1.0 || limiterIntensity > 0.0
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<segmentCount, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(color(for: index, isLit: isLit(index)))
+                    .frame(width: 8, height: 3)
+                    .animation(DesignTokens.Animation.vuMeterLevel, value: levelDB)
+                    .animation(DesignTokens.Animation.vuMeterLevel, value: isRedActive)
+            }
+        }
+        .frame(height: 10)
+        .accessibilityLabel("Output level")
+    }
+
+    private func isLit(_ index: Int) -> Bool {
+        if index >= segmentCount - 2 {
+            return isRedActive
+        }
+
+        let fraction = Float(index) / Float(max(segmentCount - 1, 1))
+        let threshold = minDB + (maxDB - minDB) * fraction
+        return levelDB >= threshold
+    }
+
+    private func color(for index: Int, isLit: Bool) -> Color {
+        guard isLit else { return DesignTokens.Colors.vuUnlit }
+
+        if index >= segmentCount - 2 {
+            return DesignTokens.Colors.vuRed
+        } else if index >= 22 {
+            return DesignTokens.Colors.vuOrange
+        } else if index >= 18 {
+            return DesignTokens.Colors.vuYellow
+        } else {
+            return DesignTokens.Colors.vuGreen
+        }
+    }
+}
+
 // MARK: - Previews
 
 #Preview("VU Meter - Vertical") {
@@ -161,6 +219,19 @@ private struct VUMeterBar: View {
                 VUMeter(level: 1.0)
             }
         }
+    }
+}
+
+#Preview("Output Level Meter") {
+    ComponentPreviewContainer {
+        VStack(spacing: DesignTokens.Spacing.md) {
+            OutputLevelMeter(level: 0.05, limiterIntensity: 0)
+            OutputLevelMeter(level: 0.45, limiterIntensity: 0)
+            OutputLevelMeter(level: 0.98, limiterIntensity: 0)
+            OutputLevelMeter(level: 0.42, limiterIntensity: 1)
+            OutputLevelMeter(level: 1.12, limiterIntensity: 0)
+        }
+        .padding()
     }
 }
 
