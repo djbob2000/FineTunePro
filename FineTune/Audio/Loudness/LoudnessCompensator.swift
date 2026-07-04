@@ -178,10 +178,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
                 Double(scaledGains[3] * Float(K))
             ]
 
-            // Multi-harmonic exciter capped at 30% wet mix
+            // Multi-harmonic exciter capped at 30% wet mix, linearly scaled by bassExciterWet slider (0..1)
             let lowBoostDB = 12.0 * Double(gainScale) * K
             let lowLinear = pow(10.0, lowBoostDB / 20.0)
-            _lowExciterWet = min(0.30, Float((lowLinear - 1.0) * 0.15) * bassExciterWet)
+            let maxHarmonicWet: Float = 0.30
+            let exciterRatio = min(1.0, Float((lowLinear - 1.0) / 2.981))
+            _lowExciterWet = maxHarmonicWet * bassExciterWet * exciterRatio
 
             // High exciter and treble boost capped at +3.0 dB
             let highBoostDB = 3.0 * Double(_trebleGainScale) * K
