@@ -404,32 +404,44 @@ struct MenuBarPopupView: View {
         return device.name
     }
 
-    /// Subtle display of both default devices in header
+    /// Subtle display of both default devices in header, plus live output meter.
     private var defaultDevicesStatus: some View {
-        HStack(spacing: DesignTokens.Spacing.xs) {
-            // Output device
-            HStack(spacing: 3) {
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.system(size: 9))
-                Text(defaultOutputDeviceName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+        VStack(spacing: 2) {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                HStack(spacing: 3) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 9))
+                    Text(defaultOutputDeviceName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Text("·")
+
+                HStack(spacing: 3) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 9))
+                    Text(defaultInputDeviceName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
 
-            // Separator
-            Text("·")
-
-            // Input device
-            HStack(spacing: 3) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 9))
-                Text(defaultInputDeviceName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            TimelineView(.periodic(from: .now, by: DesignTokens.Timing.vuMeterUpdateInterval)) { _ in
+                if let uid = deviceVolumeMonitor.defaultDeviceUID {
+                    let snapshot = audioEngine.getOutputMeterSnapshot(for: uid)
+                    OutputLevelMeter(
+                        level: snapshot.level,
+                        limiterIntensity: snapshot.limiterIntensity
+                    )
+                } else {
+                    OutputLevelMeter(level: 0, limiterIntensity: 0)
+                }
             }
         }
         .font(.system(size: 11))
         .foregroundStyle(DesignTokens.Colors.textSecondary)
+        .frame(maxWidth: 260)
     }
 
     // MARK: - Device Toggle
