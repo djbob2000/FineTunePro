@@ -20,7 +20,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         case updateEQSettings(EQSettings)
         case updateAutoEQProfile(profileID: String?)
         case setAutoEQPreampEnabled(Bool)
-        case updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode, bassCrossover: Double)
+        case updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float)
         case updateLoudnessEqualization(LoudnessEqualizerSettings)
         case invalidate
     }
@@ -35,8 +35,12 @@ final class RecordingProcessTapController: ProcessTapControlling {
         var loudnessCompensationEnabled: Bool
         var loudnessReferencePhon: Double
         var loudnessEqualizerSettings: LoudnessEqualizerSettings
-        var loudnessMode: LoudnessMode
         var loudnessBassCrossover: Double
+        var loudnessGainScale: Double
+        var loudnessTrebleCrossover: Double
+        var loudnessTrebleGainScale: Double
+        var loudnessBassExciterWet: Double
+        var loudnessBassLinearWet: Double
 
         @MainActor
         init(_ s: TapInitialState) {
@@ -47,8 +51,12 @@ final class RecordingProcessTapController: ProcessTapControlling {
             self.loudnessCompensationEnabled = s.loudnessCompensationEnabled
             self.loudnessReferencePhon = s.loudnessReferencePhon
             self.loudnessEqualizerSettings = s.loudnessEqualizerSettings
-            self.loudnessMode = s.loudnessMode
             self.loudnessBassCrossover = s.loudnessBassCrossover
+            self.loudnessGainScale = s.loudnessGainScale
+            self.loudnessTrebleCrossover = s.loudnessTrebleCrossover
+            self.loudnessTrebleGainScale = s.loudnessTrebleGainScale
+            self.loudnessBassExciterWet = s.loudnessBassExciterWet
+            self.loudnessBassLinearWet = s.loudnessBassLinearWet
         }
     }
 
@@ -61,6 +69,8 @@ final class RecordingProcessTapController: ProcessTapControlling {
     var currentDeviceVolume: Float = 1.0
     var isDeviceMuted: Bool = false
     var audioLevel: Float = 0.0
+    var outputAudioLevel: Float = 0.0
+    var limiterIntensity: Float = 0.0
     private(set) var currentDeviceUIDs: [String]
     var currentDeviceUID: String? { currentDeviceUIDs.first }
     var tapSourceDeviceUID: String? = nil
@@ -94,9 +104,11 @@ final class RecordingProcessTapController: ProcessTapControlling {
         events.append(.setAutoEQPreampEnabled(enabled))
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, mode: LoudnessMode, bassCrossover: Double) {
-        events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, mode: mode, bassCrossover: bassCrossover))
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float) {
+        events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, bassCrossover: bassCrossover, trebleCrossover: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet))
     }
+
+    func setSonicAlignmentEnabled(_ enabled: Bool) {}
 
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {
         events.append(.updateLoudnessEqualization(settings))
@@ -447,12 +459,60 @@ struct AudioEngineTapInitialStateTests {
         
         // 4. Verify that updateLoudnessCompensation(enabled: true) was called on the tap
         let match = tap.events.contains { event in
-            if case let .updateLoudnessCompensation(volume, enabled, referencePhon, gainScale, _, _) = event {
+            if case let .updateLoudnessCompensation(_, enabled, _, _, _, _, _, _, _) = event {
                 return enabled == true
             }
             return false
         }
         #expect(match)
+    }
+
+    @Test("Output meter snapshot reports level and red state above 0 dBFS")
+    func outputMeterSnapshotReportsOverZeroDbfs() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 1.12
+        tap.limiterIntensity = 0.0
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.level == 1.12)
+        #expect(snapshot.limiterIntensity == 0.0)
+        #expect(snapshot.isRedActive)
+    }
+
+    @Test("Output meter snapshot reports red state while limiter is active")
+    func outputMeterSnapshotReportsLimiterActive() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 0.42
+        tap.limiterIntensity = 0.55
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.level == 0.42)
+        #expect(snapshot.limiterIntensity == 0.55)
+        #expect(snapshot.isRedActive)
+    }
+
+    @Test("Output meter snapshot ignores taps routed to other devices")
+    func outputMeterSnapshotIgnoresOtherDevices() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 1.30
+        tap.limiterIntensity = 1.0
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: "uid-other-device")
+
+        #expect(snapshot.level == 0.0)
+        #expect(snapshot.limiterIntensity == 0.0)
+        #expect(!snapshot.isRedActive)
     }
 }
 
@@ -537,7 +597,6 @@ struct RecordingProcessTapControllerContractTests {
             #expect(snap.eqSettings == EQSettings.flat)
             #expect(snap.loudnessVolume == 1.0)
             #expect(snap.loudnessReferencePhon == ISO226Contours.defaultReferencePhon)
-            #expect(snap.loudnessMode == .modern)
         } else {
             Issue.record("activate() did not record an .activate event")
         }

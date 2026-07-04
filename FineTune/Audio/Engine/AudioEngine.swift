@@ -4,6 +4,15 @@ import Foundation
 import os
 import UserNotifications
 
+struct OutputMeterSnapshot: Equatable {
+    let level: Float
+    let limiterIntensity: Float
+
+    var isRedActive: Bool {
+        level >= 1.0 || limiterIntensity > 0.0
+    }
+}
+
 @Observable
 @MainActor
 final class AudioEngine {
@@ -331,7 +340,6 @@ final class AudioEngine {
                     }
                     let referencePhon = self.settingsManager.getLoudnessReferencePhon(for: deviceUID)
                     let maxDB = self.settingsManager.getLoudnessMaxDB(for: deviceUID)
-                    let mode = self.settingsManager.getLoudnessMode(for: deviceUID)
                     let crossover = self.settingsManager.getLoudnessBassCrossover(for: deviceUID)
                     let scale = self.settingsManager.getLoudnessGainScale(for: deviceUID)
                     let trebleCrossover = self.settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
@@ -344,7 +352,6 @@ final class AudioEngine {
                         referencePhon: referencePhon,
                         maxDB: maxDB,
                         gainScale: loudnessEnabled ? Float(scale) : 0.0,
-                        mode: mode,
                         bassCrossover: crossover,
                         trebleCrossover: trebleCrossover,
                         trebleGainScale: loudnessEnabled ? Float(trebleScale) : 1.0,
@@ -653,7 +660,6 @@ final class AudioEngine {
                 referencePhon: ISO226Contours.defaultReferencePhon,
                 maxDB: -30.0,
                 gainScale: 0.0,
-                mode: .modern,
                 bassCrossover: 180.0,
                 trebleCrossover: 3000.0,
                 trebleGainScale: 1.0,
@@ -679,7 +685,6 @@ final class AudioEngine {
             if loudnessEnabled, let firstDeviceUID = tap.currentDeviceUID {
                 let referencePhon = settingsManager.getLoudnessReferencePhon(for: firstDeviceUID)
                 let maxDB = settingsManager.getLoudnessMaxDB(for: firstDeviceUID)
-                let mode = settingsManager.getLoudnessMode(for: firstDeviceUID)
                 let crossover = settingsManager.getLoudnessBassCrossover(for: firstDeviceUID)
                 let scale = settingsManager.getLoudnessGainScale(for: firstDeviceUID)
                 let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: firstDeviceUID)
@@ -692,7 +697,6 @@ final class AudioEngine {
                     referencePhon: referencePhon,
                     maxDB: maxDB,
                     gainScale: loudnessEnabled ? Float(scale) : 0.0,
-                    mode: mode,
                     bassCrossover: crossover,
                     trebleCrossover: trebleCrossover,
                     trebleGainScale: loudnessEnabled ? Float(trebleScale) : 1.0,
@@ -746,7 +750,7 @@ final class AudioEngine {
     }
 
 
-    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, mode: LoudnessMode = .modern, bassCrossover: Double = 70.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
             tap.updateLoudnessCompensation(
@@ -755,7 +759,6 @@ final class AudioEngine {
                 referencePhon: referencePhon,
                 maxDB: maxDB,
                 gainScale: gainScale,
-                mode: mode,
                 bassCrossover: bassCrossover,
                 trebleCrossover: trebleCrossover,
                 trebleGainScale: trebleGainScale,
@@ -871,70 +874,54 @@ final class AudioEngine {
         settingsManager.setLoudnessCompensationEnabled(for: deviceUID, to: enabled)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
         settingsManager.setLoudnessReferencePhon(for: deviceUID, to: referencePhon)
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessMaxDB(for deviceUID: String, to maxDB: Double) {
         settingsManager.setLoudnessMaxDB(for: deviceUID, to: maxDB)
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
-    func setLoudnessMode(for deviceUID: String, to mode: LoudnessMode) {
-        settingsManager.setLoudnessMode(for: deviceUID, to: mode)
-        let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
-        let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
-        let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
-        let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
-        let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
-        let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
-        let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
-        let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
-    }
+
 
     func setLoudnessBassCrossover(for deviceUID: String, to frequency: Double) {
         settingsManager.setLoudnessBassCrossover(for: deviceUID, to: frequency)
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: frequency, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: frequency, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessGainScale(for deviceUID: String, to scale: Double) {
@@ -942,13 +929,12 @@ final class AudioEngine {
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessTrebleCrossover(for deviceUID: String, to frequency: Double) {
@@ -956,13 +942,12 @@ final class AudioEngine {
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: frequency, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: frequency, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessTrebleGainScale(for deviceUID: String, to scale: Double) {
@@ -970,13 +955,12 @@ final class AudioEngine {
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scaleVal = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scaleVal) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(scale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scaleVal) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(scale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessBassExciterWet(for deviceUID: String, to amount: Double) {
@@ -984,13 +968,12 @@ final class AudioEngine {
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let bassLinearWet = settingsManager.getLoudnessBassLinearWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(amount), bassLinearWet: Float(bassLinearWet))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(amount), bassLinearWet: Float(bassLinearWet))
     }
 
     func setLoudnessBassLinearWet(for deviceUID: String, to amount: Double) {
@@ -998,13 +981,12 @@ final class AudioEngine {
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
         let exciterWet = settingsManager.getLoudnessBassExciterWet(for: deviceUID)
-        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, mode: mode, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(amount))
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(amount))
     }
 
     func getLoudnessOutputLevel(for deviceUID: String) -> Float {
@@ -1027,6 +1009,20 @@ final class AudioEngine {
         return maxIntensity
     }
 
+    func getOutputMeterSnapshot(for deviceUID: String) -> OutputMeterSnapshot {
+        var maxLevel: Float = 0.0
+        var maxLimiterIntensity: Float = 0.0
+
+        for tap in taps.values {
+            if tap.currentDeviceUID == deviceUID || tap.currentDeviceUID == nil {
+                maxLevel = max(maxLevel, tap.outputAudioLevel)
+                maxLimiterIntensity = max(maxLimiterIntensity, tap.limiterIntensity)
+            }
+        }
+
+        return OutputMeterSnapshot(level: maxLevel, limiterIntensity: maxLimiterIntensity)
+    }
+
     /// Apply AutoEQ profile to all taps currently routed to the given device.
     private func applyAutoEQToTaps(for deviceUID: String) {
         for tap in taps.values {
@@ -1047,7 +1043,6 @@ final class AudioEngine {
         loudnessEqSettings.enabled = false
         let loudnessEnabled = settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID)
-        let mode = settingsManager.getLoudnessMode(for: primaryDeviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: primaryDeviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: primaryDeviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: primaryDeviceUID)
@@ -1060,7 +1055,6 @@ final class AudioEngine {
             loudnessCompensationEnabled: loudnessEnabled,
             loudnessReferencePhon: referencePhon,
             loudnessEqualizerSettings: loudnessEqSettings,
-            loudnessMode: mode,
             loudnessBassCrossover: crossover,
             loudnessGainScale: scale,
             loudnessTrebleCrossover: trebleCrossover,
@@ -1117,7 +1111,6 @@ final class AudioEngine {
         let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
-        let mode = settingsManager.getLoudnessMode(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
@@ -1130,7 +1123,6 @@ final class AudioEngine {
             referencePhon: referencePhon,
             maxDB: maxDB,
             gainScale: enabled ? Float(scale) : 0.0,
-            mode: mode,
             bassCrossover: crossover,
             trebleCrossover: trebleCrossover,
             trebleGainScale: enabled ? Float(trebleScale) : 1.0,
