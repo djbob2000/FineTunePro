@@ -1,7 +1,7 @@
 import Foundation
 import Accelerate
 
-struct BiquadState {
+struct DynamicEqualizerBiquadState {
     var x1: Double = 0
     var x2: Double = 0
     var y1: Double = 0
@@ -25,8 +25,8 @@ struct BiquadCoefficients {
 
 struct StereoBiquad {
     var coeffs = BiquadCoefficients()
-    var stateL = BiquadState()
-    var stateR = BiquadState()
+    var stateL = DynamicEqualizerBiquadState()
+    var stateR = DynamicEqualizerBiquadState()
     
     mutating func reset() {
         stateL.reset()

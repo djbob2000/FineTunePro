@@ -20,7 +20,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         case updateEQSettings(EQSettings)
         case updateAutoEQProfile(profileID: String?)
         case setAutoEQPreampEnabled(Bool)
-        case updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float)
+        case updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float)
         case updateLoudnessEqualization(LoudnessEqualizerSettings)
         case invalidate
     }
@@ -35,6 +35,12 @@ final class RecordingProcessTapController: ProcessTapControlling {
         var loudnessCompensationEnabled: Bool
         var loudnessReferencePhon: Double
         var loudnessEqualizerSettings: LoudnessEqualizerSettings
+        var loudnessBassCrossover: Double
+        var loudnessGainScale: Double
+        var loudnessTrebleCrossover: Double
+        var loudnessTrebleGainScale: Double
+        var loudnessBassExciterWet: Double
+        var loudnessBassLinearWet: Double
 
         @MainActor
         init(_ s: TapInitialState) {
@@ -45,6 +51,12 @@ final class RecordingProcessTapController: ProcessTapControlling {
             self.loudnessCompensationEnabled = s.loudnessCompensationEnabled
             self.loudnessReferencePhon = s.loudnessReferencePhon
             self.loudnessEqualizerSettings = s.loudnessEqualizerSettings
+            self.loudnessBassCrossover = s.loudnessBassCrossover
+            self.loudnessGainScale = s.loudnessGainScale
+            self.loudnessTrebleCrossover = s.loudnessTrebleCrossover
+            self.loudnessTrebleGainScale = s.loudnessTrebleGainScale
+            self.loudnessBassExciterWet = s.loudnessBassExciterWet
+            self.loudnessBassLinearWet = s.loudnessBassLinearWet
         }
     }
 
@@ -57,6 +69,9 @@ final class RecordingProcessTapController: ProcessTapControlling {
     var currentDeviceVolume: Float = 1.0
     var isDeviceMuted: Bool = false
     var audioLevel: Float = 0.0
+    var outputAudioLevel: Float = 0.0
+    var outputChannelLevels: [Float] = [0.0]
+    var limiterIntensity: Float = 0.0
     private(set) var currentDeviceUIDs: [String]
     var currentDeviceUID: String? { currentDeviceUIDs.first }
     var tapSourceDeviceUID: String? = nil
@@ -90,9 +105,11 @@ final class RecordingProcessTapController: ProcessTapControlling {
         events.append(.setAutoEQPreampEnabled(enabled))
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float) {
-        events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale))
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float) {
+        events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, bassCrossover: bassCrossover, trebleCrossover: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet))
     }
+
+    func setSonicAlignmentEnabled(_ enabled: Bool) {}
 
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {
         events.append(.updateLoudnessEqualization(settings))
@@ -139,7 +156,8 @@ private struct Fixture {
 @MainActor
 private func makeFixture(
     supportsAutoEQ: Bool = true,
-    deviceVolume: Float = 0.75
+    deviceVolume: Float = 0.75,
+    transportType: TransportType = .usb
 ) -> Fixture {
     let tempDir = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
@@ -151,7 +169,8 @@ private func makeFixture(
         uid: "uid-test",
         name: "Test Output",
         icon: nil,
-        supportsAutoEQ: supportsAutoEQ
+        supportsAutoEQ: supportsAutoEQ,
+        transportType: transportType
     )
     deviceMonitor.addOutputDevice(device)
 
@@ -252,6 +271,37 @@ struct AudioEngineTapInitialStateTests {
 
         let snap = try #require(capturedInitial(fix))
         #expect(snap.loudnessCompensationEnabled == value)
+    }
+
+    @Test("loudnessCompensationEnabled is forced to false on built-in speakers")
+    func loudnessCompensationDisabledOnBuiltIn() throws {
+        let fix = makeFixture(transportType: .builtIn)
+        fix.settings.setLoudnessCompensationEnabled(for: fix.device.uid, to: true)
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+
+        let snap = try #require(capturedInitial(fix))
+        #expect(snap.loudnessCompensationEnabled == false)
+    }
+
+    @Test("updateTapsLoudness forces enabled=false for built-in devices")
+    func loudnessCompensationDisabledOnBuiltInUpdate() throws {
+        let fix = makeFixture(transportType: .builtIn)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.clearEvents()
+
+        // Attempt to enable loudness compensation
+        fix.engine.setLoudnessCompensationEnabled(for: fix.device.uid, enabled: true)
+
+        // Verify that updateLoudnessCompensation was called with enabled = false
+        let hasDisabledCall = tap.events.contains { event in
+            if case let .updateLoudnessCompensation(_, enabled, _, _, _, _, _, _, _) = event {
+                return enabled == false
+            }
+            return false
+        }
+        #expect(hasDisabledCall)
     }
 
     @Test("loudnessVolume = currentDeviceVolume × per-app volume")
@@ -443,13 +493,98 @@ struct AudioEngineTapInitialStateTests {
         try await Task.sleep(nanoseconds: 50_000_000)
         
         // 4. Verify that updateLoudnessCompensation(enabled: true) was called on the tap
-        let loudnessEvents = tap.events.compactMap { event -> (volume: Float, enabled: Bool, referencePhon: Double, gainScale: Float)? in
-            if case let .updateLoudnessCompensation(volume, enabled, referencePhon, gainScale) = event {
-                return (volume, enabled, referencePhon, gainScale)
+        let match = tap.events.contains { event in
+            if case let .updateLoudnessCompensation(_, enabled, _, _, _, _, _, _, _) = event {
+                return enabled == true
             }
-            return nil
+            return false
         }
-        #expect(loudnessEvents.contains(where: { $0.enabled == true }))
+        #expect(match)
+    }
+
+    @Test("Output meter snapshot reports level and red state above 0 dBFS")
+    func outputMeterSnapshotReportsOverZeroDbfs() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 1.12
+        tap.limiterIntensity = 0.0
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.level == 1.12)
+        #expect(snapshot.limiterIntensity == 0.0)
+        #expect(snapshot.isRedActive)
+    }
+
+    @Test("Output meter snapshot keeps red state tied to 0 dBFS while limiter is active")
+    func outputMeterSnapshotLimiterActiveDoesNotForceRedState() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 0.42
+        tap.outputChannelLevels = [0.40, 0.42]
+        tap.limiterIntensity = 0.55
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.level == 0.42)
+        #expect(snapshot.channelLevels == [0.40, 0.42])
+        #expect(snapshot.limiterIntensity == 0.55)
+        #expect(!snapshot.isRedActive)
+    }
+
+    @Test("Output meter snapshot collapses non-stereo channel counts")
+    func outputMeterSnapshotCollapsesNonStereoChannelCounts() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 0.72
+        tap.outputChannelLevels = [0.10, 0.72, 0.30]
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.channelLevels == [0.72])
+    }
+
+    @Test("Output meter snapshot matches secondary device UID in multi-output taps")
+    func outputMeterSnapshotMatchesSecondaryDeviceUID() async throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        try await tap.updateDevices(
+            to: ["uid-secondary", fix.device.uid],
+            preferredTapSourceDeviceUID: nil,
+            sourceDeviceDead: false
+        )
+        tap.outputAudioLevel = 0.81
+        tap.limiterIntensity = 0.12
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.level == 0.81)
+        #expect(snapshot.limiterIntensity == 0.12)
+        #expect(!snapshot.isRedActive)
+    }
+
+    @Test("Output meter snapshot ignores taps routed to other devices")
+    func outputMeterSnapshotIgnoresOtherDevices() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 1.30
+        tap.limiterIntensity = 1.0
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: "uid-other-device")
+
+        #expect(snapshot.level == 0.0)
+        #expect(snapshot.limiterIntensity == 0.0)
+        #expect(!snapshot.isRedActive)
     }
 }
 

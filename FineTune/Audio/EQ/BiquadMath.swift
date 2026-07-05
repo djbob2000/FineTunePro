@@ -133,6 +133,7 @@ enum BiquadMath {
         return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0]
     }
 
+
     /// Correct a filter frequency optimized at `sourceRate` for use at `targetRate`.
     /// Uses inverse bilinear transform (digital→analog) then forward (analog→digital).
     static func preWarpFrequency(

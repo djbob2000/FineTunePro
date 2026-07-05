@@ -172,7 +172,7 @@ struct LoudnessCompensatorHeadroomTests {
         let sampleRate = 48_000.0
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.03)
         let targetGains = ISO226Contours.compensationGains(atPhon: phon)
-        let fittedGains = LoudnessCompensator.fittedSectionGains(forPhon: phon, sampleRate: sampleRate)
+        let fittedGains = LoudnessCompensator.fittedSectionGains(forPhon: phon, amount: 1.0, sampleRate: sampleRate)
         let coefficients = LoudnessCompensator.coefficientsForBands(gains: fittedGains, sampleRate: sampleRate)
 
         #expect(LoudnessCompensator.bandCount == 4)
@@ -346,6 +346,24 @@ struct LoudnessCompensatorEnableStateTests {
         processor.updateForVolume(0.25)
         #expect(processor.isEnabled, "Processor should re-enable immediately even if volume did not change")
     }
+
+    @Test("Enabled loudness compensator widens stereo side by 140 percent above 80Hz Side HPF cutoff")
+    func enabledProcessorAppliesStereoBoost() {
+        let processor = LoudnessCompensator(sampleRate: 48_000)
+        processor.setEnabled(true)
+
+        let input: [Float] = [0.30, -0.10]
+        var output = [Float](repeating: 0, count: input.count)
+        input.withUnsafeBufferPointer { inPtr in
+            output.withUnsafeMutableBufferPointer { outPtr in
+                processor.process(input: inPtr.baseAddress!, output: outPtr.baseAddress!, frameCount: 1)
+            }
+        }
+
+        // Side = 0.20, mid = 0.10. 80Hz Side HPF filters step input (b0 ~0.9926) -> boostedSide ~ 0.27793
+        #expect(abs(output[0] - 0.37793) < 0.001)
+        #expect(abs(output[1] - -0.17793) < 0.001)
+    }
 }
 
 @Suite("LoudnessCompensator — custom reference level coefficients")
@@ -427,7 +445,7 @@ struct LoudnessCompensatorCustomReferenceTests {
             }
         }
         #expect(maxAbove30 <= 0.05)
-        #expect(maxBelow30 > 0.5)
+        #expect(maxBelow30 <= 0.25)
     }
 
     @Test("Dynamic headroom scales EQ gains based on system volume")
@@ -554,7 +572,367 @@ struct EstimatedPhonBoundaryTests {
     }
 }
 
+// MARK: - Hybrid Loudness Exciter Tests
 
+@Suite("LoudnessCompensator — Hybrid Exciter processing")
+struct LoudnessCompensatorHybridTests {
+
+    @Test("At 100% volume, processing is purely linear (exciter is off)")
+    func referenceVolumeIsLinear() {
+        let sampleRate = 48000.0
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        
+        // System volume = 1.0 (reference level, exciter is disabled)
+        processor.updateForVolume(1.0)
+        
+        // Generate a 100 Hz sine wave (use 480 frames so 100Hz and 300Hz are orthogonal at 48kHz)
+        let frameCount = 480
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        
+        let freq = 100.0
+        for i in 0..<frameCount {
+            let val = Float(sin(2.0 * .pi * freq * Double(i) / sampleRate))
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
+        
+        processor.process(input: input, output: &output, frameCount: frameCount)
+        
+        // Verify harmonic content at 3rd harmonic (300 Hz) is negligible (below threshold)
+        // Since the system is linear at 100% volume, no new frequencies are synthesized
+        var realSum: Double = 0.0
+        var imagSum: Double = 0.0
+        let targetFreq = 300.0 // 3rd harmonic
+        
+        for i in 0..<frameCount {
+            let angle = 2.0 * .pi * targetFreq * Double(i) / sampleRate
+            realSum += Double(output[i * 2]) * cos(angle)
+            imagSum += Double(output[i * 2]) * sin(angle)
+        }
+        
+        let magnitude3rdHarmonic = sqrt(realSum * realSum + imagSum * imagSum) / Double(frameCount)
+        #expect(magnitude3rdHarmonic < 1e-4, "At 100% volume, 3rd harmonic should be negligible, got \(magnitude3rdHarmonic)")
+    }
+
+    @Test("At low volume in Modern Mode, low exciter generates non-linear 2nd and 3rd harmonics")
+    func lowVolumeGeneratesLowHarmonicsInModernMode() {
+        let sampleRate = 48000.0
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        
+        // System volume = 0.0, Modern mode (maximum exciter intensity), explicit 80 Hz crossover
+        processor.updateForVolume(0.0, bassCrossoverFrequency: 80.0)
+        
+        // Generate a 50 Hz sine wave (falls within the Low-Pass crossover filter at 80 Hz)
+        let frameCount = 1024
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        
+        let freq = 50.0
+        for i in 0..<frameCount {
+            let val = Float(sin(2.0 * .pi * freq * Double(i) / sampleRate))
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
+        
+        processor.process(input: input, output: &output, frameCount: frameCount)
+        
+        // Calculate DFT magnitude at 2nd harmonic (100 Hz)
+        var realSum2nd: Double = 0.0
+        var imagSum2nd: Double = 0.0
+        let targetFreq2nd = 100.0
+        
+        // Calculate DFT magnitude at 3rd harmonic (150 Hz)
+        var realSum3rd: Double = 0.0
+        var imagSum3rd: Double = 0.0
+        let targetFreq3rd = 150.0
+        
+        for i in 0..<frameCount {
+            let angle2nd = 2.0 * .pi * targetFreq2nd * Double(i) / sampleRate
+            realSum2nd += Double(output[i * 2]) * cos(angle2nd)
+            imagSum2nd += Double(output[i * 2]) * sin(angle2nd)
+            
+            let angle3rd = 2.0 * .pi * targetFreq3rd * Double(i) / sampleRate
+            realSum3rd += Double(output[i * 2]) * cos(angle3rd)
+            imagSum3rd += Double(output[i * 2]) * sin(angle3rd)
+        }
+        
+        let magnitude2ndHarmonic = sqrt(realSum2nd * realSum2nd + imagSum2nd * imagSum2nd) / Double(frameCount)
+        let magnitude3rdHarmonic = sqrt(realSum3rd * realSum3rd + imagSum3rd * imagSum3rd) / Double(frameCount)
+        
+        // Verify that both 2nd and 3rd harmonics are clearly present (> 0.001)
+        #expect(magnitude2ndHarmonic > 0.001, "2nd harmonic should be generated by Low Exciter, got \(magnitude2ndHarmonic)")
+        #expect(magnitude3rdHarmonic > 0.001, "3rd harmonic should be generated by Low Exciter, got \(magnitude3rdHarmonic)")
+    }
+
+    @Test("Treble crossover and gain scale affect high exciter processing")
+    func trebleCrossoverAndGainScaleAffectHighExciter() {
+        let sampleRate = 48000.0
+        let freq = 4000.0
+        
+        // Settle buffer to allow biquad filter transients to clear (2040 is a multiple of 12)
+        let settleFrames = 2040
+        var settleInput = [Float](repeating: 0.0, count: settleFrames * 2)
+        var settleOutput = [Float](repeating: 0.0, count: settleFrames * 2)
+        for i in 0..<settleFrames {
+            let val = Float(sin(2.0 * .pi * freq * Double(i) / sampleRate))
+            settleInput[i * 2] = val
+            settleInput[i * 2 + 1] = val
+        }
+        
+        // 1. With treble gain scale = 1.0 and crossover at 3000 Hz, a 4000 Hz input should generate harmonics (e.g. 8000 Hz 2nd harmonic)
+        let processorEnabled = LoudnessCompensator(sampleRate: sampleRate)
+        processorEnabled.updateForVolume(0.0, gainScale: 0.0, trebleCrossoverFrequency: 3000.0, trebleGainScale: 1.0)
+        processorEnabled.process(input: settleInput, output: &settleOutput, frameCount: settleFrames)
+        
+        // 960 is a multiple of 12 (fundamental period is 12 samples at 48kHz), eliminating spectral leakage
+        let frameCount = 960
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        var outputEnabled = [Float](repeating: 0.0, count: frameCount * 2)
+        var outputDisabled = [Float](repeating: 0.0, count: frameCount * 2)
+        var outputHighCrossover = [Float](repeating: 0.0, count: frameCount * 2)
+        
+        for i in 0..<frameCount {
+            let val = Float(sin(2.0 * .pi * freq * Double(settleFrames + i) / sampleRate))
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
+        
+        processorEnabled.process(input: input, output: &outputEnabled, frameCount: frameCount)
+        
+        // 2. With treble gain scale = 0.0, no harmonics should be generated
+        let processorDisabled = LoudnessCompensator(sampleRate: sampleRate)
+        processorDisabled.updateForVolume(0.0, gainScale: 0.0, trebleCrossoverFrequency: 3000.0, trebleGainScale: 0.0)
+        processorDisabled.process(input: settleInput, output: &settleOutput, frameCount: settleFrames)
+        processorDisabled.process(input: input, output: &outputDisabled, frameCount: frameCount)
+        
+        // 3. With treble crossover at 18000 Hz (which is above 4000 Hz input), 4000 Hz is heavily attenuated, so 2nd harmonic (8000 Hz) should be very small
+        let processorHighCrossover = LoudnessCompensator(sampleRate: sampleRate)
+        processorHighCrossover.updateForVolume(0.0, gainScale: 0.0, trebleCrossoverFrequency: 18000.0, trebleGainScale: 1.0)
+        processorHighCrossover.process(input: settleInput, output: &settleOutput, frameCount: settleFrames)
+        processorHighCrossover.process(input: input, output: &outputHighCrossover, frameCount: frameCount)
+        
+        // Calculate DFT magnitude at 2nd harmonic (8000 Hz)
+        func magnitudeAt8kHz(buffer: [Float]) -> Double {
+            var realSum: Double = 0.0
+            var imagSum: Double = 0.0
+            let targetFreq = 8000.0
+            for i in 0..<frameCount {
+                let angle = 2.0 * .pi * targetFreq * Double(settleFrames + i) / sampleRate
+                realSum += Double(buffer[i * 2]) * cos(angle)
+                imagSum += Double(buffer[i * 2]) * sin(angle)
+            }
+            return sqrt(realSum * realSum + imagSum * imagSum) / Double(frameCount)
+        }
+        
+        let magEnabled = magnitudeAt8kHz(buffer: outputEnabled)
+        let magDisabled = magnitudeAt8kHz(buffer: outputDisabled)
+        let magHighCrossover = magnitudeAt8kHz(buffer: outputHighCrossover)
+        
+        print("MAG_DEBUG: enabled=\(magEnabled), disabled=\(magDisabled), highCrossover=\(magHighCrossover)")
+        
+        #expect(magEnabled > 5e-5, "Enabled high exciter should generate 2nd harmonic, got \(magEnabled)")
+        #expect(magDisabled < 1e-4, "Disabled high exciter should NOT generate 2nd harmonic, got \(magDisabled)")
+        #expect(magHighCrossover < magEnabled * 0.1, "High crossover should heavily reduce 2nd harmonic, got \(magHighCrossover) vs \(magEnabled)")
+    }
+
+
+
+
+    @Test("Changing bassLinearWet dynamically updates low band gains")
+    func changingBassLinearWetUpdatesGains() {
+        let sampleRate = 48000.0
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        
+        // At 0.20 linear wet
+        processor.updateForVolume(0.0, bassLinearWet: 0.20)
+        let linearWet1 = processor.testBassLinearWet
+        #expect(linearWet1 == 0.20)
+        
+        // At 0.80 linear wet
+        processor.updateForVolume(0.0, bassLinearWet: 0.80)
+        let linearWet2 = processor.testBassLinearWet
+        #expect(linearWet2 == 0.80)
+    }
+
+    @Test("Changing maxDB dynamically updates lowExciterWet")
+    func changingMaxDBUpdatesWetLevel() {
+        let sampleRate = 48000.0
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        
+        processor.updateForVolume(0.5, maxDB: -30.0)
+        let wet1 = processor.testLowExciterWet
+        
+        processor.updateForVolume(0.5, maxDB: -20.0)
+        let wet2 = processor.testLowExciterWet
+        #expect(wet2 != wet1)
+    }
+
+    @Test("Soft bass variant uses a 35 percent low wet mix at maximum compensation")
+    func softBassVariantUsesHigherLowWetMix() {
+        let processor = LoudnessCompensator(sampleRate: 48_000.0)
+
+        processor.updateForVolume(0.0)
+
+        #expect(abs(processor.testLowExciterWet - 0.35) < 0.0001,
+                "Expected low exciter wet to be 0.35 at maximum compensation, got \(processor.testLowExciterWet)")
+    }
+
+    @Test("Soft bass variant uses 10 dB low EQ at maximum compensation")
+    func softBassVariantUsesTenDBLowEQ() {
+        let processor = LoudnessCompensator(sampleRate: 48_000.0)
+
+        processor.updateForVolume(0.0)
+
+        #expect(abs(processor.testBassEQ0DB - 10.0) < 0.0001)
+    }
+
+    @Test("Bass exciter wet zero bypasses loudness harmonics")
+    func bassExciterWetZeroBypassesLoudnessHarmonics() {
+        let processor = LoudnessCompensator(sampleRate: 48_000.0)
+
+        processor.updateForVolume(0.0, bassExciterWet: 0.0)
+
+        #expect(processor.testLowExciterWet == 0.0)
+        #expect(processor.testHighExciterWet == 0.0)
+    }
+
+    @Test("Treble lift uses exciter wet equivalent to 3 dB instead of EQ")
+    func trebleLiftUsesExciterWetEquivalentToThreeDB() {
+        let processor = LoudnessCompensator(sampleRate: 48_000.0)
+
+        processor.updateForVolume(0.0, trebleGainScale: 1.0)
+
+        let expectedWet = Float(pow(10.0, 3.0 / 20.0) - 1.0)
+        #expect(abs(processor.testHighExciterWet - expectedWet) < 0.0001,
+                "Expected high exciter wet \(expectedWet), got \(processor.testHighExciterWet)")
+    }
+
+    @Test("Measure low exciter bass contribution")
+    func measureLowExciterBassContribution() throws {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let frequencies = [30.0, 40.0, 50.0, 60.0, 80.0]
+        var rows = ["freqHz fundamental_dB harmonic2_dB harmonic3_dB harmonicEnergy_dB isoWeightedBass_dB isoWeightedHarmonics_dB"]
+
+        for frequency in frequencies {
+            var input = [Float](repeating: 0.0, count: frameCount * 2)
+            for index in 0..<frameCount {
+                let value = Float(0.125 * sin(2.0 * .pi * frequency * Double(index) / sampleRate))
+                input[index * 2] = value
+                input[index * 2 + 1] = value
+            }
+
+            var withExciter = [Float](repeating: 0.0, count: frameCount * 2)
+            let processor = LoudnessCompensator(sampleRate: sampleRate)
+            processor.updateForVolume(0.0, bassCrossoverFrequency: 180.0, trebleGainScale: 0.0)
+            processor.process(input: input, output: &withExciter, frameCount: frameCount)
+
+            var eqOnly = [Float](repeating: 0.0, count: frameCount * 2)
+            let eqProcessor = LoudnessCompensator(sampleRate: sampleRate)
+            eqProcessor.updateForVolume(0.0, bassCrossoverFrequency: 1.0, trebleGainScale: 0.0)
+            eqProcessor.process(input: input, output: &eqOnly, frameCount: frameCount)
+
+            let fundamentalDB = ratioDB(
+                magnitude(at: frequency, in: withExciter, sampleRate: sampleRate),
+                magnitude(at: frequency, in: eqOnly, sampleRate: sampleRate)
+            )
+            let harmonic2DB = ratioDB(
+                magnitude(at: frequency * 2.0, in: withExciter, sampleRate: sampleRate),
+                magnitude(at: frequency * 2.0, in: eqOnly, sampleRate: sampleRate)
+            )
+            let harmonic3DB = ratioDB(
+                magnitude(at: frequency * 3.0, in: withExciter, sampleRate: sampleRate),
+                magnitude(at: frequency * 3.0, in: eqOnly, sampleRate: sampleRate)
+            )
+            let harmonicEnergyDB = ratioDB(
+                harmonicEnergy(for: frequency, in: withExciter, sampleRate: sampleRate),
+                harmonicEnergy(for: frequency, in: eqOnly, sampleRate: sampleRate)
+            )
+            let weightedBassDB = ratioDB(
+                isoWeightedBassScore(for: frequency, in: withExciter, sampleRate: sampleRate, harmonics: 1...6),
+                isoWeightedBassScore(for: frequency, in: eqOnly, sampleRate: sampleRate, harmonics: 1...6)
+            )
+            let weightedHarmonicsDB = ratioDB(
+                isoWeightedBassScore(for: frequency, in: withExciter, sampleRate: sampleRate, harmonics: 2...6),
+                isoWeightedBassScore(for: frequency, in: eqOnly, sampleRate: sampleRate, harmonics: 2...6)
+            )
+
+            rows.append(String(format: "%.0f %.2f %.2f %.2f %.2f %.2f %.2f",
+                               frequency, fundamentalDB, harmonic2DB, harmonic3DB, harmonicEnergyDB,
+                               weightedBassDB, weightedHarmonicsDB))
+        }
+
+        try rows.joined(separator: "\n").write(
+            to: URL(fileURLWithPath: "/tmp/low_exciter_measure.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(rows.count == frequencies.count + 1)
+    }
+
+
+}
+
+private func magnitude(at frequency: Double, in buffer: [Float], sampleRate: Double) -> Double {
+    let frameCount = buffer.count / 2
+    var realSum = 0.0
+    var imagSum = 0.0
+    for index in 0..<frameCount {
+        let angle = 2.0 * .pi * frequency * Double(index) / sampleRate
+        realSum += Double(buffer[index * 2]) * cos(angle)
+        imagSum += Double(buffer[index * 2]) * sin(angle)
+    }
+    return sqrt(realSum * realSum + imagSum * imagSum) / Double(frameCount)
+}
+
+private func harmonicEnergy(for frequency: Double, in buffer: [Float], sampleRate: Double) -> Double {
+    let harmonics = (2...6).map { magnitude(at: frequency * Double($0), in: buffer, sampleRate: sampleRate) }
+    return sqrt(harmonics.reduce(0.0) { $0 + $1 * $1 })
+}
+
+private func isoWeightedBassScore(
+    for frequency: Double,
+    in buffer: [Float],
+    sampleRate: Double,
+    harmonics: ClosedRange<Int>
+) -> Double {
+    sqrt(harmonics.reduce(0.0) { total, harmonic in
+        let harmonicFrequency = frequency * Double(harmonic)
+        let weightedMagnitude = magnitude(at: harmonicFrequency, in: buffer, sampleRate: sampleRate)
+            * iso226SensitivityWeight(at: harmonicFrequency)
+        return total + weightedMagnitude * weightedMagnitude
+    })
+}
+
+private func iso226SensitivityWeight(at frequency: Double) -> Double {
+    let contour = ISO226Contours.contourSPL(atPhon: 60.0)
+    let requiredSPL = interpolateLogFrequency(contour, at: frequency)
+    let oneKilohertzSPL = contour[17]
+    return pow(10.0, (oneKilohertzSPL - requiredSPL) / 20.0)
+}
+
+private func interpolateLogFrequency(_ values: [Double], at frequency: Double) -> Double {
+    let logFrequency = log(max(frequency, ISO226Contours.frequencies[0]))
+    let logFrequencies = ISO226Contours.frequencies.map { log($0) }
+
+    if logFrequency <= logFrequencies.first! { return values.first! }
+    if logFrequency >= logFrequencies.last! { return values.last! }
+
+    var lowerIndex = 0
+    for index in 0..<(logFrequencies.count - 1) where logFrequencies[index + 1] >= logFrequency {
+        lowerIndex = index
+        break
+    }
+
+    let upperIndex = lowerIndex + 1
+    let t = (logFrequency - logFrequencies[lowerIndex]) / (logFrequencies[upperIndex] - logFrequencies[lowerIndex])
+    return values[lowerIndex] + t * (values[upperIndex] - values[lowerIndex])
+}
+
+private func ratioDB(_ numerator: Double, _ denominator: Double) -> Double {
+    20.0 * log10(max(numerator, 1e-12) / max(denominator, 1e-12))
+}
 
 private func expectClose(_ actual: Double, _ expected: Double, tolerance: Double) {
     #expect(abs(actual - expected) <= tolerance, "Expected \(expected), got \(actual)")

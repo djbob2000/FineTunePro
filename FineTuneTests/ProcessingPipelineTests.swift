@@ -108,9 +108,10 @@ private func processWithDefaults(
     dynamicEqualizerProc: DynamicEqualizer? = nil,
     loudnessEqualizerProc: LoudnessEqualizer? = nil,
     postAgcCompressorProc: PostAgcCompressor? = nil,
-    loudnessCompensatorProc: LoudnessCompensator? = nil
+    loudnessCompensatorProc: LoudnessCompensator? = nil,
+    brickwallLimiter: BrickwallLimiter? = nil
 ) {
-    ProcessTapController.processMappedBuffers(
+    _ = ProcessTapController.processMappedBuffers(
         inputBuffers: input.bufferList,
         outputBuffers: output.bufferList,
         targetVol: targetVol,
@@ -125,7 +126,9 @@ private func processWithDefaults(
         dynamicEqualizerProc: dynamicEqualizerProc,
         loudnessEqualizerProc: loudnessEqualizerProc,
         postAgcCompressorProc: postAgcCompressorProc,
-        loudnessCompensatorProc: loudnessCompensatorProc
+        loudnessCompensatorProc: loudnessCompensatorProc,
+        brickwallLimiter: brickwallLimiter,
+        sampleRate: 48000.0
     )
 }
 
@@ -703,11 +706,11 @@ struct ProcessingChainTests {
                 "Flat EQ should be near-passthrough. Max error: \(maxError)")
     }
 
-    @Test("EQ applied before SoftLimiter: boosted peaks are caught")
+    @Test("EQ applied before BrickwallLimiter: boosted peaks are caught")
     func eqBeforeLimiter() {
-        // Strategy: boost EQ so output exceeds 1.0 before limiting.
+        // Strategy: boost EQ so output exceeds ceiling before limiting.
         // If EQ runs after limiter, peaks would slip through.
-        // If EQ runs before limiter (correct), output <= 1.0.
+        // If EQ runs before limiter (correct), output <= ceiling.
         let frames = 4096
         let input = TestABL(buffers: [(channels: 2, frames: frames)])
         let output = TestABL(buffers: [(channels: 2, frames: frames)])
@@ -731,19 +734,21 @@ struct ProcessingChainTests {
         eq.updateSettings(settings)
 
         var vol: Float = 1.0
+        let limiter = BrickwallLimiter()
         processWithDefaults(
             input: input, output: output,
-            currentVol: &vol, eqProc: eq
+            currentVol: &vol, eqProc: eq,
+            brickwallLimiter: limiter
         )
 
-        // After EQ boost + SoftLimiter: output should never exceed +/-1.0.
+        // After EQ boost + BrickwallLimiter: output should never exceed ceiling.
         let outData = output.data(at: 0)
         var maxAbs: Float = 0
         for i in 0..<(frames * 2) {
             maxAbs = max(maxAbs, abs(outData[i]))
         }
-        #expect(maxAbs <= SoftLimiter.ceiling,
-                "SoftLimiter should catch EQ-boosted peaks. Max: \(maxAbs)")
+        #expect(maxAbs <= BrickwallLimiter.ceiling + 0.001,
+                "BrickwallLimiter should catch EQ-boosted peaks. Max: \(maxAbs)")
         // Also verify EQ actually boosted (output peak > input peak).
         #expect(maxAbs > 0.5,
                 "EQ boost should increase output above input level. Max: \(maxAbs)")
@@ -770,27 +775,30 @@ struct ProcessingChainTests {
         }
     }
 
-    @Test("SoftLimiter engages on boosted volume without EQ")
+    @Test("BrickwallLimiter engages on boosted volume without EQ")
     func limiterEngagesOnBoost() {
         let frames = 256
         let input = TestABL(buffers: [(channels: 2, frames: frames)])
         let output = TestABL(buffers: [(channels: 2, frames: frames)])
         fill(input, bufferIndex: 0, value: 0.5)
 
-        var vol: Float = 3.0  // 3x boost -> 0.5 * 3.0 = 1.5, exceeds threshold
+        var vol: Float = 3.0  // 3x boost -> 0.5 * 3.0 = 1.5, exceeds ceiling
+        let limiter = BrickwallLimiter()
         processWithDefaults(
             input: input, output: output,
             targetVol: 3.0,
-            currentVol: &vol
+            currentVol: &vol,
+            brickwallLimiter: limiter
         )
 
         let outData = output.data(at: 0)
+        var peak: Float = 0.0
         for i in 0..<(frames * 2) {
-            #expect(outData[i] <= SoftLimiter.ceiling,
+            peak = max(peak, abs(outData[i]))
+            #expect(outData[i] <= BrickwallLimiter.ceiling + 0.001,
                     "Limiter should constrain boosted output. Sample \(i): \(outData[i])")
-            #expect(outData[i] > SoftLimiter.threshold,
-                    "Output should be above threshold (limiter compresses, not clips). Sample \(i): \(outData[i])")
         }
+        #expect(peak > 0.9, "Limiter should allow signal to reach near ceiling. Peak: \(peak)")
     }
 
     @Test("EQ disabled: output equals volume-scaled input (no filter artifacts)")
@@ -846,6 +854,239 @@ struct ProcessingChainTests {
             #expect(outData[i] == 0.0,
                     "Trailing sample \(i) should be zeroed, got \(outData[i])")
         }
+    }
+}
+
+@Suite("ProcessTapController - Output Metering")
+struct OutputMeteringTests {
+    @Test("Limiter sample rate follows callback role")
+    func limiterSampleRateFollowsCallbackRole() {
+        #expect(ProcessTapController.limiterSampleRate(isPrimary: true, primarySampleRate: 96_000, secondarySampleRate: 44_100) == 96_000)
+        #expect(ProcessTapController.limiterSampleRate(isPrimary: false, primarySampleRate: 96_000, secondarySampleRate: 44_100) == 44_100)
+    }
+
+    @Test("Brickwall path returns pre-limiter peak and limiter trigger")
+    func brickwallPeakAndTrigger() {
+        let frames = 256
+        let input = TestABL(buffers: [(channels: 2, frames: frames)])
+        let output = TestABL(buffers: [(channels: 2, frames: frames)])
+        fill(input, bufferIndex: 0, value: 1.25)
+
+        var vol: Float = 1.0
+        let limiter = BrickwallLimiter()
+
+        let (peak, limiterTriggered) = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            dynamicEqualizerProc: nil,
+            loudnessEqualizerProc: nil,
+            postAgcCompressorProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: limiter,
+            sampleRate: 48000.0
+        )
+
+        #expect(peak == 1.25)
+        #expect(peak > BrickwallLimiter.ceiling)
+        #expect(limiterTriggered)
+    }
+
+    @Test("Brickwall path does not trigger below ceiling")
+    func brickwallBelowCeilingDoesNotTrigger() {
+        let frames = 256
+        let input = TestABL(buffers: [(channels: 2, frames: frames)])
+        let output = TestABL(buffers: [(channels: 2, frames: frames)])
+        fill(input, bufferIndex: 0, value: 0.50)
+
+        var vol: Float = 1.0
+        let limiter = BrickwallLimiter()
+
+        let (peak, limiterTriggered) = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            dynamicEqualizerProc: nil,
+            loudnessEqualizerProc: nil,
+            postAgcCompressorProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: limiter,
+            sampleRate: 48000.0
+        )
+
+        #expect(peak == 0.50)
+        #expect(!limiterTriggered)
+    }
+
+    @Test("Stereo output meter reports separate channel peaks")
+    func stereoOutputMeterReportsSeparateChannelPeaks() {
+        let frames = 8
+        let input = TestABL(buffers: [(channels: 2, frames: frames)])
+        let output = TestABL(buffers: [(channels: 2, frames: frames)])
+        let inputData = input.data(at: 0)
+        for frame in 0..<frames {
+            inputData[frame * 2] = 0.25
+            inputData[frame * 2 + 1] = 0.75
+        }
+
+        var vol: Float = 1.0
+        var channelPeaks: (Float, Float) = (0, 0)
+        var channelCount = 0
+        let (peak, _) = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            dynamicEqualizerProc: nil,
+            loudnessEqualizerProc: nil,
+            postAgcCompressorProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: nil,
+            outputMeterChannelPeaks: &channelPeaks,
+            outputMeterChannelCount: &channelCount,
+            sampleRate: 48000.0
+        )
+
+        #expect(peak == 0.75)
+        #expect(channelPeaks.0 == 0.25)
+        #expect(channelPeaks.1 == 0.75)
+        #expect(channelCount == 2)
+    }
+}
+
+@Suite("BrickwallLimiter - Best Practice Safety")
+struct BrickwallLimiterBestPracticeTests {
+    @Test("Ceiling stays near legacy safety threshold")
+    func ceilingStaysNearLegacySafetyThreshold() {
+        #expect(abs(BrickwallLimiter.ceiling - 0.98) < 0.000_001)
+    }
+
+    @Test("Limiter processes mono without stereo assumptions")
+    func limiterProcessesMono() {
+        var samples = [Float](repeating: 1.25, count: 512)
+        let limiter = BrickwallLimiter()
+
+        samples.withUnsafeMutableBufferPointer { ptr in
+            limiter.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: 1, sampleRate: 48_000)
+        }
+
+        let outputPeak = samples.map { abs($0) }.max() ?? 0
+        #expect(outputPeak <= BrickwallLimiter.ceiling + 0.0001)
+        #expect(samples.contains { abs($0) > 0.0001 })
+    }
+
+    @Test("Limiter processes six-channel interleaved audio with shared gain")
+    func limiterProcessesSixChannelInterleavedAudio() {
+        let channelCount = 6
+        let frameCount = 512
+        var samples = [Float](repeating: 0.0, count: frameCount * channelCount)
+        for frame in 0..<frameCount {
+            samples[frame * channelCount + 0] = 0.25
+            samples[frame * channelCount + 5] = 1.50
+        }
+        let limiter = BrickwallLimiter()
+
+        samples.withUnsafeMutableBufferPointer { ptr in
+            limiter.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: channelCount, sampleRate: 48_000)
+        }
+
+        let outputPeak = samples.map { abs($0) }.max() ?? 0
+        let frontLeftPeak = (0..<frameCount).map { abs(samples[$0 * channelCount + 0]) }.max() ?? 0
+        let rearRightPeak = (0..<frameCount).map { abs(samples[$0 * channelCount + 5]) }.max() ?? 0
+
+        #expect(outputPeak <= BrickwallLimiter.ceiling + 0.0001)
+        #expect(frontLeftPeak > 0.01)
+        #expect(rearRightPeak > frontLeftPeak)
+    }
+
+    @Test("Planar stereo buffers do not leak delayed audio between channels")
+    func planarStereoBuffersDoNotLeakBetweenChannels() {
+        let frames = 256
+        let input = TestABL(buffers: [(channels: 1, frames: frames), (channels: 1, frames: frames)])
+        let output = TestABL(buffers: [(channels: 1, frames: frames), (channels: 1, frames: frames)])
+        fill(input, bufferIndex: 0, value: 0.20)
+        fill(input, bufferIndex: 1, value: 0.70)
+
+        var vol: Float = 1.0
+        _ = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            dynamicEqualizerProc: nil,
+            loudnessEqualizerProc: nil,
+            postAgcCompressorProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: BrickwallLimiter(),
+            sampleRate: 48_000
+        )
+
+        let right = output.data(at: 1)
+        let left = output.data(at: 0)
+        #expect(abs(right[0]) < 0.0001) // inside delay window
+        #expect(abs(left[0]) < 0.0001) // inside delay window
+        #expect(abs(right[95] - 0.70) < 0.0001) // after delay window
+        #expect(abs(left[95] - 0.20) < 0.0001) // after delay window
+    }
+
+    @Test("Below-ceiling sine stays a delayed clean sine")
+    func belowCeilingSineStaysDelayedCleanSine() {
+        let sampleRate: Double = 48_000
+        let frequency: Float = 1_000
+        let frameCount = 4_096
+        let channelCount = 2
+        let delayFrames = 95
+        var samples = [Float](repeating: 0.0, count: frameCount * channelCount)
+        for frame in 0..<frameCount {
+            let sample = 0.50 * sinf(2.0 * Float.pi * frequency * Float(frame) / Float(sampleRate))
+            samples[frame * channelCount] = sample
+            samples[frame * channelCount + 1] = sample
+        }
+        let input = samples
+        let limiter = BrickwallLimiter()
+
+        samples.withUnsafeMutableBufferPointer { ptr in
+            limiter.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: channelCount, sampleRate: sampleRate)
+        }
+
+        var maxError: Float = 0.0
+        for frame in delayFrames..<frameCount {
+            let expected = input[(frame - delayFrames) * channelCount]
+            maxError = max(maxError, abs(samples[frame * channelCount] - expected))
+            maxError = max(maxError, abs(samples[frame * channelCount + 1] - expected))
+        }
+
+        #expect(maxError < 0.0001)
     }
 }
 

@@ -249,3 +249,28 @@ struct BiquadMathPreWarpTests {
         #expect(freq.isFinite)
     }
 }
+
+// MARK: - Low-Pass Coefficients
+
+@Suite("BiquadMath — Low-Pass coefficients")
+struct BiquadMathLowPassTests {
+
+    @Test("Always returns exactly 5 coefficients")
+    func coefficientCount() {
+        let coeffs = BiquadMath.lowPassCoefficients(
+            frequency: 100, q: 0.707, sampleRate: 44100
+        )
+        #expect(coeffs.count == 5)
+    }
+
+    @Test("All coefficients are finite for valid inputs")
+    func allFinite() {
+        let coeffs = BiquadMath.lowPassCoefficients(
+            frequency: 100, q: 0.707, sampleRate: 48000
+        )
+        for (i, c) in coeffs.enumerated() {
+            #expect(c.isFinite, "Coefficient[\(i)] is not finite: \(c)")
+        }
+    }
+}
+

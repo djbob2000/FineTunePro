@@ -106,7 +106,7 @@ struct LoudnessVolumeCompensationTests {
         #expect(volAfterEnable == 0.5, "volAfterEnable was \(volAfterEnable), expected 0.5")
         
         let enableLoudnessEvents = tap.events.compactMap { event -> (volume: Float, enabled: Bool, gainScale: Float)? in
-            if case let .updateLoudnessCompensation(vol, enabled, _, gainScale) = event {
+            if case let .updateLoudnessCompensation(vol, enabled, _, gainScale, _, _, _, _, _) = event {
                 return (vol, enabled, gainScale)
             }
             return nil
@@ -134,7 +134,7 @@ struct LoudnessVolumeCompensationTests {
         #expect(volAfterDisable == 0.5)
         
         let disableLoudnessEvents = tap.events.compactMap { event -> (volume: Float, enabled: Bool, gainScale: Float)? in
-            if case let .updateLoudnessCompensation(vol, enabled, _, gainScale) = event {
+            if case let .updateLoudnessCompensation(vol, enabled, _, gainScale, _, _, _, _, _) = event {
                 return (vol, enabled, gainScale)
             }
             return nil
@@ -171,7 +171,7 @@ struct LoudnessVolumeCompensationTests {
         #expect(fix.deviceVolume.volumes[fix.device.id] == 0.5)
         
         let enableEvents = tap.events.compactMap { event -> Float? in
-            if case let .updateLoudnessCompensation(_, true, _, gainScale) = event {
+            if case let .updateLoudnessCompensation(_, true, _, gainScale, _, _, _, _, _) = event {
                 return gainScale
             }
             return nil
@@ -190,7 +190,7 @@ struct LoudnessVolumeCompensationTests {
         try await Task.sleep(nanoseconds: 50_000_000)
         
         let disableEvents = tap.events.compactMap { event -> (enabled: Bool, gainScale: Float)? in
-            if case let .updateLoudnessCompensation(_, enabled, _, gainScale) = event {
+            if case let .updateLoudnessCompensation(_, enabled, _, gainScale, _, _, _, _, _) = event {
                 return (enabled, gainScale)
             }
             return nil

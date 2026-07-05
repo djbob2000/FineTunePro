@@ -711,9 +711,9 @@ struct EQProcessorMultiBandSignalTests {
     }
 }
 
-// MARK: - Full Chain: Volume + EQ + SoftLimiter
+// MARK: - Full Chain: Volume + EQ + BrickwallLimiter
 
-@Suite("Signal Chain — Volume + EQ + SoftLimiter")
+@Suite("Signal Chain — Volume + EQ + BrickwallLimiter")
 struct FullSignalChainTests {
 
     private static let sampleRate: Double = 48000
@@ -760,23 +760,21 @@ struct FullSignalChainTests {
         #expect(eqGain > 3.0,
                 "EQ stage should boost ~4x at 1kHz, got \(eqGain)x")
 
-        // Stage 3: Apply SoftLimiter
-        SoftLimiter.processBuffer(afterEQ, sampleCount: sampleCount)
+        // Stage 3: Apply BrickwallLimiter
+        let limiter = BrickwallLimiter()
+        limiter.process(afterEQ, sampleCount: sampleCount, channelCount: 2, sampleRate: Self.sampleRate)
 
         let afterLimiterPeak = TestSignal.measurePeak(
             buffer: afterEQ, channel: 0, frameCount: Self.frameCount, skipFrames: Self.skipFrames
         )
 
         // Limiter must enforce ceiling
-        #expect(afterLimiterPeak <= SoftLimiter.ceiling,
+        #expect(afterLimiterPeak <= BrickwallLimiter.ceiling + 0.001,
                 "After limiter: peak should be <= ceiling, got \(afterLimiterPeak)")
 
-        // After limiter, RMS should be reduced compared to pre-limiter (if signal was clipping)
         let afterLimiterRMS = TestSignal.measureRMS(
             buffer: afterEQ, channel: 0, frameCount: Self.frameCount, skipFrames: Self.skipFrames
         )
-        // Input amplitude 0.5 * volume 0.5 = 0.25 peak, * ~4x EQ = ~1.0 peak.
-        // That's near/above threshold (0.95), so limiter should be active on peaks.
         #expect(afterLimiterRMS > 0, "Limiter output should not be silent")
     }
 
@@ -807,15 +805,18 @@ struct FullSignalChainTests {
         let preLimiterPeak = TestSignal.measurePeak(
             buffer: working, channel: 0, frameCount: Self.frameCount, skipFrames: Self.skipFrames
         )
-        #expect(preLimiterPeak > SoftLimiter.ceiling,
+        #expect(preLimiterPeak > BrickwallLimiter.ceiling,
                 "Pre-limiter peak should exceed ceiling: got \(preLimiterPeak)")
 
         // Apply limiter
-        SoftLimiter.processBuffer(working, sampleCount: sampleCount)
+        let limiter = BrickwallLimiter()
+        limiter.process(working, sampleCount: sampleCount, channelCount: 2, sampleRate: Self.sampleRate)
 
-        // After limiter: every sample should be within ceiling
-        for i in 0..<sampleCount {
-            #expect(abs(working[i]) <= SoftLimiter.ceiling,
+        // After limiter: every sample should be within ceiling (skipping initial delay window)
+        let windowSize = Int((2.0 / 1000.0) * Self.sampleRate)
+        let delaySamples = windowSize * 2
+        for i in delaySamples..<sampleCount {
+            #expect(abs(working[i]) <= BrickwallLimiter.ceiling + 0.001,
                     "Post-limiter sample \(i) = \(working[i]) exceeds ceiling")
         }
     }
@@ -823,7 +824,7 @@ struct FullSignalChainTests {
     @Test("Full chain: low volume signal passes through EQ and limiter transparently")
     func lowVolumeTransparent() {
         // 0.1 amplitude * 0.3 volume = 0.03 peak. Even +12dB EQ -> 0.12 peak.
-        // Well below limiter threshold (0.95) -> limiter should be transparent.
+        // Well below limiter ceiling -> limiter should be transparent.
         let input = TestSignal.makeStereoSine(
             frequency: 1000, amplitude: 0.1, sampleRate: Self.sampleRate, frameCount: Self.frameCount
         )
@@ -853,19 +854,22 @@ struct FullSignalChainTests {
 
         // Apply limiter
         let preLimit = Array(UnsafeBufferPointer(start: working, count: sampleCount))
-        SoftLimiter.processBuffer(working, sampleCount: sampleCount)
+        let limiter = BrickwallLimiter()
+        limiter.process(working, sampleCount: sampleCount, channelCount: 2, sampleRate: Self.sampleRate)
 
         // Signal should be below threshold, so limiter is no-op
         let postLimiterPeak = TestSignal.measurePeak(
             buffer: working, channel: 0, frameCount: Self.frameCount, skipFrames: Self.skipFrames
         )
-        #expect(postLimiterPeak < SoftLimiter.threshold,
-                "Low signal should stay below threshold: peak=\(postLimiterPeak)")
+        #expect(postLimiterPeak < BrickwallLimiter.ceiling,
+                "Low signal should stay below ceiling: peak=\(postLimiterPeak)")
 
-        // Verify limiter didn't modify anything (bit-exact passthrough)
-        for i in Self.skipFrames * 2..<sampleCount {
-            #expect(working[i] == preLimit[i],
-                    "Limiter should be transparent for below-threshold signal at sample \(i)")
+        // Verify limiter didn't modify anything besides look-ahead delay
+        let windowSize = Int((2.0 / 1000.0) * Self.sampleRate)
+        let delaySamples = (windowSize - 1) * 2
+        for i in (Self.skipFrames * 2 + delaySamples)..<sampleCount {
+            #expect(working[i] == preLimit[i - delaySamples],
+                    "Limiter should be transparent (just delayed) for below-ceiling signal at sample \(i)")
         }
 
         // EQ should have boosted significantly
