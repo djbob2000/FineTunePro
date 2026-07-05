@@ -1523,11 +1523,9 @@ final class ProcessTapController: ProcessTapControlling {
             if inputChannels == outputChannels {
                 let sampleCount = frameCount * inputChannels
                 for frame in 0..<frameCount {
-                    currentVol += (targetVol - currentVol) * rampCoefficient
-                    let gain = currentVol * crossfadeMultiplier * outputGateMultiplier
                     let base = frame * inputChannels
                     for ch in 0..<inputChannels {
-                        outputSamples[base + ch] = inputSamples[base + ch] * gain
+                        outputSamples[base + ch] = inputSamples[base + ch]
                     }
                 }
                 if sampleCount < outputSampleCount {
@@ -1535,12 +1533,10 @@ final class ProcessTapController: ProcessTapControlling {
                 }
             } else if inputChannels == 2 && outputChannels > 2 {
                 for frame in 0..<frameCount {
-                    currentVol += (targetVol - currentVol) * rampCoefficient
-                    let gain = currentVol * crossfadeMultiplier * outputGateMultiplier
                     let inBase = frame * 2
                     let outBase = frame * outputChannels
-                    let left = inputSamples[inBase] * gain
-                    let right = inputSamples[inBase + 1] * gain
+                    let left = inputSamples[inBase]
+                    let right = inputSamples[inBase + 1]
 
                     for ch in 0..<outputChannels {
                         outputSamples[outBase + ch] = 0
@@ -1554,9 +1550,7 @@ final class ProcessTapController: ProcessTapControlling {
                 }
             } else if inputChannels == 1 && outputChannels > 1 {
                 for frame in 0..<frameCount {
-                    currentVol += (targetVol - currentVol) * rampCoefficient
-                    let gain = currentVol * crossfadeMultiplier * outputGateMultiplier
-                    let sample = inputSamples[frame] * gain
+                    let sample = inputSamples[frame]
                     let outBase = frame * outputChannels
 
                     for ch in 0..<outputChannels {
@@ -1571,13 +1565,11 @@ final class ProcessTapController: ProcessTapControlling {
                 }
             } else {
                 for frame in 0..<frameCount {
-                    currentVol += (targetVol - currentVol) * rampCoefficient
-                    let gain = currentVol * crossfadeMultiplier * outputGateMultiplier
                     let inBase = frame * inputChannels
                     let outBase = frame * outputChannels
                     let copiedChannels = min(inputChannels, outputChannels)
                     for ch in 0..<copiedChannels {
-                        outputSamples[outBase + ch] = inputSamples[inBase + ch] * gain
+                        outputSamples[outBase + ch] = inputSamples[inBase + ch]
                     }
                     if copiedChannels < outputChannels {
                         for ch in copiedChannels..<outputChannels {
@@ -1591,6 +1583,16 @@ final class ProcessTapController: ProcessTapControlling {
                 }
             }
 
+            // 1. Smart Volume: Loudness Equalization & Post AGC Compressor on raw unscaled audio
+            if let loudnessEqualizerProc, loudnessEqualizerProc.isEnabled, eqCanProcessStereoInterleaved {
+                loudnessEqualizerProc.process(input: UnsafePointer(outputSamples), output: outputSamples, frameCount: frameCount, channelCount: outputChannels)
+            }
+
+            if let postAgcCompressorProc, postAgcCompressorProc.isEnabled, eqCanProcessStereoInterleaved {
+                postAgcCompressorProc.process(input: UnsafePointer(outputSamples), output: outputSamples, frameCount: frameCount, channelCount: outputChannels)
+            }
+
+            // 2. Per-app EQ & Dynamic EQ
             if let eq = eq, eq.isEnabled, eqCanProcessStereoInterleaved {
                 eq.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
             }
@@ -1599,22 +1601,22 @@ final class ProcessTapController: ProcessTapControlling {
                 dynEQ.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
             }
 
-            // Per-device AutoEQ correction (after per-app EQ)
+            // 3. Per-device AutoEQ correction
             if let autoEQProc, autoEQProc.isEnabled, eqCanProcessStereoInterleaved {
                 autoEQProc.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
             }
 
-            // Loudness Equalization (before post-AGC compressor)
-            if let loudnessEqualizerProc, loudnessEqualizerProc.isEnabled, eqCanProcessStereoInterleaved {
-                loudnessEqualizerProc.process(input: UnsafePointer(outputSamples), output: outputSamples, frameCount: frameCount, channelCount: outputChannels)
+            // 4. App Volume Slider Gain & Smooth Ramping (applied AFTER Smart Volume AGC)
+            for frame in 0..<frameCount {
+                currentVol += (targetVol - currentVol) * rampCoefficient
+                let gain = currentVol * crossfadeMultiplier * outputGateMultiplier
+                let base = frame * outputChannels
+                for ch in 0..<outputChannels {
+                    outputSamples[base + ch] *= gain
+                }
             }
 
-            // Post AGC Compressor (catches transient overshoots that slow AGC misses)
-            if let postAgcCompressorProc, postAgcCompressorProc.isEnabled, eqCanProcessStereoInterleaved {
-                postAgcCompressorProc.process(input: UnsafePointer(outputSamples), output: outputSamples, frameCount: frameCount, channelCount: outputChannels)
-            }
-
-            // Loudness compensation (after all EQ, before limiting)
+            // 5. Loudness Compensation (ISO 226 contour, evaluated on post-volume level, before limiting)
             if let loudnessCompensatorProc, loudnessCompensatorProc.isEnabled, eqCanProcessStereoInterleaved {
                 loudnessCompensatorProc.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
             }

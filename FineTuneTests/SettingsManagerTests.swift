@@ -247,6 +247,23 @@ struct AppSettingsDefaultTests {
         #expect(manager.appSettings.loudnessCompensationEnabled == true)
     }
 
+    @Test("appSmartVolumeEnabled and deviceSmartVolumeEnabled persist via SettingsManager")
+    @MainActor
+    func smartVolumeEnabledPersistence() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let manager = SettingsManager(directory: tempDir)
+
+        #expect(manager.getAppSmartVolumeEnabled(for: "com.apple.Music") == false)
+        #expect(manager.getSmartVolumeEnabled(for: "dev-123") == false)
+
+        manager.setAppSmartVolumeEnabled(for: "com.apple.Music", to: true)
+        manager.setSmartVolumeEnabled(for: "dev-123", to: true)
+
+        #expect(manager.getAppSmartVolumeEnabled(for: "com.apple.Music") == true)
+        #expect(manager.getSmartVolumeEnabled(for: "dev-123") == true)
+    }
+
     @Test("volumeHotkeyStep defaults to .normal")
     func volumeHotkeyStepDefault() {
         let settings = AppSettings()

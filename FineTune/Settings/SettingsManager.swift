@@ -141,6 +141,8 @@ final class SettingsManager {
         var autoEQPreampEnabled: Bool = true  // Use profile preamp vs bypass (rely on limiter)
 
         // Per-device loudness settings
+        var appSmartVolumeEnabled: [String: Bool] = [:] // bundleID/identifier -> enabled
+        var deviceSmartVolumeEnabled: [String: Bool] = [:] // deviceUID -> enabled
         var deviceLoudnessCompensationEnabled: [String: Bool] = [:] // deviceUID -> enabled
         var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> startDB (default: 0.0)
         var deviceLoudnessMaxDB: [String: Double] = [:] // deviceUID -> maxDB (default: -20.0)
@@ -199,6 +201,8 @@ final class SettingsManager {
             deviceAutoEQ = try c.decodeIfPresent([String: AutoEQSelection].self, forKey: .deviceAutoEQ) ?? [:]
             favoriteAutoEQProfiles = try c.decodeIfPresent(Set<String>.self, forKey: .favoriteAutoEQProfiles) ?? []
             autoEQPreampEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoEQPreampEnabled) ?? true
+            appSmartVolumeEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .appSmartVolumeEnabled) ?? [:]
+            deviceSmartVolumeEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceSmartVolumeEnabled) ?? [:]
             deviceLoudnessCompensationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessCompensationEnabled) ?? [:]
             deviceLoudnessReferencePhon = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessReferencePhon) ?? [:]
             deviceLoudnessBassCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassCrossover) ?? [:]
@@ -793,6 +797,26 @@ final class SettingsManager {
     var appSettings: AppSettings {
         get { settings.appSettings }
         set { updateAppSettings(newValue) }
+    }
+
+    // MARK: - Per-App & Per-Device Smart Volume
+
+    func getAppSmartVolumeEnabled(for identifier: String) -> Bool {
+        settings.appSmartVolumeEnabled[identifier] ?? false
+    }
+
+    func setAppSmartVolumeEnabled(for identifier: String, to enabled: Bool) {
+        settings.appSmartVolumeEnabled[identifier] = enabled
+        scheduleSave()
+    }
+
+    func getSmartVolumeEnabled(for deviceUID: String) -> Bool {
+        settings.deviceSmartVolumeEnabled[deviceUID] ?? false
+    }
+
+    func setSmartVolumeEnabled(for deviceUID: String, to enabled: Bool) {
+        settings.deviceSmartVolumeEnabled[deviceUID] = enabled
+        scheduleSave()
     }
 
     // MARK: - Per-Device Loudness & Equalization

@@ -9,6 +9,8 @@ struct DeviceDetailSheet: View {
     let autoDetectedTier: VolumeControlTier
     let currentOverride: VolumeControlTier?
     let onOverrideChange: (VolumeControlTier?) -> Void
+    let isSmartVolumeEnabled: Bool
+    let onSmartVolumeToggle: (Bool) -> Void
     let isLoudnessCompensationEnabled: Bool
     let onLoudnessCompensationToggle: (Bool) -> Void
     let loudnessReferencePhon: Double
@@ -35,6 +37,8 @@ struct DeviceDetailSheet: View {
         autoDetectedTier: VolumeControlTier,
         currentOverride: VolumeControlTier?,
         onOverrideChange: @escaping (VolumeControlTier?) -> Void,
+        isSmartVolumeEnabled: Bool = false,
+        onSmartVolumeToggle: @escaping (Bool) -> Void = { _ in },
         isLoudnessCompensationEnabled: Bool,
         onLoudnessCompensationToggle: @escaping (Bool) -> Void,
         loudnessReferencePhon: Double,
@@ -54,6 +58,8 @@ struct DeviceDetailSheet: View {
         self.autoDetectedTier = autoDetectedTier
         self.currentOverride = currentOverride
         self.onOverrideChange = onOverrideChange
+        self.isSmartVolumeEnabled = isSmartVolumeEnabled
+        self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isLoudnessCompensationEnabled = isLoudnessCompensationEnabled
         self.onLoudnessCompensationToggle = onLoudnessCompensationToggle
         self.loudnessReferencePhon = loudnessReferencePhon
@@ -102,6 +108,9 @@ struct DeviceDetailSheet: View {
                 softwareToggle
                 calloutText
             }
+
+            separator
+            smartVolumeToggle
 
             separator
             loudnessCompensationToggle
@@ -212,6 +221,36 @@ struct DeviceDetailSheet: View {
             .font(DesignTokens.Typography.caption)
             .foregroundStyle(DesignTokens.Colors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - Smart Volume Toggle
+
+    @ViewBuilder
+    private var smartVolumeToggle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                Text("Smart Volume")
+                    .font(DesignTokens.Typography.pickerText)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+
+                Spacer(minLength: DesignTokens.Spacing.sm)
+
+                Toggle("", isOn: Binding(
+                    get: { transportType == .builtIn ? false : isSmartVolumeEnabled },
+                    set: { onSmartVolumeToggle($0) }
+                ))
+                .toggleStyle(.switch)
+                .scaleEffect(0.8)
+                .labelsHidden()
+                .disabled(transportType == .builtIn)
+            }
+            Text(transportType == .builtIn
+                 ? "Smart volume is unavailable for built-in speakers as macOS applies native DSP tuning to them."
+                 : "Normalize volume across apps and content for this device.")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: - Loudness Compensation Toggle
