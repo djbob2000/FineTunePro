@@ -18,6 +18,9 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
     /// Slider fraction in [0, 1]. The wiring site converts to gain using the current device's tier.
     var volumeWriter: ((Double) -> Void)?
+    var foregroundAppFullscreenProvider: () -> Bool = {
+        HUDWindowController.detectForegroundAppFullscreen()
+    }
 
     // MARK: - Suppression-degraded tracking
 
@@ -73,6 +76,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
     func show(sliderFraction: Double, mute: Bool, deviceName: String) {
         showCallCount += 1
         showDidUpdatePanel = false
+
 
         guard !popupVisibility.isVisible else {
             logger.debug("Skipping HUD show: popup is visible")
@@ -382,7 +386,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
     // MARK: - Fullscreen guard
 
-    private func isForegroundAppFullscreen() -> Bool {
+    private static func detectForegroundAppFullscreen() -> Bool {
         guard let frontmostApp = NSWorkspace.shared.frontmostApplication else { return false }
         let pid = frontmostApp.processIdentifier
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]

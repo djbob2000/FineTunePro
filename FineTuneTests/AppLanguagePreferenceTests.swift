@@ -7,6 +7,59 @@ import Testing
 
 @Suite("AppLanguagePreference")
 struct AppLanguagePreferenceTests {
+    private static let expectedAppleLanguageOverrides: [[String]] = [
+        ["ar-SA"],
+        ["bn-BD"],
+        ["ca"],
+        ["zh-Hans"],
+        ["zh-Hant"],
+        ["hr"],
+        ["cs"],
+        ["da"],
+        ["nl-NL"],
+        ["en-AU"],
+        ["en-CA"],
+        ["en-GB"],
+        ["en-US"],
+        ["fi"],
+        ["fr-FR"],
+        ["fr-CA"],
+        ["de-DE"],
+        ["el"],
+        ["gu-IN"],
+        ["he"],
+        ["hi"],
+        ["hu"],
+        ["id"],
+        ["it"],
+        ["ja"],
+        ["kn-IN"],
+        ["ko"],
+        ["ms"],
+        ["ml-IN"],
+        ["mr-IN"],
+        ["nb"],
+        ["or-IN"],
+        ["pl"],
+        ["pt-BR"],
+        ["pt-PT"],
+        ["pa-IN"],
+        ["ro"],
+        ["ru"],
+        ["sk"],
+        ["sl-SI"],
+        ["es-MX"],
+        ["es-ES"],
+        ["sv"],
+        ["ta-IN"],
+        ["te-IN"],
+        ["th"],
+        ["tr"],
+        ["uk"],
+        ["ur-PK"],
+        ["vi"],
+    ]
+
     @Test("default follows system language")
     func defaultFollowsSystemLanguage() {
         let settings = AppSettings()
@@ -49,11 +102,26 @@ struct AppLanguagePreferenceTests {
         AppLanguagePreference.simplifiedChinese.apply(to: defaults)
         #expect(defaults.stringArray(forKey: "AppleLanguages") == ["zh-Hans"])
 
-        AppLanguagePreference.english.apply(to: defaults)
-        #expect(defaults.stringArray(forKey: "AppleLanguages") == ["en"])
+        AppLanguagePreference.englishUnitedStates.apply(to: defaults)
+        #expect(defaults.stringArray(forKey: "AppleLanguages") == ["en-US"])
 
         AppLanguagePreference.system.apply(to: defaults)
         let persistedDomain = defaults.persistentDomain(forName: suiteName) ?? [:]
         #expect(persistedDomain["AppleLanguages"] == nil)
+    }
+
+    @Test("language selector exposes every mainstream localization")
+    func languageSelectorExposesEveryMainstreamLocalization() throws {
+        let suiteName = "FineTune.AppLanguagePreferenceTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var actualOverrides: [[String]] = []
+        for preference in AppLanguagePreference.allCases where preference != .system {
+            preference.apply(to: defaults)
+            actualOverrides.append(defaults.stringArray(forKey: "AppleLanguages") ?? [])
+        }
+
+        #expect(actualOverrides == Self.expectedAppleLanguageOverrides)
     }
 }
