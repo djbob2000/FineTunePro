@@ -56,6 +56,17 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
     private var knownDeviceUIDs: Set<String> = []
     private var knownInputDeviceUIDs: Set<String> = []
 
+    private let settingsManager: SettingsManager
+
+    init(settingsManager: SettingsManager) {
+        self.settingsManager = settingsManager
+    }
+
+    /// Forces an immediate rebuild of output/input device lists.
+    func refreshNow() {
+        refresh()
+    }
+
     /// Listeners for kAudioDevicePropertyDataSource changes on built-in devices (headphone jack detection)
     @ObservationIgnored private var dataSourceListeners: [AudioDeviceID: AudioObjectPropertyListenerBlock] = [:]
 
@@ -144,10 +155,14 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
     private func refresh() {
         do {
             let deviceIDs = try AudioObjectID.readDeviceList()
+            let showAllDevices = settingsManager.showAllDevices
             var outputDeviceList: [AudioDevice] = []
             var inputDeviceList: [AudioDevice] = []
 
             for deviceID in deviceIDs {
+                // Respect user preference for showing all devices
+                if deviceID.isAggregateDevice() && !showAllDevices { continue }
+
                 guard let uid = try? deviceID.readDeviceUID(),
                       let name = try? deviceID.readDeviceName() else {
                     continue
@@ -160,6 +175,14 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
                 // etc.) pass through.
                 if deviceID.isAggregateDevice() && name.hasPrefix("FineTune-") { continue }
 
+                // Filter out known FineTune-created devices to avoid self-references
+                let lowerUID = uid.lowercased()
+                let lowerName = name.lowercased()
+                let bundleID = Bundle.main.bundleIdentifier?.lowercased() ?? "finetune"
+                if lowerUID.contains("finetune") || lowerName.contains("finetune") || (!bundleID.isEmpty && lowerUID.contains(bundleID)) {
+                    continue
+                }
+
                 // Respect the driver's own opt-out. `kAudioDevicePropertyIsHidden` is
                 // how drivers signal "maintenance/utility device, don't show in
                 // pickers" — mirrors what Apple's System Settings does.
@@ -167,8 +190,9 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
 
                 // Output devices. Virtual outputs (BlackHole, Loopback, Teams Audio)
                 // are NOT filtered out here — users who don't want them in their
-                // picker can hide them per-device via the reorder-mode eye toggle.
-                if deviceID.hasOutputStreams() {
+                // picker can hide them per-device via the reorder-mode eye toggle,
+                // or via showAllDevices setting.
+                if deviceID.hasOutputStreams() && (showAllDevices || !deviceID.isVirtualDevice()) {
                     // Try Core Audio icon first (via LRU cache), fall back to SF Symbol
                     let icon = DeviceIconCache.shared.icon(for: uid) {
                         deviceID.readDeviceIcon()
