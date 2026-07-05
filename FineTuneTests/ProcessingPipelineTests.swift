@@ -124,6 +124,8 @@ private func processWithDefaults(
         eqProc: eqProc,
         autoEQProc: autoEQProc,
         dynamicEqualizerProc: dynamicEqualizerProc,
+        appAUChain: nil,
+        deviceAUChain: nil,
         loudnessEqualizerProc: loudnessEqualizerProc,
         postAgcCompressorProc: postAgcCompressorProc,
         loudnessCompensatorProc: loudnessCompensatorProc,
