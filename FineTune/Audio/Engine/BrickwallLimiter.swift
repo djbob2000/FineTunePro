@@ -1,4 +1,4 @@
-// FineTune/Audio/Engine/BrickwallLimiter.swift
+import AudioToolbox
 import Foundation
 
 /// RT-safe look-ahead safety limiter for final app output.
@@ -15,6 +15,11 @@ final class BrickwallLimiter {
     private let delayBuffer: UnsafeMutablePointer<Float>
     private let peakBuffer: UnsafeMutablePointer<Float>
 
+    // Pre-allocated buffers for channel mapping to avoid real-time heap allocations
+    private let channelPointers: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>
+    private let channelStrides: UnsafeMutablePointer<Int>
+    private let channelOffsets: UnsafeMutablePointer<Int>
+
     private var bufferIndex = 0
     private var currentGain: Float = 1.0
     private var lastSampleRate: Double = 0.0
@@ -28,20 +33,101 @@ final class BrickwallLimiter {
         delayBuffer = UnsafeMutablePointer<Float>.allocate(capacity: Self.maxWindowSize * Self.maxChannelCount)
         peakBuffer = UnsafeMutablePointer<Float>.allocate(capacity: Self.maxWindowSize)
 
+        channelPointers = UnsafeMutablePointer<UnsafeMutablePointer<Float>?>.allocate(capacity: Self.maxChannelCount)
+        channelStrides = UnsafeMutablePointer<Int>.allocate(capacity: Self.maxChannelCount)
+        channelOffsets = UnsafeMutablePointer<Int>.allocate(capacity: Self.maxChannelCount)
+
         delayBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize * Self.maxChannelCount)
         peakBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize)
+
+        channelPointers.initialize(repeating: nil, count: Self.maxChannelCount)
+        channelStrides.initialize(repeating: 0, count: Self.maxChannelCount)
+        channelOffsets.initialize(repeating: 0, count: Self.maxChannelCount)
     }
 
     deinit {
         delayBuffer.deallocate()
         peakBuffer.deallocate()
+        channelPointers.deallocate()
+        channelStrides.deallocate()
+        channelOffsets.deallocate()
     }
+
 
     func reset() {
         delayBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize * Self.maxChannelCount)
         peakBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize)
         bufferIndex = 0
         currentGain = 1.0
+    }
+
+    /// Process AudioBufferList in-place (handles interleaved, non-interleaved/planar and mixed formats).
+    /// Guaranteed RT-safe.
+    @inline(__always)
+    func process(_ buffers: UnsafeMutableAudioBufferListPointer, frameCount: Int, sampleRate: Double) {
+        guard frameCount > 0 else { return }
+
+        // Populate channel mapping
+        var channelCount = 0
+        for buffer in buffers {
+            guard let mData = buffer.mData else { continue }
+            let ptr = mData.assumingMemoryBound(to: Float.self)
+            let numChannels = max(1, Int(buffer.mNumberChannels))
+
+            for ch in 0..<numChannels {
+                if channelCount >= Self.maxChannelCount { break }
+                channelPointers[channelCount] = ptr
+                channelStrides[channelCount] = numChannels
+                channelOffsets[channelCount] = ch
+                channelCount += 1
+            }
+            if channelCount >= Self.maxChannelCount { break }
+        }
+
+        guard channelCount > 0 else { return }
+
+        configureIfNeeded(sampleRate: sampleRate)
+
+        for frame in 0..<frameCount {
+            let delayBase = bufferIndex * Self.maxChannelCount
+
+            var samplePeak: Float = 0.0
+            for channel in 0..<channelCount {
+                if let ptr = channelPointers[channel] {
+                    let stride = channelStrides[channel]
+                    let offset = channelOffsets[channel]
+                    let sample = ptr[frame * stride + offset]
+                    delayBuffer[delayBase + channel] = sample
+                    samplePeak = max(samplePeak, abs(sample))
+                }
+            }
+
+            peakBuffer[bufferIndex] = samplePeak
+
+            var windowMaxPeak: Float = 0.0
+            for i in 0..<windowSize {
+                windowMaxPeak = max(windowMaxPeak, peakBuffer[i])
+            }
+
+            let targetGain = windowMaxPeak > Self.ceiling ? Self.ceiling / windowMaxPeak : 1.0
+            if targetGain < currentGain {
+                currentGain = targetGain
+            } else {
+                currentGain += (targetGain - currentGain) * releaseCoeff
+            }
+
+            let outputIndex = (bufferIndex + 1) % windowSize
+            let outputBase = outputIndex * Self.maxChannelCount
+            for channel in 0..<channelCount {
+                if let ptr = channelPointers[channel] {
+                    let stride = channelStrides[channel]
+                    let offset = channelOffsets[channel]
+                    ptr[frame * stride + offset] = delayBuffer[outputBase + channel] * currentGain
+                }
+            }
+
+            bufferIndex = (bufferIndex + 1) % windowSize
+        }
     }
 
     /// Process interleaved samples in-place.

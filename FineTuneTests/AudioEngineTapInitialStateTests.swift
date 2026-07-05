@@ -70,6 +70,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
     var isDeviceMuted: Bool = false
     var audioLevel: Float = 0.0
     var outputAudioLevel: Float = 0.0
+    var outputChannelLevels: [Float] = [0.0]
     var limiterIntensity: Float = 0.0
     private(set) var currentDeviceUIDs: [String]
     var currentDeviceUID: String? { currentDeviceUIDs.first }
@@ -154,7 +155,8 @@ private struct Fixture {
 @MainActor
 private func makeFixture(
     supportsAutoEQ: Bool = true,
-    deviceVolume: Float = 0.75
+    deviceVolume: Float = 0.75,
+    transportType: TransportType = .usb
 ) -> Fixture {
     let tempDir = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
@@ -166,7 +168,8 @@ private func makeFixture(
         uid: "uid-test",
         name: "Test Output",
         icon: nil,
-        supportsAutoEQ: supportsAutoEQ
+        supportsAutoEQ: supportsAutoEQ,
+        transportType: transportType
     )
     deviceMonitor.addOutputDevice(device)
 
@@ -267,6 +270,37 @@ struct AudioEngineTapInitialStateTests {
 
         let snap = try #require(capturedInitial(fix))
         #expect(snap.loudnessCompensationEnabled == value)
+    }
+
+    @Test("loudnessCompensationEnabled is forced to false on built-in speakers")
+    func loudnessCompensationDisabledOnBuiltIn() throws {
+        let fix = makeFixture(transportType: .builtIn)
+        fix.settings.setLoudnessCompensationEnabled(for: fix.device.uid, to: true)
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+
+        let snap = try #require(capturedInitial(fix))
+        #expect(snap.loudnessCompensationEnabled == false)
+    }
+
+    @Test("updateTapsLoudness forces enabled=false for built-in devices")
+    func loudnessCompensationDisabledOnBuiltInUpdate() throws {
+        let fix = makeFixture(transportType: .builtIn)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.clearEvents()
+
+        // Attempt to enable loudness compensation
+        fix.engine.setLoudnessCompensationEnabled(for: fix.device.uid, enabled: true)
+
+        // Verify that updateLoudnessCompensation was called with enabled = false
+        let hasDisabledCall = tap.events.contains { event in
+            if case let .updateLoudnessCompensation(_, enabled, _, _, _, _, _, _, _) = event {
+                return enabled == false
+            }
+            return false
+        }
+        #expect(hasDisabledCall)
     }
 
     @Test("loudnessVolume = currentDeviceVolume × per-app volume")
@@ -483,20 +517,36 @@ struct AudioEngineTapInitialStateTests {
         #expect(snapshot.isRedActive)
     }
 
-    @Test("Output meter snapshot reports red state while limiter is active")
-    func outputMeterSnapshotReportsLimiterActive() throws {
+    @Test("Output meter snapshot keeps red state tied to 0 dBFS while limiter is active")
+    func outputMeterSnapshotLimiterActiveDoesNotForceRedState() throws {
         let fix = makeFixture()
 
         fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
         let tap = try #require(fix.lastTap())
         tap.outputAudioLevel = 0.42
+        tap.outputChannelLevels = [0.40, 0.42]
         tap.limiterIntensity = 0.55
 
         let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
 
         #expect(snapshot.level == 0.42)
+        #expect(snapshot.channelLevels == [0.40, 0.42])
         #expect(snapshot.limiterIntensity == 0.55)
-        #expect(snapshot.isRedActive)
+        #expect(!snapshot.isRedActive)
+    }
+
+    @Test("Output meter snapshot collapses non-stereo channel counts")
+    func outputMeterSnapshotCollapsesNonStereoChannelCounts() throws {
+        let fix = makeFixture()
+
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.outputAudioLevel = 0.72
+        tap.outputChannelLevels = [0.10, 0.72, 0.30]
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        #expect(snapshot.channelLevels == [0.72])
     }
 
     @Test("Output meter snapshot matches secondary device UID in multi-output taps")
@@ -517,7 +567,7 @@ struct AudioEngineTapInitialStateTests {
 
         #expect(snapshot.level == 0.81)
         #expect(snapshot.limiterIntensity == 0.12)
-        #expect(snapshot.isRedActive)
+        #expect(!snapshot.isRedActive)
     }
 
     @Test("Output meter snapshot ignores taps routed to other devices")

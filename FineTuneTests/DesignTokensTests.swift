@@ -95,6 +95,32 @@ struct DesignTokensDimensionTests {
         #expect(DesignTokens.Dimensions.vuMeterBarCount == 8)
     }
 
+    @Test("Output level meter red threshold is at 0 dB")
+    func outputLevelMeterRedThresholds() {
+        #expect(OutputLevelMeter.segmentCount == 81)
+        #expect(OutputLevelMeter.maxDB == 0)
+        #expect(OutputLevelMeter.labelDBs == [-24, -18, -12, -9, -6, -3, 0])
+        #expect(abs(OutputLevelMeter.db(forSegment: OutputLevelMeter.firstRedSegmentIndex)) < 0.001)
+        #expect(OutputLevelMeter.labelPositionFraction(for: 0) == 1)
+        #expect(abs(OutputLevelMeter.labelPositionFraction(for: -24) - 0.0) < 0.001)
+        #expect(abs(OutputLevelMeter.labelPositionFraction(for: -18) - 0.0825) < 0.001)
+        #expect(abs(OutputLevelMeter.labelPositionFraction(for: -12) - 0.2872) < 0.001)
+        #expect(abs(OutputLevelMeter.labelPositionFraction(for: -9) - 0.4285) < 0.001)
+        #expect(abs(OutputLevelMeter.labelPositionFraction(for: -6) - 0.5960) < 0.001)
+        #expect(abs(OutputLevelMeter.labelPositionFraction(for: -3) - 0.7863) < 0.001)
+        #expect(OutputLevelMeter.peakHoldFrames == 30)
+        #expect(OutputLevelMeter.peakDecayRate == 0.03)
+        #expect(OutputLevelMeter.releaseCoefficient > 0)
+        #expect(OutputLevelMeter.releaseCoefficient < 1)
+        #expect(OutputLevelMeter.displayedLevel(previous: 0.2, current: 0.8) == 0.8)
+        let decayed = OutputLevelMeter.displayedLevel(previous: 0.8, current: 0.2)
+        #expect(decayed < 0.8)
+        #expect(decayed > 0.2)
+        #expect(OutputLevelMeter.peakSegmentIndex(forDB: -3) == 62)
+        #expect(OutputLevelMeter.shouldStartLimiterHold(previous: 0.95, current: 0.90) == false)
+        #expect(OutputLevelMeter.shouldStartLimiterHold(previous: 0.95, current: 1.0))
+    }
+
     @Test("Min touch target is at least 16pt (Apple HIG minimum)")
     func minTouchTarget() {
         #expect(DesignTokens.Dimensions.minTouchTarget >= 16)
@@ -110,6 +136,12 @@ struct DesignTokensTimingTests {
     func vuMeterInterval() {
         let interval = DesignTokens.Timing.vuMeterUpdateInterval
         #expect(abs(interval - 1.0 / 30.0) < 0.001)
+    }
+
+    @Test("Output meter update interval is ~15fps")
+    func outputMeterInterval() {
+        let interval = DesignTokens.Timing.outputMeterUpdateInterval
+        #expect(abs(interval - 1.0 / 15.0) < 0.001)
     }
 
     @Test("VU meter peak hold is positive")

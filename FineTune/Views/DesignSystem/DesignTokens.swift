@@ -256,7 +256,7 @@ enum DesignTokens {
         static let vuOrange = Color(red: 0.95, green: 0.50, blue: 0.20)
 
         /// VU meter red segment (bar 7, peak/clip)
-        static let vuRed = Color(red: 0.90, green: 0.25, blue: 0.25)
+        static let vuRed = Color(red: 1.0, green: 0.0, blue: 0.0)
 
         /// VU meter unlit bar color (matches sliderTrack for visual consistency)
         static let vuUnlit: Color = .primary.opacity(0.15)
@@ -477,6 +477,9 @@ enum DesignTokens {
     enum Timing {
         /// VU meter update interval (30fps)
         static let vuMeterUpdateInterval: TimeInterval = 1.0 / 30.0
+
+        /// Output meter update interval (15fps)
+        static let outputMeterUpdateInterval: TimeInterval = 1.0 / 15.0
 
         /// VU meter peak hold duration
         static let vuMeterPeakHold: TimeInterval = 0.5

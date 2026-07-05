@@ -55,8 +55,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _currentDigitalVolume: Float = 1.0
     /// Gain scale used for the last coefficient computation.
     private var _currentGainScale: Float = 1.0
-    /// Mode used for the last coefficient computation.
-    private var _currentMode: LoudnessMode? = nil
     /// Crossover frequency for low-frequency band (Hz).
     private var _bassCrossoverFrequency: Double = 67.0
     /// Crossover frequency for high-frequency band (Hz).
@@ -79,14 +77,17 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _hpPostR = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFL = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFR = BiquadState()
+    private nonisolated(unsafe) var _sideHPF = BiquadState()
 
-    private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
-    private nonisolated(unsafe) var _highExciterWet: Float = 0.0
-    private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
+private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
+private nonisolated(unsafe) var _highExciterWet: Float = 0.0
+private nonisolated(unsafe) var _bassEQ0DB: Double = 0.0
+private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
     var outputGainCorrection: Float { _outputGainCorrection }
+    private static let stereoSideBoost: Float = 1.2
 
     // MARK: - Init
 
@@ -111,14 +112,14 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, mode: LoudnessMode = .modern, bassCrossoverFrequency: Double = 180.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 180.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         // Volume-based phon estimation (primary — tracks user's intended listening level,
         // matching Dolby Volume Modeler / THX Loudness Plus architecture).
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
 
         // Coalesce rapid updates, but never skip a disabled processor because re-enabling
         // loudness from the UI must rebuild coefficients immediately even at the same volume.
-        guard !isEnabled || _currentMode != mode || _bassCrossoverFrequency != bassCrossoverFrequency || _trebleCrossoverFrequency != trebleCrossoverFrequency || _trebleGainScale != trebleGainScale || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 || _currentMaxDB != maxDB || _currentBassExciterWet != bassExciterWet || _currentBassLinearWet != bassLinearWet else { return }
+        guard !isEnabled || _bassCrossoverFrequency != bassCrossoverFrequency || _trebleCrossoverFrequency != trebleCrossoverFrequency || _trebleGainScale != trebleGainScale || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 || _currentMaxDB != maxDB || _currentBassExciterWet != bassExciterWet || _currentBassLinearWet != bassLinearWet else { return }
         
         var crossoverChanged = false
         if _bassCrossoverFrequency != bassCrossoverFrequency {
@@ -139,19 +140,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _currentSystemVolume = systemVolume
         _currentDigitalVolume = digitalVolume
         _currentGainScale = gainScale
-        _currentMode = mode
         _currentMaxDB = maxDB
         _currentBassExciterWet = bassExciterWet
         _currentBassLinearWet = bassLinearWet
-
-        // Calculate raw ISO-226 gains
-        let rawGains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, amount: 1.0, sampleRate: sampleRate)
-        let scaledGains = [
-            rawGains[0] * gainScale,
-            rawGains[1] * gainScale,
-            rawGains[2] * _trebleGainScale,
-            rawGains[3] * _trebleGainScale
-        ]
 
         // RME ADI-2 Style Dual-Point Decibel-Linear Loudness Transition (needed for treble)
         let linearVol = max(Double(systemVolume), 0.0001)
@@ -160,37 +151,32 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let K_linear = min(1.0, max(0.0, -volDB / abs(mDB)))
         let K = pow(K_linear, 1.8)
 
-        let eqGains: [Double]
-        if mode == .classic {
-            eqGains = scaledGains.map(Double.init)
-            _lowExciterWet = 0.0
-            _highExciterWet = 0.0
-            _outputGainCorrection = 1.0
-        } else {
-            // Clean ISO 226 low-frequency EQ curve (+5.0 dB shelf / +1.0 dB peak at max K)
-            let bassEQ0 = 5.0 * K
-            let bassEQ1 = 1.0 * K
-            let trebleEQ2 = 0.0
-            let trebleEQ3 = 3.0 * Double(_trebleGainScale) * K
-            
-            eqGains = [
-                bassEQ0,
-                bassEQ1,
-                trebleEQ2,
-                trebleEQ3
-            ]
+        // Clean ISO 226 low-frequency EQ curve, pushed a bit harder for the soft MaxxBass-style variant.
+        let bassEQ0 = 10.0 * K
+        let bassEQ1 = 2.0 * K
+        let trebleEQ2 = 0.0
+        let trebleEQ3 = 0.0
+        _bassEQ0DB = bassEQ0
+        
+        let eqGains = [
+            bassEQ0,
+            bassEQ1,
+            trebleEQ2,
+            trebleEQ3
+        ]
 
-            // Multi-harmonic exciter fixed at 30% max wet mix, scaled dynamically by K
-            _lowExciterWet = 0.30 * Float(K)
+        let harmonicsEnabled = bassExciterWet > 0.0
 
-            // High exciter scaled dynamically by K
-            let highBoostDB = trebleEQ3
-            let highLinear = pow(10.0, highBoostDB / 20.0)
-            _highExciterWet = Float(highLinear - 1.0) * 0.05
-            
-            // Output gain correction factor (BrickwallLimiter handles headroom downstream)
-            _outputGainCorrection = 1.0
-        }
+        // Multi-harmonic exciter wet mix, scaled dynamically by K.
+        _lowExciterWet = harmonicsEnabled ? 0.35 * Float(K) : 0.0
+
+        // High lift comes from the exciter, using the amplitude delta of a 3 dB shelf as the wet target.
+        let highBoostDB = 3.0 * Double(_trebleGainScale) * K
+        let highLinear = pow(10.0, highBoostDB / 20.0)
+        _highExciterWet = harmonicsEnabled ? Float(highLinear - 1.0) : 0.0
+        
+        // Output gain correction factor (BrickwallLimiter handles headroom downstream)
+        _outputGainCorrection = 1.0
 
         // Calculate realized response and headroom based on actual EQ gains
         let realized = Self.realizedResponseDB(sectionGains: eqGains, sampleRate: sampleRate)
@@ -205,10 +191,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let linearVolume = max(Double(digitalVolume), 1e-4)
         let volumeAttenuationDB = -20.0 * log10(linearVolume)
         
-        // In modern mode, we do NOT subtract headroom from the EQ gains to allow a standard bass boost behavior
-        // (the downstream SoftLimiter handles any digital clipping).
-        // In classic mode, we preserve the 0 dBFS peak constraint.
-        let headroomToSubtract = mode == .classic ? max(0.0, peakDB - volumeAttenuationDB) : 0.0
+        // Always subtract headroom (dynamic headroom subtraction)
+        let headroomToSubtract = max(0.0, peakDB - volumeAttenuationDB)
 
         let gains = eqGains.map { Float($0) - Float(headroomToSubtract) }
 
@@ -232,6 +216,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     var testHighExciterWet: Float { _highExciterWet }
     var testLowExciterWet: Float { _lowExciterWet }
     var testBassLinearWet: Float { _currentBassLinearWet }
+    var testBassEQ0DB: Double { _bassEQ0DB }
     #endif
 
     // MARK: - Coefficient Computation
@@ -363,6 +348,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
                 var scale = correction
                 vDSP_vsmul(output, 1, &scale, output, 1, vDSP_Length(frameCount * 2))
             }
+            applyStereoBoost(output: output, frameCount: frameCount)
             return
         }
         
@@ -413,12 +399,31 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             output[idxL] = (xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)) * correction
             output[idxR] = (xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)) * correction
         }
+
+        applyStereoBoost(output: output, frameCount: frameCount)
+    }
+
+    @inline(__always)
+    private func applyStereoBoost(output: UnsafeMutablePointer<Float>, frameCount: Int) {
+        for frame in 0..<frameCount {
+            let idxL = frame * 2
+            let idxR = idxL + 1
+            let left = output[idxL]
+            let right = output[idxR]
+            let mid = (left + right) * 0.5
+            let side = (left - right) * 0.5
+            let filteredSide = _sideHPF.process(side)
+            let boostedSide = filteredSide * Self.stereoSideBoost
+            output[idxL] = mid + boostedSide
+            output[idxR] = mid - boostedSide
+        }
     }
 
     private func updateCrossoverCoefficients() {
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let lpPostCoeffs = BiquadMath.highPassCoefficients(frequency: 25.0, q: 0.707, sampleRate: sampleRate)
+        let sideHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 80.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
@@ -429,6 +434,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         
         _lowPostHPFL.updateCoefficients(b0: lpPostCoeffs[0], b1: lpPostCoeffs[1], b2: lpPostCoeffs[2], a1: lpPostCoeffs[3], a2: lpPostCoeffs[4])
         _lowPostHPFR.updateCoefficients(b0: lpPostCoeffs[0], b1: lpPostCoeffs[1], b2: lpPostCoeffs[2], a1: lpPostCoeffs[3], a2: lpPostCoeffs[4])
+        _sideHPF.updateCoefficients(b0: sideHPFCoeffs[0], b1: sideHPFCoeffs[1], b2: sideHPFCoeffs[2], a1: sideHPFCoeffs[3], a2: sideHPFCoeffs[4])
 
         _lpL.reset()
         _lpR.reset()
@@ -438,6 +444,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _hpPostR.reset()
         _lowPostHPFL.reset()
         _lowPostHPFR.reset()
+        _sideHPF.reset()
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
@@ -472,7 +479,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     @inline(__always)
     private func softClipLow(_ x: Float) -> Float {
         // Multi-harmonic saturator generating 2nd, 3rd, 4th, and 5th harmonics
-        let c = max(-1.0, min(1.0, x * 1.2))
+        let c = max(-1.0, min(1.0, x * 1.4))
         let c2 = c * c
         let c3 = c2 * c
         let c4 = c3 * c

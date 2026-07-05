@@ -179,7 +179,8 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
                         uid: uid,
                         name: name,
                         icon: icon,
-                        supportsAutoEQ: deviceID.supportsAutoEQ()
+                        supportsAutoEQ: deviceID.supportsAutoEQ(),
+                        transportType: deviceID.readTransportType()
                     )
                     outputDeviceList.append(device)
                 }
@@ -199,7 +200,8 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
                         uid: uid,
                         name: name,
                         icon: icon,
-                        supportsAutoEQ: false
+                        supportsAutoEQ: false,
+                        transportType: deviceID.readTransportType()
                     )
                     inputDeviceList.append(device)
                 }

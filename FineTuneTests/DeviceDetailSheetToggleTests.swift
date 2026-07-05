@@ -44,10 +44,12 @@ struct DeviceDetailSheetToggleTests {
             onLoudnessCompensationToggle: { _ in },
             loudnessReferencePhon: ISO226Contours.defaultReferencePhon,
             onLoudnessReferencePhonChange: { _ in },
-            loudnessMode: .modern,
-            onLoudnessModeChange: { _ in },
-            loudnessBassCrossover: 100.0,
-            onLoudnessBassCrossoverChange: { _ in },
+            loudnessGainScale: 1.0,
+            onLoudnessGainScaleChange: { _ in },
+            loudnessTrebleGainScale: 1.0,
+            onLoudnessTrebleGainScaleChange: { _ in },
+            loudnessBassLinearWet: 1.0,
+            onLoudnessBassLinearWetChange: { _ in },
             onDismiss: {}
         )
     }

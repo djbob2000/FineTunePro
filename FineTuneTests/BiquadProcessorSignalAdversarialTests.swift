@@ -986,17 +986,18 @@ struct EQSettingsEdgeCaseTests {
 @Suite("Adversarial — Full Signal Chain Edge Cases")
 struct FullChainEdgeCaseTests {
 
-    @Test("SoftLimiter.processBuffer with zero-length buffer does not crash")
-    func softLimiterZeroLength() {
+    @Test("BrickwallLimiter with zero-length buffer does not crash")
+    func brickwallLimiterZeroLength() {
         let buffer = UnsafeMutablePointer<Float>.allocate(capacity: 1) // minimal allocation
         defer { buffer.deallocate() }
         buffer[0] = 1.0
 
+        let limiter = BrickwallLimiter()
         // sampleCount = 0 should be a no-op
-        SoftLimiter.processBuffer(buffer, sampleCount: 0)
+        limiter.process(buffer, sampleCount: 0, channelCount: 1, sampleRate: 48000)
 
         // Original value should be unchanged
-        #expect(buffer[0] == 1.0, "Zero-length processBuffer should not modify buffer")
+        #expect(buffer[0] == 1.0, "Zero-length process should not modify buffer")
     }
 
     @Test("Volume scaling to exact zero + EQ: output is zero, limiter is no-op")
@@ -1029,7 +1030,8 @@ struct FullChainEdgeCaseTests {
         }
 
         // Limiter should be no-op on zeros
-        SoftLimiter.processBuffer(working, sampleCount: sampleCount)
+        let limiter = BrickwallLimiter()
+        limiter.process(working, sampleCount: sampleCount, channelCount: 2, sampleRate: 48000)
         for i in 0..<sampleCount {
             #expect(working[i] == 0,
                     "Zero volume + EQ + limiter: sample \(i) should be zero")

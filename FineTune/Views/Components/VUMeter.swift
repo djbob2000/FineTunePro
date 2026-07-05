@@ -127,59 +127,216 @@ private struct VUMeterBar: View {
 }
 
 /// Horizontal output meter for the popup header.
-/// Red only lights when output reaches/exceeds 0 dBFS or limiter state is active.
+/// Red segments show over-0 dBFS peaks; limiter state is shown by the LED.
 struct OutputLevelMeter: View {
     let level: Float
+    var channelLevels: [Float]? = nil
     let limiterIntensity: Float
 
-    private let segmentCount = 30
-    private let minDB: Float = -40
-    private let maxDB: Float = 0
+    static let segmentCount = 81
+    static let minDB: Float = -24
+    static let maxDB: Float = 0
+    static let firstRedSegmentIndex = 80
+    static let holdSeconds = 0.05
+    private static let holdDuration: Duration = .milliseconds(50)
+    static let peakHoldFrames = 30
+    static let peakDecayRate: Float = 0.03
+    static let releaseCoefficient: Float = 0.22
+    static let scaleExponent: Float = 1.8
 
-    private var levelDB: Float {
-        guard level > 0 else { return minDB }
-        return min(maxDB, max(minDB, 20 * log10f(level)))
+    @State private var displayLevels: [Float] = []
+    @State private var displayPeakLevels: [Float] = []
+    @State private var peakHoldTimers: [Int] = []
+    @State private var isLimiterHeld = false
+    @State private var limiterHoldTask: Task<Void, Never>?
+
+    static let labelDBs: [Float] = [-24, -18, -12, -9, -6, -3, 0]
+
+    private var meterLevels: [Float] {
+        channelLevels?.count == 2 ? channelLevels! : [level]
     }
 
-    private var isRedActive: Bool {
-        level >= 1.0 || limiterIntensity > 0.0
+    private var levelDB: Float {
+        db(for: level)
+    }
+
+    private var limiterLEDOpacity: Double {
+        isLimiterHeld ? 0.75 : 0.18
     }
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<segmentCount, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(color(for: index, isLit: isLit(index)))
-                    .frame(width: 8, height: 3)
-                    .animation(DesignTokens.Animation.vuMeterLevel, value: levelDB)
-                    .animation(DesignTokens.Animation.vuMeterLevel, value: isRedActive)
+        HStack(spacing: 8) {
+            VStack(spacing: 2) {
+                VStack(spacing: 3) {
+                    ForEach(Array(meterLevels.enumerated()), id: \.offset) { index, channelLevel in
+                        meterRow(
+                            level: displayLevels.indices.contains(index) ? displayLevels[index] : channelLevel,
+                            peakLevel: displayPeakLevels.indices.contains(index) ? displayPeakLevels[index] : channelLevel
+                        )
+                    }
+                }
+                .padding(.vertical, 2)
+
+                GeometryReader { proxy in
+                    ForEach(Self.labelDBs, id: \.self) { db in
+                        Text(label(for: db))
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .foregroundStyle(DesignTokens.Colors.vuYellow)
+                            .position(x: xPosition(for: db, width: proxy.size.width), y: 5)
+                    }
+                }
+                .frame(height: 10)
             }
+
+            Circle()
+                .fill(DesignTokens.Colors.vuRed.opacity(limiterLEDOpacity))
+                .frame(width: 7, height: 7)
+                .shadow(color: DesignTokens.Colors.vuRed.opacity(limiterLEDOpacity), radius: limiterLEDOpacity > 0.3 ? 3 : 0)
+                .offset(y: -6)
+                .animation(.linear(duration: 0.03), value: limiterIntensity)
         }
-        .frame(height: 10)
+        .frame(width: 322)
         .accessibilityLabel("Output level")
+        .onAppear {
+            displayLevels = meterLevels
+            displayPeakLevels = meterLevels
+            peakHoldTimers = Array(repeating: 0, count: meterLevels.count)
+            updateLimiterHold(previous: 0, current: limiterIntensity)
+        }
+        .onChange(of: meterLevels) { _, levels in
+            updateDisplayedLevels(levels)
+            updateLevelHold(levels)
+        }
+        .onChange(of: limiterIntensity) { previous, current in
+            updateLimiterHold(previous: previous, current: current)
+        }
+        .onDisappear {
+            limiterHoldTask?.cancel()
+        }
     }
 
-    private func isLit(_ index: Int) -> Bool {
-        if index >= segmentCount - 2 {
-            return isRedActive
+    private func meterRow(level: Float, peakLevel: Float) -> some View {
+        let channelDB = db(for: level)
+        let peakDB = db(for: peakLevel)
+        let peakIndex = Self.peakSegmentIndex(forDB: peakDB)
+        return HStack(spacing: 1.5) {
+            ForEach(0..<Self.segmentCount, id: \.self) { index in
+                let isLit = isLit(index, levelDB: channelDB)
+                let isPeak = peakDB > channelDB && index == peakIndex
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(color(for: index, isLit: isLit || isPeak))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 3)
+            }
         }
+        .animation(DesignTokens.Animation.vuMeterLevel, value: channelDB)
+    }
 
-        let fraction = Float(index) / Float(max(segmentCount - 1, 1))
-        let threshold = minDB + (maxDB - minDB) * fraction
-        return levelDB >= threshold
+    private func db(for level: Float) -> Float {
+        guard level > 0 else { return Self.minDB }
+        return min(Self.maxDB, max(Self.minDB, 20 * log10f(level)))
+    }
+
+    private func isLit(_ index: Int, levelDB: Float) -> Bool {
+        levelDB >= Self.db(forSegment: index)
     }
 
     private func color(for index: Int, isLit: Bool) -> Color {
         guard isLit else { return DesignTokens.Colors.vuUnlit }
 
-        if index >= segmentCount - 2 {
+        if index >= Self.firstRedSegmentIndex {
             return DesignTokens.Colors.vuRed
-        } else if index >= 22 {
+        } else if Self.db(forSegment: index) >= -3 {
             return DesignTokens.Colors.vuOrange
-        } else if index >= 18 {
+        } else if Self.db(forSegment: index) >= -6 {
             return DesignTokens.Colors.vuYellow
         } else {
             return DesignTokens.Colors.vuGreen
+        }
+    }
+
+    static func db(forSegment index: Int) -> Float {
+        if index == firstRedSegmentIndex { return 0 }
+
+        let fraction = Float(index) / Float(max(firstRedSegmentIndex, 1))
+        // Power-based warping (exponent 1.8) maps index fraction to a non-linear dB scale.
+        // This compresses the lower range (near -40 dB) and expands the upper range (near 0 dB).
+        let warpedFraction = powf(fraction, 1.0 / scaleExponent)
+        return minDB + (0 - minDB) * warpedFraction
+    }
+
+    private func xPosition(for db: Float, width: CGFloat) -> CGFloat {
+        let fraction = CGFloat(Self.labelPositionFraction(for: db))
+        return min(width - 6, max(6, width * fraction))
+    }
+
+    static func labelPositionFraction(for db: Float) -> Float {
+        let linearFraction = (db - minDB) / (0 - minDB)
+        return powf(max(0, min(1, linearFraction)), scaleExponent)
+    }
+
+    static func peakSegmentIndex(forDB db: Float) -> Int? {
+        guard db >= minDB else { return nil }
+        if db >= 0 { return firstRedSegmentIndex }
+
+        let linearFraction = (db - minDB) / (0 - minDB)
+        let warpedFraction = powf(linearFraction, scaleExponent)
+        return min(firstRedSegmentIndex - 1, max(0, Int(floor(warpedFraction * Float(firstRedSegmentIndex)))))
+    }
+
+    static func shouldStartLimiterHold(previous: Float, current: Float) -> Bool {
+        previous < 0.99 && current >= 0.99
+    }
+
+    static func displayedLevel(previous: Float, current: Float) -> Float {
+        current >= previous ? current : previous + (current - previous) * releaseCoefficient
+    }
+
+    private func label(for db: Float) -> String {
+        "\(Int(db))"
+    }
+
+    private func updateLevelHold(_ levels: [Float]) {
+        var peaks = normalized(displayPeakLevels, count: levels.count, fallback: 0)
+        var timers = normalized(peakHoldTimers, count: levels.count, fallback: 0)
+
+        for index in levels.indices {
+            let currentLevel = levels[index]
+            if currentLevel > peaks[index] {
+                peaks[index] = currentLevel
+                timers[index] = Self.peakHoldFrames
+            } else if timers[index] > 0 {
+                timers[index] -= 1
+            } else {
+                peaks[index] = max(currentLevel, peaks[index] - Self.peakDecayRate)
+            }
+        }
+
+        displayPeakLevels = peaks
+        peakHoldTimers = timers
+    }
+
+    private func updateDisplayedLevels(_ levels: [Float]) {
+        let previous = normalized(displayLevels, count: levels.count, fallback: 0)
+        displayLevels = levels.indices.map { index in
+            Self.displayedLevel(previous: previous[index], current: levels[index])
+        }
+    }
+
+    private func normalized<T>(_ values: [T], count: Int, fallback: T) -> [T] {
+        (0..<count).map { values.indices.contains($0) ? values[$0] : fallback }
+    }
+
+    private func updateLimiterHold(previous: Float, current: Float) {
+        guard Self.shouldStartLimiterHold(previous: previous, current: current) else { return }
+        isLimiterHeld = true
+        limiterHoldTask?.cancel()
+        limiterHoldTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.holdDuration)
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.05)) {
+                isLimiterHeld = false
+            }
         }
     }
 }
@@ -226,7 +383,7 @@ struct OutputLevelMeter: View {
     ComponentPreviewContainer {
         VStack(spacing: DesignTokens.Spacing.md) {
             OutputLevelMeter(level: 0.05, limiterIntensity: 0)
-            OutputLevelMeter(level: 0.45, limiterIntensity: 0)
+            OutputLevelMeter(level: 0.45, channelLevels: [0.35, 0.45], limiterIntensity: 0)
             OutputLevelMeter(level: 0.98, limiterIntensity: 0)
             OutputLevelMeter(level: 0.42, limiterIntensity: 1)
             OutputLevelMeter(level: 1.12, limiterIntensity: 0)

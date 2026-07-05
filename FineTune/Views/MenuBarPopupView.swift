@@ -427,11 +427,12 @@ struct MenuBarPopupView: View {
                 }
             }
 
-            TimelineView(.periodic(from: .now, by: DesignTokens.Timing.vuMeterUpdateInterval)) { _ in
+            TimelineView(.periodic(from: .now, by: DesignTokens.Timing.outputMeterUpdateInterval)) { _ in
                 if let uid = deviceVolumeMonitor.defaultDeviceUID {
                     let snapshot = audioEngine.getOutputMeterSnapshot(for: uid)
                     OutputLevelMeter(
                         level: snapshot.level,
+                        channelLevels: snapshot.channelLevels,
                         limiterIntensity: snapshot.limiterIntensity
                     )
                 } else {
@@ -441,7 +442,7 @@ struct MenuBarPopupView: View {
         }
         .font(.system(size: 11))
         .foregroundStyle(DesignTokens.Colors.textSecondary)
-        .frame(maxWidth: 260)
+        .frame(maxWidth: 340)
     }
 
     // MARK: - Device Toggle
@@ -706,13 +707,21 @@ struct MenuBarPopupView: View {
                         onLoudnessReferencePhonChange: { referencePhon in
                             audioEngine.setLoudnessReferencePhon(for: device.uid, to: referencePhon)
                         },
-                        loudnessMode: audioEngine.settingsManager.getLoudnessMode(for: device.uid),
-                        onLoudnessModeChange: { mode in
-                            audioEngine.setLoudnessMode(for: device.uid, to: mode)
+                        loudnessMaxDB: audioEngine.settingsManager.getLoudnessMaxDB(for: device.uid),
+                        onLoudnessMaxDBChange: { maxDB in
+                            audioEngine.setLoudnessMaxDB(for: device.uid, to: maxDB)
                         },
-                        loudnessBassCrossover: audioEngine.settingsManager.getLoudnessBassCrossover(for: device.uid),
-                        onLoudnessBassCrossoverChange: { frequency in
-                            audioEngine.setLoudnessBassCrossover(for: device.uid, to: frequency)
+                        loudnessGainScale: audioEngine.settingsManager.getLoudnessGainScale(for: device.uid),
+                        onLoudnessGainScaleChange: { scale in
+                            audioEngine.setLoudnessGainScale(for: device.uid, to: scale)
+                        },
+                        loudnessTrebleGainScale: audioEngine.settingsManager.getLoudnessTrebleGainScale(for: device.uid),
+                        onLoudnessTrebleGainScaleChange: { scale in
+                            audioEngine.setLoudnessTrebleGainScale(for: device.uid, to: scale)
+                        },
+                        loudnessBassLinearWet: audioEngine.settingsManager.getLoudnessBassLinearWet(for: device.uid),
+                        onLoudnessBassLinearWetChange: { amount in
+                            audioEngine.setLoudnessBassLinearWet(for: device.uid, to: amount)
                         },
                         onDismiss: {}
                     )

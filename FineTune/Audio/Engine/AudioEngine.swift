@@ -6,10 +6,17 @@ import UserNotifications
 
 struct OutputMeterSnapshot: Equatable {
     let level: Float
+    let channelLevels: [Float]
     let limiterIntensity: Float
 
+    init(level: Float, limiterIntensity: Float, channelLevels: [Float]? = nil) {
+        self.level = level
+        self.channelLevels = channelLevels?.count == 2 ? channelLevels! : [level]
+        self.limiterIntensity = limiterIntensity
+    }
+
     var isRedActive: Bool {
-        level >= 1.0 || limiterIntensity > 0.0
+        level >= 1.0
     }
 }
 
@@ -751,17 +758,22 @@ final class AudioEngine {
 
 
     private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+        let isBuiltIn = deviceMonitor.device(for: deviceUID)?.transportType == .builtIn
+        let actualEnabled = isBuiltIn ? false : enabled
+        let actualGainScale = isBuiltIn ? 0.0 : gainScale
+        let actualTrebleGainScale = isBuiltIn ? 1.0 : trebleGainScale
+
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
             tap.updateLoudnessCompensation(
                 volume: effectiveLoudnessVolume(for: tap),
-                enabled: enabled,
+                enabled: actualEnabled,
                 referencePhon: referencePhon,
                 maxDB: maxDB,
-                gainScale: gainScale,
+                gainScale: actualGainScale,
                 bassCrossover: bassCrossover,
                 trebleCrossover: trebleCrossover,
-                trebleGainScale: trebleGainScale,
+                trebleGainScale: actualTrebleGainScale,
                 bassExciterWet: bassExciterWet,
                 bassLinearWet: bassLinearWet
             )
@@ -989,38 +1001,32 @@ final class AudioEngine {
         updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: enabled ? Float(scale) : 0.0, bassCrossover: crossover, trebleCrossover: trebleCrossover, trebleGainScale: enabled ? Float(trebleScale) : 1.0, bassExciterWet: Float(exciterWet), bassLinearWet: Float(amount))
     }
 
-    func getLoudnessOutputLevel(for deviceUID: String) -> Float {
-        var maxLevel: Float = 0.0
-        for tap in taps.values {
-            if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
-                maxLevel = max(maxLevel, tap.outputAudioLevel)
-            }
-        }
-        return maxLevel
-    }
 
-    func getLoudnessLimiterIntensity(for deviceUID: String) -> Float {
-        var maxIntensity: Float = 0.0
-        for tap in taps.values {
-            if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
-                maxIntensity = max(maxIntensity, tap.limiterIntensity)
-            }
-        }
-        return maxIntensity
-    }
 
     func getOutputMeterSnapshot(for deviceUID: String) -> OutputMeterSnapshot {
         var maxLevel: Float = 0.0
+        var channelLevels: [Float] = [0.0, 0.0]
+        var isStereo = true
         var maxLimiterIntensity: Float = 0.0
 
         for tap in taps.values {
             if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
                 maxLevel = max(maxLevel, tap.outputAudioLevel)
+                if tap.outputChannelLevels.count == 2 {
+                    channelLevels[0] = max(channelLevels[0], tap.outputChannelLevels[0])
+                    channelLevels[1] = max(channelLevels[1], tap.outputChannelLevels[1])
+                } else {
+                    isStereo = false
+                }
                 maxLimiterIntensity = max(maxLimiterIntensity, tap.limiterIntensity)
             }
         }
 
-        return OutputMeterSnapshot(level: maxLevel, limiterIntensity: maxLimiterIntensity)
+        return OutputMeterSnapshot(
+            level: maxLevel,
+            limiterIntensity: maxLimiterIntensity,
+            channelLevels: isStereo ? channelLevels : [maxLevel]
+        )
     }
 
     /// Apply AutoEQ profile to all taps currently routed to the given device.
@@ -1041,7 +1047,8 @@ final class AudioEngine {
     private func tapInitialState(forApp app: AudioApp, primaryDeviceUID: String, deviceVolume: Float) -> TapInitialState {
         var loudnessEqSettings = LoudnessEqualizerSettings()
         loudnessEqSettings.enabled = false
-        let loudnessEnabled = settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
+        let isBuiltIn = deviceMonitor.device(for: primaryDeviceUID)?.transportType == .builtIn
+        let loudnessEnabled = isBuiltIn ? false : settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: primaryDeviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: primaryDeviceUID)

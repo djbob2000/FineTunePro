@@ -142,9 +142,14 @@ final class SettingsManager {
 
         // Per-device loudness settings
         var deviceLoudnessCompensationEnabled: [String: Bool] = [:] // deviceUID -> enabled
-        var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> referencePhon (default: ISO226Contours.defaultReferencePhon)
-        var deviceLoudnessMode: [String: LoudnessMode] = [:] // deviceUID -> mode
+        var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> startDB (default: 0.0)
+        var deviceLoudnessMaxDB: [String: Double] = [:] // deviceUID -> maxDB (default: -20.0)
         var deviceLoudnessBassCrossover: [String: Double] = [:] // deviceUID -> crossover frequency
+        var deviceLoudnessGainScale: [String: Double] = [:] // deviceUID -> gain scale (amount)
+        var deviceLoudnessBassExciterWet: [String: Double] = [:] // deviceUID -> bass exciter wet (0.0 to 1.0)
+        var deviceLoudnessBassLinearWet: [String: Double] = [:] // deviceUID -> bass linear wet (0.0 to 1.0)
+        var deviceLoudnessTrebleCrossover: [String: Double] = [:] // deviceUID -> treble crossover frequency
+        var deviceLoudnessTrebleGainScale: [String: Double] = [:] // deviceUID -> treble gain scale (amount)
 
         // User-created EQ presets (named EQ curves)
         var userEQPresets: [UserEQPreset] = []
@@ -196,8 +201,12 @@ final class SettingsManager {
             autoEQPreampEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoEQPreampEnabled) ?? true
             deviceLoudnessCompensationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessCompensationEnabled) ?? [:]
             deviceLoudnessReferencePhon = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessReferencePhon) ?? [:]
-            deviceLoudnessMode = try c.decodeIfPresent([String: LoudnessMode].self, forKey: .deviceLoudnessMode) ?? [:]
             deviceLoudnessBassCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassCrossover) ?? [:]
+            deviceLoudnessGainScale = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessGainScale) ?? [:]
+            deviceLoudnessBassExciterWet = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassExciterWet) ?? [:]
+            deviceLoudnessBassLinearWet = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassLinearWet) ?? [:]
+            deviceLoudnessTrebleCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessTrebleCrossover) ?? [:]
+            deviceLoudnessTrebleGainScale = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessTrebleGainScale) ?? [:]
             userEQPresets = try c.decodeIfPresent([UserEQPreset].self, forKey: .userEQPresets) ?? []
         }
     }
@@ -801,32 +810,80 @@ final class SettingsManager {
         scheduleSave()
     }
 
-
-
     func getLoudnessReferencePhon(for deviceUID: String) -> Double {
-        settings.deviceLoudnessReferencePhon[deviceUID] ?? ISO226Contours.defaultReferencePhon
+        let val = settings.deviceLoudnessReferencePhon[deviceUID] ?? 0.0
+        return (val >= -12.0 && val <= 0.0) ? val : 0.0
     }
 
     func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
-        settings.deviceLoudnessReferencePhon[deviceUID] = referencePhon
+        settings.deviceLoudnessReferencePhon[deviceUID] = min(0.0, max(-12.0, referencePhon))
         scheduleSave()
     }
 
-    func getLoudnessMode(for deviceUID: String) -> LoudnessMode {
-        settings.deviceLoudnessMode[deviceUID] ?? .modern
+    func getLoudnessMaxDB(for deviceUID: String) -> Double {
+        let val = settings.deviceLoudnessMaxDB[deviceUID] ?? -30.0
+        return (val >= -40.0 && val <= -20.0) ? val : -30.0
     }
 
-    func setLoudnessMode(for deviceUID: String, to mode: LoudnessMode) {
-        settings.deviceLoudnessMode[deviceUID] = mode
+    func setLoudnessMaxDB(for deviceUID: String, to maxDB: Double) {
+        settings.deviceLoudnessMaxDB[deviceUID] = min(-20.0, max(-40.0, maxDB))
         scheduleSave()
     }
+
 
     func getLoudnessBassCrossover(for deviceUID: String) -> Double {
-        settings.deviceLoudnessBassCrossover[deviceUID] ?? 100.0
+        settings.deviceLoudnessBassCrossover[deviceUID] ?? 70.0
     }
 
     func setLoudnessBassCrossover(for deviceUID: String, to frequency: Double) {
         settings.deviceLoudnessBassCrossover[deviceUID] = frequency
+        scheduleSave()
+    }
+
+    func getLoudnessGainScale(for deviceUID: String) -> Double {
+        settings.deviceLoudnessGainScale[deviceUID] ?? 1.0
+    }
+
+    func setLoudnessGainScale(for deviceUID: String, to scale: Double) {
+        settings.deviceLoudnessGainScale[deviceUID] = scale
+        scheduleSave()
+    }
+
+    func getLoudnessBassExciterWet(for deviceUID: String) -> Double {
+        let val = settings.deviceLoudnessBassExciterWet[deviceUID] ?? 0.20
+        return min(1.0, max(0.0, val))
+    }
+
+    func setLoudnessBassExciterWet(for deviceUID: String, to amount: Double) {
+        settings.deviceLoudnessBassExciterWet[deviceUID] = min(1.0, max(0.0, amount))
+        scheduleSave()
+    }
+
+    func getLoudnessBassLinearWet(for deviceUID: String) -> Double {
+        let val = settings.deviceLoudnessBassLinearWet[deviceUID] ?? 1.0
+        return min(1.0, max(0.0, val))
+    }
+
+    func setLoudnessBassLinearWet(for deviceUID: String, to amount: Double) {
+        settings.deviceLoudnessBassLinearWet[deviceUID] = min(1.0, max(0.0, amount))
+        scheduleSave()
+    }
+
+    func getLoudnessTrebleCrossover(for deviceUID: String) -> Double {
+        settings.deviceLoudnessTrebleCrossover[deviceUID] ?? 3000.0
+    }
+
+    func setLoudnessTrebleCrossover(for deviceUID: String, to frequency: Double) {
+        settings.deviceLoudnessTrebleCrossover[deviceUID] = frequency
+        scheduleSave()
+    }
+
+    func getLoudnessTrebleGainScale(for deviceUID: String) -> Double {
+        settings.deviceLoudnessTrebleGainScale[deviceUID] ?? 1.0
+    }
+
+    func setLoudnessTrebleGainScale(for deviceUID: String, to scale: Double) {
+        settings.deviceLoudnessTrebleGainScale[deviceUID] = scale
         scheduleSave()
     }
 
@@ -889,8 +946,10 @@ final class SettingsManager {
         settings.autoEQPreampEnabled = true
         settings.deviceLoudnessCompensationEnabled.removeAll()
         settings.deviceLoudnessReferencePhon.removeAll()
-        settings.deviceLoudnessMode.removeAll()
         settings.deviceLoudnessBassCrossover.removeAll()
+        settings.deviceLoudnessGainScale.removeAll()
+        settings.deviceLoudnessTrebleCrossover.removeAll()
+        settings.deviceLoudnessTrebleGainScale.removeAll()
         settings.deviceAutoEQ.removeAll()
         settings.favoriteAutoEQProfiles.removeAll()
         settings.appDeviceSelectionMode.removeAll()

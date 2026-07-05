@@ -487,3 +487,79 @@ struct LoudnessEqualizerTests {
         }
     }
 }
+
+// MARK: - LoudnessCompensatorStereoWidener
+
+@Suite("LoudnessCompensatorStereoWidener")
+struct LoudnessCompensatorStereoWidenerTests {
+
+    @Test("Stereo widening applies 80Hz High-Pass to Side channel (Bass Mono)")
+    func stereoWidenerBassMono() {
+        let sampleRate: Double = 48000.0
+        let compensator = LoudnessCompensator(sampleRate: sampleRate)
+        // Enable compensator with volume = 0.5 (which triggers non-zero K factor and enables process)
+        compensator.updateForVolume(0.5)
+        #expect(compensator.isEnabled, "Compensator should be enabled at 50% volume")
+
+        let frameCount = 1024
+        let skipFrames = 512
+
+        // 1. Low frequency test: 20 Hz sub-bass out-of-phase signal (L = +val, R = -val)
+        // Mid = 0, Side = val. Since 20 Hz is 2 octaves below 80 Hz HPF, Side channel is attenuated by ~24dB => output Side should be < 10% of HF.
+        var lowInput = [Float](repeating: 0, count: frameCount * 2)
+        var lowOutput = [Float](repeating: 0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let phase = Float(2.0 * Double.pi * 20.0 * Double(i) / sampleRate)
+            let val = 0.3 * sin(phase)
+            lowInput[i * 2] = val       // Left
+            lowInput[i * 2 + 1] = -val  // Right (out of phase)
+        }
+
+        lowInput.withUnsafeBufferPointer { inPtr in
+            lowOutput.withUnsafeMutableBufferPointer { outPtr in
+                compensator.process(input: inPtr.baseAddress!, output: outPtr.baseAddress!, frameCount: frameCount)
+            }
+        }
+
+        // Measure low-frequency Side output after settling
+        var lowSideRMS: Double = 0
+        for i in skipFrames..<frameCount {
+            let outL = lowOutput[i * 2]
+            let outR = lowOutput[i * 2 + 1]
+            let side = (outL - outR) * 0.5
+            lowSideRMS += Double(side * side)
+        }
+        lowSideRMS = sqrt(lowSideRMS / Double(frameCount - skipFrames))
+
+        // 2. High frequency test: 1000 Hz out-of-phase signal (L = +val, R = -val)
+        // Mid = 0, Side = val. Since 1000 Hz > 80 Hz, Side channel passes through HPF and is boosted by 1.2x.
+        var highInput = [Float](repeating: 0, count: frameCount * 2)
+        var highOutput = [Float](repeating: 0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let phase = Float(2.0 * Double.pi * 1000.0 * Double(i) / sampleRate)
+            let val = 0.3 * sin(phase)
+            highInput[i * 2] = val       // Left
+            highInput[i * 2 + 1] = -val  // Right (out of phase)
+        }
+
+        highInput.withUnsafeBufferPointer { inPtr in
+            highOutput.withUnsafeMutableBufferPointer { outPtr in
+                compensator.process(input: inPtr.baseAddress!, output: outPtr.baseAddress!, frameCount: frameCount)
+            }
+        }
+
+        var highSideRMS: Double = 0
+        for i in skipFrames..<frameCount {
+            let outL = highOutput[i * 2]
+            let outR = highOutput[i * 2 + 1]
+            let side = (outL - outR) * 0.5
+            highSideRMS += Double(side * side)
+        }
+        highSideRMS = sqrt(highSideRMS / Double(frameCount - skipFrames))
+
+        // Side energy for 40 Hz sub-bass should be significantly attenuated relative to 1000 Hz
+        #expect(lowSideRMS < highSideRMS * 0.25,
+                "Sub-bass (40 Hz) Side RMS (\(lowSideRMS)) should be heavily attenuated relative to 1000 Hz Side RMS (\(highSideRMS))")
+    }
+}
+
