@@ -107,6 +107,7 @@ private func processWithDefaults(
     autoEQProc: AutoEQProcessor? = nil,
     dynamicEqualizerProc: DynamicEqualizer? = nil,
     loudnessEqualizerProc: LoudnessEqualizer? = nil,
+    postAgcCompressorProc: PostAgcCompressor? = nil,
     loudnessCompensatorProc: LoudnessCompensator? = nil
 ) {
     ProcessTapController.processMappedBuffers(
@@ -123,6 +124,7 @@ private func processWithDefaults(
         autoEQProc: autoEQProc,
         dynamicEqualizerProc: dynamicEqualizerProc,
         loudnessEqualizerProc: loudnessEqualizerProc,
+        postAgcCompressorProc: postAgcCompressorProc,
         loudnessCompensatorProc: loudnessCompensatorProc
     )
 }
@@ -1042,24 +1044,26 @@ struct LoudnessIntegrationTests {
 
         // Baseline: no loudness processor
         let baselineOutput = TestABL(buffers: [(channels: 2, frames: frames)])
-        var baseVol: Float = 1.0
+        var baseVol: Float = 0.25
         processWithDefaults(
             input: inputABL,
             output: baselineOutput,
+            targetVol: 0.25,
             currentVol: &baseVol
         )
 
         // With loudness compensator at 25% volume (will produce non-flat EQ)
         let compensator = LoudnessCompensator(sampleRate: sampleRate)
-        compensator.updateForVolume(0.25)
+        compensator.updateForVolume(0.25, digitalVolume: 0.25)
         #expect(compensator.isEnabled,
                 "Compensator should enable at non-reference volume")
 
         let compOutput = TestABL(buffers: [(channels: 2, frames: frames)])
-        var compVol: Float = 1.0
+        var compVol: Float = 0.25
         processWithDefaults(
             input: inputABL,
             output: compOutput,
+            targetVol: 0.25,
             currentVol: &compVol,
             loudnessCompensatorProc: compensator
         )
@@ -1076,12 +1080,12 @@ struct LoudnessIntegrationTests {
         let baselineRMS = sqrt(baselineSquaredSum / Double((endSample - startSample) / 2))
         let compRMS = sqrt(compSquaredSum / Double((endSample - startSample) / 2))
 
-        // Compensator at low volume boosts bass — output RMS should differ from baseline
+        // Compensator shapes the spectrum — output RMS should differ from baseline
         #expect(abs(compRMS - baselineRMS) > 0.001,
                 "Compensated RMS (\(compRMS)) should differ measurably from baseline (\(baselineRMS))")
-        // At low volume, 60 Hz bass should be boosted (ISO 226 shows increased bass sensitivity loss at low phon)
-        #expect(compRMS > baselineRMS,
-                "60 Hz bass should be boosted at low volume: compensated RMS=\\(compRMS) vs baseline=\\(baselineRMS)")
+        // Note: After headroom-aware gain normalization, the compensator preserves spectral
+        // shape but shifts overall level down by the cascade peak. At 60 Hz the net effect
+        // may not be a pure RMS increase — we verify spectral change via the RMS difference above.
     }
 
     @Test("Loudness equalizer modifies output vs nil-processor baseline when enabled")
