@@ -321,7 +321,6 @@ final class AudioEngine {
             guard let self else { return }
             guard let deviceUID = self.deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid else { return }
             let loudnessEnabled = self.settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
-            
             for (_, tap) in self.taps {
                 if tap.currentDeviceUID == deviceUID {
                     tap.currentDeviceVolume = newVolume
@@ -644,7 +643,7 @@ final class AudioEngine {
         applyPersistedSettings()
 
         logger.info("Settings reset: engine state synchronized")
-    }
+     }
 
     func setVolume(for app: AudioApp, to volume: Float) {
         volumeState.setVolume(for: app.id, to: volume, identifier: app.persistenceIdentifier)
@@ -720,7 +719,6 @@ final class AudioEngine {
             )
         }
     }
-
 
 
     private func applyTapOutputState(to tap: any ProcessTapControlling, for pid: pid_t, deviceUIDs: [String]? = nil) {
@@ -853,6 +851,8 @@ final class AudioEngine {
     }
 
     private func tapInitialState(forApp app: AudioApp, primaryDeviceUID: String, deviceVolume: Float) -> TapInitialState {
+        // Build initial LoudnessEqualizerSettings (Smart Volume).
+        // Note: Populate other settings here if they become customizable per-device.
         var loudnessEqSettings = LoudnessEqualizerSettings()
         loudnessEqSettings.enabled = false
         let loudnessEnabled = settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
@@ -993,6 +993,8 @@ final class AudioEngine {
                     self.logger.debug("Switched \(app.name) to device: \(targetUID)")
                 } catch {
                     self.logger.error("Failed to switch device for \(app.name): \(error.localizedDescription)")
+                    self.logger.info("Falling back to recreateTap for \(app.name)")
+                    await self.recreateTap(for: app.id)
                 }
             }
         } else {
@@ -1230,6 +1232,8 @@ final class AudioEngine {
                         self.applyLoudnessCompensationToTap(existingTap)
                     } catch {
                         self.logger.error("Failed to re-route \(app.name) to \(deviceUID): \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(app.name)")
+                        await self.recreateTap(for: app.id)
                     }
                 }
                 appliedPIDs.insert(app.id)
@@ -1374,6 +1378,8 @@ final class AudioEngine {
                     self.applyLoudnessCompensationToTap(tap)
                 } catch {
                     self.logger.error("Failed to switch \(app.name) to \(targetUID): \(error.localizedDescription)")
+                    self.logger.info("Falling back to recreateTap for \(app.name)")
+                    await self.recreateTap(for: app.id)
                 }
             }
         }
@@ -1455,6 +1461,8 @@ final class AudioEngine {
                         self.applyLoudnessCompensationToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) to fallback: \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(tap.app.name)")
+                        await self.recreateTap(for: tap.app.id)
                     }
                 }
 
@@ -1470,6 +1478,8 @@ final class AudioEngine {
                         self.logger.debug("Removed \(deviceName) from \(tap.app.name) multi-device output")
                     } catch {
                         self.logger.error("Failed to update \(tap.app.name) devices: \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(tap.app.name) (multi-mode)")
+                        await self.recreateTap(for: tap.app.id, overridingDeviceUIDs: remainingUIDs)
                     }
                 }
             }
@@ -1530,6 +1540,8 @@ final class AudioEngine {
                         self.applyLoudnessCompensationToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) back to \(deviceName): \(error.localizedDescription)")
+                        self.logger.info("Falling back to recreateTap for \(tap.app.name)")
+                        await self.recreateTap(for: tap.app.id)
                     }
                 }
             }
@@ -1995,9 +2007,9 @@ final class AudioEngine {
     /// Tears down and recreates a tap for a given PID, preserving routing and settings.
     /// Async: awaits full CoreAudio resource teardown before creating the replacement tap
     /// to prevent orphaned IO procs from accumulating (issue #176).
-    private func recreateTap(for pid: pid_t) async {
+    private func recreateTap(for pid: pid_t, overridingDeviceUIDs: [String]? = nil) async {
         guard let oldTap = taps.removeValue(forKey: pid) else { return }
-        let deviceUIDs = oldTap.currentDeviceUIDs
+        let deviceUIDs = overridingDeviceUIDs ?? oldTap.currentDeviceUIDs
         await oldTap.invalidateAsync()
 
         // Set cooldown to prevent thrashing

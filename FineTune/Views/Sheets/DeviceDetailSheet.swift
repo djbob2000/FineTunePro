@@ -189,8 +189,6 @@ struct DeviceDetailSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-
-
     // MARK: - Loudness Compensation Toggle
 
     @ViewBuilder

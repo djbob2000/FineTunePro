@@ -110,6 +110,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
     func isHealthCheckEligible(minActiveSeconds: Double) -> Bool { false }
 
     func refreshTapSource(_ preferredDeviceUID: String?) async throws {}
+    func recreateForOutputRateChange() async throws {}
 }
 
 // MARK: - Process monitor stub
