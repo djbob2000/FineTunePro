@@ -5,29 +5,66 @@ import AppKit
 /// A percentage display that can be clicked to edit the value directly
 /// Features a refined edit state with subtle visual feedback
 struct EditablePercentage: View {
-    @Binding var percentage: Int
-    let range: ClosedRange<Int>
-    var onCommit: ((Int) -> Void)? = nil
+    @Binding var sliderValue: Double
+    let range: ClosedRange<Double>
+    let useLogScale: Bool
+    var onCommit: ((Double) -> Void)? = nil
     /// True when this row is the popup's keyboard selection (gates keyboard entry).
     var isRowFocused: Bool = false
+
+    init(
+        sliderValue: Binding<Double>,
+        range: ClosedRange<Double> = 0...1,
+        useLogScale: Bool = false,
+        onCommit: ((Double) -> Void)? = nil,
+        isRowFocused: Bool = false
+    ) {
+        self._sliderValue = sliderValue
+        self.range = range
+        self.useLogScale = useLogScale
+        self.onCommit = onCommit
+        self.isRowFocused = isRowFocused
+    }
 
     @State private var isEditing = false
     @State private var inputText = ""
     @State private var isHovered = false
-    @FocusState private var isFocused: Bool
-    @State private var coordinator = ClickOutsideCoordinator()
     @State private var componentFrame: CGRect = .zero
-    @Environment(PopupTextEntryCoordinator.self) private var textEntry: PopupTextEntryCoordinator?
+    @FocusState private var isFocused: Bool
 
-    /// Popup-owned keyboard entry, so first responder never leaves the nav anchor.
-    private var keyboardBuffer: String? {
-        isRowFocused ? textEntry?.buffer : nil
+    @Environment(\.keyboardTextEntry) private var textEntry
+    @StateObject private var coordinator = EditStateCoordinator()
+
+    /// Visual edit state: either mouse-based textfield editing or active keyboard buffer on this row.
+    private var isVisuallyEditing: Bool {
+        isEditing || keyboardBuffer != nil
     }
-    private var isVisuallyEditing: Bool { isEditing || keyboardBuffer != nil }
+
+    /// Keyboard entry buffer strictly scoped to this row when focused.
+    private var keyboardBuffer: String? {
+        guard isRowFocused, let te = textEntry, let buf = te.buffer, !buf.isEmpty else { return nil }
+        return buf
+    }
 
     /// Text color adapts to state: accent when editing, secondary otherwise
     private var textColor: Color {
         isVisuallyEditing ? DesignTokens.Colors.accentPrimary : DesignTokens.Colors.textSecondary
+    }
+
+    private var width: CGFloat {
+        if useLogScale {
+            DesignTokens.Dimensions.decibelsWidth
+        } else {
+            DesignTokens.Dimensions.percentageWidth
+        }
+    }
+
+    private var percentage: Int { Int(round(sliderValue * 100)) }
+
+    private var decibels: String {
+        let gain = VolumeMapping.sliderToGain(sliderValue, logScale: useLogScale)
+        let db = VolumeMapping.gainToDecibels(gain)
+        return String(format: "%0.1f", db)
     }
 
     var body: some View {
@@ -52,14 +89,22 @@ struct EditablePercentage: View {
                     .onExitCommand { cancel() }
                     .fixedSize()  // Size to content
 
-                Text("%")
-                    .font(DesignTokens.Typography.percentage)
-                    .foregroundStyle(textColor)
+                if !useLogScale {
+                    Text("%")
+                        .font(DesignTokens.Typography.percentage)
+                        .foregroundStyle(textColor)
+                }
             } else {
                 // Display mode: tappable percentage
-                Text("\(percentage)%")
-                    .font(DesignTokens.Typography.percentage)
-                    .foregroundStyle(isHovered ? DesignTokens.Colors.textPrimary : textColor)
+                if useLogScale {
+                    Text(decibels)
+                        .font(DesignTokens.Typography.percentage)
+                        .foregroundStyle(isHovered ? DesignTokens.Colors.textPrimary : textColor)
+                } else {
+                    Text("\(percentage)%")
+                        .font(DesignTokens.Typography.percentage)
+                        .foregroundStyle(isHovered ? DesignTokens.Colors.textPrimary : textColor)
+                }
             }
         }
         .padding(.horizontal, isVisuallyEditing ? 6 : 4)
@@ -67,51 +112,34 @@ struct EditablePercentage: View {
         .background {
             GeometryReader { geo in
                 Color.clear
-                    .preference(key: FramePreferenceKey.self, value: geo.frame(in: .global))
-            }
-        }
-        .onPreferenceChange(FramePreferenceKey.self) { frame in
-            updateScreenFrame(from: frame)
-        }
-        .background {
-            if isVisuallyEditing {
-                // Subtle pill background when editing
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(DesignTokens.Colors.accentPrimary.opacity(0.12))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(DesignTokens.Colors.accentPrimary.opacity(0.4), lineWidth: 1)
+                    .onAppear {
+                        componentFrame = geo.frame(in: .global)
                     }
-            } else if isHovered {
-                // Subtle hover background to indicate clickability
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.primary.opacity(0.08))
+                    .onChange(of: geo.frame(in: .global)) { _, newFrame in
+                        componentFrame = newFrame
+                    }
             }
         }
-        .frame(width: DesignTokens.Dimensions.percentageWidth, alignment: .trailing)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isVisuallyEditing ? DesignTokens.Colors.surfaceHover : (isHovered ? DesignTokens.Colors.surfaceHover.opacity(0.5) : Color.clear))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(isVisuallyEditing ? DesignTokens.Colors.accentPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
         .contentShape(Rectangle())
-        .onTapGesture { if !isEditing { startEditing() } }
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("Edit volume percentage")
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            if !isEditing {
+                startEditing()
             }
         }
-        .onChange(of: isEditing) { _, editing in
-            if !editing {
-                coordinator.removeMonitors()
-                // Mouse edit released first responder; ask the popup to refocus the nav anchor.
-                textEntry?.navRestoreNonce += 1
-            }
-        }
+        .frame(minWidth: width, alignment: .trailing)
         .onChange(of: textEntry?.commitNonce) { _, _ in
             guard isRowFocused, let te = textEntry, let buffer = te.buffer else { return }
-            if let value = Int(buffer), range.contains(value) {
-                percentage = value
+            if let value = parseValue(buffer), range.contains(value) {
+                sliderValue = value
                 onCommit?(value)
             }
             te.buffer = nil
@@ -123,7 +151,11 @@ struct EditablePercentage: View {
     private func startEditing() {
         // A mouse edit supersedes any in-progress keyboard entry on this row.
         textEntry?.buffer = nil
-        inputText = "\(percentage)"
+        if useLogScale {
+            inputText = decibels
+        } else {
+            inputText = "\(percentage)"
+        }
         isEditing = true
 
         // Install monitors via coordinator (handles local, global, and app deactivation)
@@ -140,63 +172,36 @@ struct EditablePercentage: View {
         }
     }
 
-    private func commit() {
-        let cleaned = inputText.replacing("%", with: "")
-                               .trimmingCharacters(in: .whitespaces)
+    private func parseValue(_ input: String) -> Double? {
+        let cleaned = input
+            .replacing("%", with: "")
+            .trimmingCharacters(in: .whitespaces)
 
-        if let value = Int(cleaned), range.contains(value) {
-            percentage = value
+        guard let newValue = Float(cleaned) else { return nil }
+
+        if useLogScale {
+            let gain = VolumeMapping.decibelsToGain(Double(newValue))
+            return VolumeMapping.gainToSlider(gain, logScale: useLogScale)
+        } else {
+            return Double(newValue) / 100
+        }
+    }
+
+    private func commit() {
+        if let value = parseValue(inputText), range.contains(value) {
+            sliderValue = value
             onCommit?(value)
         }
-        isEditing = false
+        stopEditing()
     }
 
     private func cancel() {
+        stopEditing()
+    }
+
+    private func stopEditing() {
         isEditing = false
+        isFocused = false
+        coordinator.remove()
     }
-
-    private func updateScreenFrame(from globalFrame: CGRect) {
-        componentFrame = screenFrame(from: globalFrame)
-    }
-}
-
-// MARK: - Preference Key for Frame Tracking
-
-private struct FramePreferenceKey: PreferenceKey {
-    static let defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
-
-// MARK: - Keyboard Entry Coordinator
-
-/// Shared between the menu-bar popup and its rows. The popup owns keyboard percentage
-/// entry — first responder never leaves the nav anchor — and writes `buffer`; the
-/// keyboard-focused row's field renders it and commits when `commitNonce` changes. A
-/// field raises `navRestoreNonce` when a *mouse* edit ends so the popup refocuses the anchor.
-@MainActor
-@Observable
-final class PopupTextEntryCoordinator {
-    var buffer: String? = nil
-    var commitNonce: Int = 0
-    var navRestoreNonce: Int = 0
-}
-
-// MARK: - Previews
-
-#Preview("Editable Percentage") {
-    struct PreviewWrapper: View {
-        @State private var percentage = 100
-
-        var body: some View {
-            HStack {
-                Text("Volume:")
-                EditablePercentage(percentage: $percentage, range: 0...400)
-            }
-            .padding()
-            .background(Color.black)
-        }
-    }
-    return PreviewWrapper()
 }

@@ -24,6 +24,7 @@ struct DeviceRow: View {
     let isMuted: Bool
     /// The device's volume backend. Determines which slider ↔ value mapping to use.
     let volumeBackend: VolumeControlTier
+    let useLogScale: Bool
     let onSetDefault: () -> Void
     let onVolumeChange: (Float) -> Void
     let onMuteToggle: () -> Void
@@ -72,6 +73,7 @@ struct DeviceRow: View {
         volume: Float,
         isMuted: Bool,
         volumeBackend: VolumeControlTier = .hardware,
+        useLogScale: Bool = false,
         onSetDefault: @escaping () -> Void,
         onVolumeChange: @escaping (Float) -> Void,
         onMuteToggle: @escaping () -> Void,
@@ -97,6 +99,7 @@ struct DeviceRow: View {
         self.volume = volume
         self.isMuted = isMuted
         self.volumeBackend = volumeBackend
+        self.useLogScale = useLogScale
         self.onSetDefault = onSetDefault
         self.onVolumeChange = onVolumeChange
         self.onMuteToggle = onMuteToggle
@@ -231,11 +234,9 @@ struct DeviceRow: View {
 
             // Editable volume percentage
             EditablePercentage(
-                percentage: Binding(
-                    get: { Int(round(sliderValue * 100)) },
-                    set: { sliderValue = Double($0) / 100.0 }
-                ),
-                range: 0...100,
+                sliderValue: $sliderValue,
+                range: 0...1,
+                useLogScale: useLogScale,
                 isRowFocused: isFocused
             )
 

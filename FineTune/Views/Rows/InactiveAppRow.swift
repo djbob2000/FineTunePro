@@ -19,6 +19,7 @@ struct InactiveAppRow: View {
     let deviceSelectionMode: DeviceSelectionMode
     let isMuted: Bool
     let isSmartVolumeEnabled: Bool
+    let useLogScale: Bool
     let onSmartVolumeToggle: (Bool) -> Void
     let onVolumeChange: (Float) -> Void
     let onMuteChange: (Bool) -> Void
@@ -51,6 +52,7 @@ struct InactiveAppRow: View {
         deviceSelectionMode: DeviceSelectionMode = .single,
         isMuted: Bool = false,
         isSmartVolumeEnabled: Bool = false,
+        useLogScale: Bool = false,
         onSmartVolumeToggle: @escaping (Bool) -> Void = { _ in },
         onVolumeChange: @escaping (Float) -> Void,
         onMuteChange: @escaping (Bool) -> Void,
@@ -80,6 +82,7 @@ struct InactiveAppRow: View {
         self.deviceSelectionMode = deviceSelectionMode
         self.isMuted = isMuted
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
+        self.useLogScale = useLogScale
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.onVolumeChange = onVolumeChange
         self.onMuteChange = onMuteChange
@@ -141,6 +144,7 @@ struct InactiveAppRow: View {
                 AppRowControls(
                     volume: volume,
                     isMuted: isMuted,
+                    useLogScale: useLogScale,
                     devices: devices,
                     selectedDeviceUID: selectedDeviceUID ?? defaultDeviceUID ?? "",
                     selectedDeviceUIDs: selectedDeviceUIDs,

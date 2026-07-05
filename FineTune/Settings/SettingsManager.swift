@@ -30,6 +30,7 @@ nonisolated struct AppSettings: Codable, Equatable {
     // Audio
     var defaultNewAppVolume: Float = 1.0      // 100% (unity gain)
     var maxVolumeBoost: Float = 2.0           // 200% max
+    var useLogScale: Bool = false             // Measure volume in dB
         
     // Whether to show all devices (including combined/virtual) in device lists
     var showAllDevices: Bool = false

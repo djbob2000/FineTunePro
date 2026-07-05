@@ -50,6 +50,16 @@ struct AudioTab: View {
                     width: 280
                 )
             }
+            SettingsRowDivider()
+            SettingsRow(
+                "Logarithmic Volume Scale",
+                description: "Display sliders and values in decibels (dB)"
+            ) {
+                Toggle("", isOn: $settings.appSettings.useLogScale)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+            }
         }
     }
 

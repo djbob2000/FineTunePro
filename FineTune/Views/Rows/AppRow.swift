@@ -15,6 +15,7 @@ struct AppRow: View {
     let deviceSelectionMode: DeviceSelectionMode
     let isMutedExternal: Bool  // Mute state from AudioEngine
     let isSmartVolumeEnabled: Bool
+    let useLogScale: Bool
     let onSmartVolumeToggle: (Bool) -> Void
     let onVolumeChange: (Float) -> Void
     let onMuteChange: (Bool) -> Void
@@ -49,6 +50,7 @@ struct AppRow: View {
         deviceSelectionMode: DeviceSelectionMode = .single,
         isMuted: Bool = false,
         isSmartVolumeEnabled: Bool = false,
+        useLogScale: Bool = false,
         onSmartVolumeToggle: @escaping (Bool) -> Void = { _ in },
         onVolumeChange: @escaping (Float) -> Void,
         onMuteChange: @escaping (Bool) -> Void,
@@ -79,6 +81,7 @@ struct AppRow: View {
         self.deviceSelectionMode = deviceSelectionMode
         self.isMutedExternal = isMuted
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
+        self.useLogScale = useLogScale
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.onVolumeChange = onVolumeChange
         self.onMuteChange = onMuteChange
@@ -155,6 +158,7 @@ struct AppRow: View {
                 AppRowControls(
                     volume: volume,
                     isMuted: isMutedExternal,
+                    useLogScale: useLogScale,
                     devices: devices,
                     selectedDeviceUID: selectedDeviceUID,
                     selectedDeviceUIDs: selectedDeviceUIDs,

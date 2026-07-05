@@ -28,36 +28,59 @@ import Foundation
 /// - Discord perceptual (github.com/discord/perceptual): 50 dB exponential mapping for
 ///   linear PCM gain — similar purpose to our x² curve for per-app volume.
 enum VolumeMapping {
-    /// Convert per-app slider position to linear PCM gain using square-law curve.
+    private static let sliderMinDecibels: Double = -30.0
+    private static let sliderMaxDecibels: Double = 0.0
+
+    /// Convert per-app slider position to linear PCM gain using square-law curve or log scale.
     /// Slider 50% → gain 0.25 (−12 dB). Provides perceptual linearity for software gain.
-    static func sliderToGain(_ slider: Double) -> Float {
-        if slider <= 0 { return 0 }
-        let t = min(slider, 1.0)
-        return Float(t * t)
+    static func sliderToGain(_ slider: Double, logScale: Bool = false) -> Float {
+        if slider <= 0 {
+            return 0
+        } else if logScale {
+            let decibels = slider * (sliderMaxDecibels - sliderMinDecibels) + sliderMinDecibels
+            return decibelsToGain(decibels)
+        } else {
+            let t = min(slider, 1.0)
+            return Float(t * t)
+        }
     }
 
-    /// Convert linear PCM gain to per-app slider position using inverse square-law (sqrt).
+    /// Convert linear PCM gain to per-app slider position using inverse square-law (sqrt) or log scale.
     /// Gain 0.25 → slider 50%. Inverse of `sliderToGain`.
-    static func gainToSlider(_ gain: Float) -> Double {
-        if gain <= 0 { return 0 }
-        return Double(sqrt(min(gain, 1.0)))
+    static func gainToSlider(_ gain: Float, logScale: Bool = false) -> Double {
+        if gain <= 0 {
+            return 0
+        } else if logScale {
+            let decibels = gainToDecibels(gain)
+            return (decibels - sliderMinDecibels) / (sliderMaxDecibels - sliderMinDecibels)
+        } else {
+            return Double(sqrt(min(gain, 1.0)))
+        }
+    }
+
+    static func decibelsToGain(_ decibels: Double) -> Float {
+        return Float(pow(10.0, decibels / 20.0))
+    }
+
+    static func gainToDecibels(_ gain: Float) -> Double {
+        return log10(Double(gain)) * 20.0
     }
 
     /// `.software` is linear PCM; `.hardware` / `.ddc` scalars are already audio-tapered
     /// by the driver/firmware (see the top-level docstring on this enum).
-    static func sliderFraction(forSystemGain gain: Float, tier: VolumeControlTier) -> Double {
+    static func sliderFraction(forSystemGain gain: Float, tier: VolumeControlTier, logScale: Bool = false) -> Double {
         switch tier {
         case .software:
-            return gainToSlider(gain)
+            return gainToSlider(gain, logScale: logScale)
         case .hardware, .ddc:
             return Double(max(0, min(1, gain)))
         }
     }
 
-    static func systemGain(forSliderFraction fraction: Double, tier: VolumeControlTier) -> Float {
+    static func systemGain(forSliderFraction fraction: Double, tier: VolumeControlTier, logScale: Bool = false) -> Float {
         switch tier {
         case .software:
-            return sliderToGain(fraction)
+            return sliderToGain(fraction, logScale: logScale)
         case .hardware, .ddc:
             return Float(max(0, min(1, fraction)))
         }
