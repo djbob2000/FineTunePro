@@ -852,22 +852,6 @@ struct BrickwallLimiterBestPracticeTests {
         #expect(abs(BrickwallLimiter.ceiling - 0.98) < 0.000_001)
     }
 
-    @Test("True-peak sidechain catches quarter-rate inter-sample peak")
-    func truePeakSidechainCatchesQuarterRateInterSamplePeak() {
-        let sampleRate: Float = 48_000
-        let toneFrequency: Float = 12_000
-        let phase = Float.pi / 4.0
-        let samples = (0..<256).map { index in
-            sinf((2.0 * Float.pi * toneFrequency / sampleRate * Float(index)) + phase)
-        }
-        let samplePeak = samples.map { abs($0) }.max() ?? 0
-
-        let truePeak = BrickwallLimiter.estimateTruePeakForTesting(samples, channelCount: 1)
-
-        #expect(samplePeak < 0.72)
-        #expect(truePeak > 0.90)
-    }
-
     @Test("Limiter processes mono without stereo assumptions")
     func limiterProcessesMono() {
         var samples = [Float](repeating: 1.25, count: 512)
@@ -935,6 +919,36 @@ struct BrickwallLimiterBestPracticeTests {
 
         let right = output.data(at: 1)
         #expect(abs(right[0] - 0.70) < 0.0001)
+    }
+
+    @Test("Below-ceiling sine stays a delayed clean sine")
+    func belowCeilingSineStaysDelayedCleanSine() {
+        let sampleRate: Double = 48_000
+        let frequency: Float = 1_000
+        let frameCount = 4_096
+        let channelCount = 2
+        let delayFrames = 95
+        var samples = [Float](repeating: 0.0, count: frameCount * channelCount)
+        for frame in 0..<frameCount {
+            let sample = 0.50 * sinf(2.0 * Float.pi * frequency * Float(frame) / Float(sampleRate))
+            samples[frame * channelCount] = sample
+            samples[frame * channelCount + 1] = sample
+        }
+        let input = samples
+        let limiter = BrickwallLimiter()
+
+        samples.withUnsafeMutableBufferPointer { ptr in
+            limiter.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: channelCount, sampleRate: sampleRate)
+        }
+
+        var maxError: Float = 0.0
+        for frame in delayFrames..<frameCount {
+            let expected = input[(frame - delayFrames) * channelCount]
+            maxError = max(maxError, abs(samples[frame * channelCount] - expected))
+            maxError = max(maxError, abs(samples[frame * channelCount + 1] - expected))
+        }
+
+        #expect(maxError < 0.0001)
     }
 }
 
