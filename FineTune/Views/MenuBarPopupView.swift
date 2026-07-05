@@ -177,18 +177,6 @@ struct MenuBarPopupView: View {
                 selectedRow = navModel.defaultFocus(defaultOutputUID: currentDefaultDeviceUID())
             }
         }
-        .onChange(of: localAppSettings) { oldValue, newValue in
-            audioEngine.settingsManager.updateAppSettings(newValue)
-
-            if oldValue.showAllDevices != newValue.showAllDevices {
-                audioEngine.refreshDeviceLists()
-                updateSortedDevices()
-                updateSortedInputDevices()
-            }
-            if !oldValue.lockInputDevice && newValue.lockInputDevice {
-                audioEngine.handleInputLockEnabled()
-            }
-        }
         .onChange(of: audioEngine.apps) { _, _ in
             syncNavOrder()
         }

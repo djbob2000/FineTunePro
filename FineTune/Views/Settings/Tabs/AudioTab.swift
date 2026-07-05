@@ -29,6 +29,10 @@ struct AudioTab: View {
                 audioEngine.handleInputLockEnabled()
             }
         }
+        .onChange(of: settings.appSettings.showAllDevices) { _, _ in
+            audioEngine.refreshDeviceLists()
+            updateSortedDevices()
+        }
 
     }
 
@@ -58,6 +62,16 @@ struct AudioTab: View {
                 description: "Prevent auto-switching when devices connect"
             ) {
                 Toggle("", isOn: $settings.appSettings.lockInputDevice)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+            }
+            SettingsRowDivider()
+            SettingsRow(
+                "Show All Devices",
+                description: "Include all (combined/virtual) devices in device lists"
+            ) {
+                Toggle("", isOn: $settings.appSettings.showAllDevices)
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .labelsHidden()
