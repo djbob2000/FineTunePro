@@ -116,6 +116,8 @@ struct DeviceDetailSheetToggleTests {
         #expect(captured.first == .some(nil))
     }
 
+
+
 }
 
 // MARK: - Test-only simulation helpers

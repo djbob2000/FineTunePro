@@ -133,10 +133,10 @@ final class ProcessTapController: ProcessTapControlling {
     private nonisolated(unsafe) var secondaryRampCoefficient: Float = 0.0007
     private nonisolated(unsafe) var eqProcessor: EQProcessor?
     private nonisolated(unsafe) var autoEQProcessor: AutoEQProcessor?
+    private nonisolated(unsafe) var dynamicEqualizer: DynamicEqualizer?
     private nonisolated(unsafe) var loudnessCompensator: LoudnessCompensator?
     private nonisolated(unsafe) var loudnessEqualizerProcessor: LoudnessEqualizer?
-    /// Last effective loudness volume (device × app) passed to updateLoudnessCompensation.
-    /// Used by createSecondaryTap to initialize secondary compensator with the correct volume.
+    private nonisolated(unsafe) var postAgcCompressorProcessor: PostAgcCompressor?
     private var _lastLoudnessVolume: Float = 1.0
     /// Last effective reference phon level passed to updateLoudnessCompensation.
     private var _lastLoudnessReferencePhon: Double = ISO226Contours.defaultReferencePhon
@@ -151,8 +151,10 @@ final class ProcessTapController: ProcessTapControlling {
     private var _lastLoudnessMaxDB: Double = -30.0
     private nonisolated(unsafe) var secondaryEQProcessor: EQProcessor?
     private nonisolated(unsafe) var secondaryAutoEQProcessor: AutoEQProcessor?
+    private nonisolated(unsafe) var secondaryDynamicEqualizer: DynamicEqualizer?
     private nonisolated(unsafe) var secondaryLoudnessCompensator: LoudnessCompensator?
     private nonisolated(unsafe) var secondaryLoudnessEqualizerProcessor: LoudnessEqualizer?
+    private nonisolated(unsafe) var secondaryPostAgcCompressorProcessor: PostAgcCompressor?
 
     // Target device UIDs for synchronized multi-output (first is clock source)
     private var targetDeviceUIDs: [String]
@@ -265,8 +267,12 @@ final class ProcessTapController: ProcessTapControlling {
     // MARK: - Public Methods
 
     func updateEQSettings(_ settings: EQSettings) {
-        eqProcessor?.updateSettings(settings)
-        secondaryEQProcessor?.updateSettings(settings)
+        var manualSettings = settings
+        manualSettings.isEnabled = settings.isEnabled && !settings.isAutoEQEnabled
+        eqProcessor?.updateSettings(manualSettings)
+        secondaryEQProcessor?.updateSettings(manualSettings)
+        dynamicEqualizer?.isEnabled = settings.isEnabled && settings.isAutoEQEnabled
+        secondaryDynamicEqualizer?.isEnabled = settings.isEnabled && settings.isAutoEQEnabled
     }
 
     func updateAutoEQProfile(_ profile: AutoEQProfile?) {
@@ -305,12 +311,32 @@ final class ProcessTapController: ProcessTapControlling {
             if let old {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = old }
             }
+
+            // Create Post AGC Compressor alongside AGC (auto-enabled when AGC is enabled)
+            var compressorSettings = PostAgcCompressorSettings()
+            compressorSettings.enabled = settings.enabled
+            let newCompressor = PostAgcCompressor(settings: compressorSettings, sampleRate: Float(sampleRate))
+            let oldCompressor = postAgcCompressorProcessor
+            postAgcCompressorProcessor = newCompressor
+            if let oldCompressor {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldCompressor }
+            }
         }
         if let secondary = secondaryLoudnessEqualizerProcessor,
            let sampleRate = try? secondaryResources.aggregateDeviceID.readNominalSampleRate() {
             let newSecondary = LoudnessEqualizer(settings: settings, sampleRate: Float(sampleRate))
             secondaryLoudnessEqualizerProcessor = newSecondary
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = secondary }
+
+            // Secondary Post AGC Compressor
+            var secCompressorSettings = PostAgcCompressorSettings()
+            secCompressorSettings.enabled = settings.enabled
+            let newSecCompressor = PostAgcCompressor(settings: secCompressorSettings, sampleRate: Float(sampleRate))
+            let oldSecCompressor = secondaryPostAgcCompressorProcessor
+            secondaryPostAgcCompressorProcessor = newSecCompressor
+            if let oldSecCompressor {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldSecCompressor }
+            }
         }
     }
 
@@ -667,12 +693,16 @@ final class ProcessTapController: ProcessTapControlling {
 
         eqProcessor = EQProcessor(sampleRate: sampleRate)
         autoEQProcessor = AutoEQProcessor(sampleRate: sampleRate)
+        dynamicEqualizer = DynamicEqualizer(sampleRate: sampleRate)
         loudnessEqualizerProcessor = LoudnessEqualizer(settings: initial.loudnessEqualizerSettings, sampleRate: Float(sampleRate))
+        var compressorSettings = PostAgcCompressorSettings()
+        compressorSettings.enabled = initial.loudnessEqualizerSettings.enabled
+        postAgcCompressorProcessor = PostAgcCompressor(settings: compressorSettings, sampleRate: Float(sampleRate))
         loudnessCompensator = LoudnessCompensator(sampleRate: sampleRate)
 
         // Apply persisted state to fresh processors before AudioDeviceStart so the
         // first IOProc callback sees correct EQ/AutoEQ/Loudness coefficients.
-        eqProcessor?.updateSettings(initial.eqSettings)
+        updateEQSettings(initial.eqSettings)
         autoEQProcessor?.setPreampEnabled(initial.autoEQPreampEnabled)
         if let profile = initial.autoEQProfile {
             autoEQProcessor?.updateProfile(profile)
@@ -908,9 +938,12 @@ final class ProcessTapController: ProcessTapControlling {
     private func endInvalidation() {
         secondaryEQProcessor = nil
         secondaryAutoEQProcessor = nil
+        secondaryDynamicEqualizer = nil
         secondaryLoudnessCompensator = nil
         secondaryLoudnessEqualizerProcessor = nil
+        secondaryPostAgcCompressorProcessor = nil
         loudnessEqualizerProcessor = nil
+        postAgcCompressorProcessor = nil
         _invalidating = false
     }
 
@@ -1074,8 +1107,15 @@ final class ProcessTapController: ProcessTapControlling {
         }
         secondaryAutoEQProcessor = secAutoEQ
 
+        let secDynEQ = DynamicEqualizer(sampleRate: sampleRate)
+        secDynEQ.isEnabled = dynamicEqualizer?.isEnabled ?? false
+        secondaryDynamicEqualizer = secDynEQ
+
         let secLoudnessEqualizer = LoudnessEqualizer(settings: loudnessEqualizerProcessor?.currentSettings ?? LoudnessEqualizerSettings(), sampleRate: Float(sampleRate))
         secondaryLoudnessEqualizerProcessor = secLoudnessEqualizer
+
+        let secPostAgcCompressor = PostAgcCompressor(settings: postAgcCompressorProcessor?.currentSettings ?? PostAgcCompressorSettings(), sampleRate: Float(sampleRate))
+        secondaryPostAgcCompressorProcessor = secPostAgcCompressor
 
         let secLoudness = LoudnessCompensator(sampleRate: sampleRate)
         secLoudness.updateForVolume(
@@ -1134,8 +1174,9 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryResources.destroy()
         secondaryEQProcessor = nil
         secondaryAutoEQProcessor = nil
+        secondaryDynamicEqualizer = nil
         secondaryLoudnessCompensator = nil
-        secondaryLoudnessEqualizerProcessor = nil
+        secondaryPostAgcCompressorProcessor = nil
         _secondarySampleRate = 48000.0
     }
 
@@ -1156,26 +1197,34 @@ final class ProcessTapController: ProcessTapControlling {
         // so defer their deallocation to ensure no use-after-free on the RT thread.
         let oldEQ = eqProcessor
         let oldAutoEQ = autoEQProcessor
+        let oldDynEQ = dynamicEqualizer
         let oldLoudness = loudnessCompensator
         let oldLoudnessEqualizer = loudnessEqualizerProcessor
+        let oldPostAgcCompressor = postAgcCompressorProcessor
         eqProcessor = secondaryEQProcessor
         autoEQProcessor = secondaryAutoEQProcessor
+        dynamicEqualizer = secondaryDynamicEqualizer
         loudnessCompensator = secondaryLoudnessCompensator
         loudnessEqualizerProcessor = secondaryLoudnessEqualizerProcessor
+        postAgcCompressorProcessor = secondaryPostAgcCompressorProcessor
         secondaryEQProcessor = nil
         secondaryAutoEQProcessor = nil
+        secondaryDynamicEqualizer = nil
         secondaryLoudnessCompensator = nil
         secondaryLoudnessEqualizerProcessor = nil
+        secondaryPostAgcCompressorProcessor = nil
 
         // Deferred cleanup: hold old processors alive briefly so any in-flight RT callback
         // that read the pointer before the swap finishes its buffer without accessing freed memory.
         // 0.5s is conservative — audio callbacks run at ~5ms intervals.
-        if oldEQ != nil || oldAutoEQ != nil || oldLoudness != nil || oldLoudnessEqualizer != nil {
+        if oldEQ != nil || oldAutoEQ != nil || oldDynEQ != nil || oldLoudness != nil || oldLoudnessEqualizer != nil || oldPostAgcCompressor != nil {
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                 _ = oldEQ
                 _ = oldAutoEQ
+                _ = oldDynEQ
                 _ = oldLoudness
                 _ = oldLoudnessEqualizer
+                _ = oldPostAgcCompressor
             }
         }
 
@@ -1310,6 +1359,7 @@ final class ProcessTapController: ProcessTapControlling {
             rampCoefficient = 1 - exp(-1 / (Float(deviceSampleRate) * 0.030))
             eqProcessor?.updateSampleRate(deviceSampleRate)
             autoEQProcessor?.updateSampleRate(deviceSampleRate)
+            dynamicEqualizer?.updateSampleRate(deviceSampleRate)
             loudnessCompensator?.updateSampleRate(deviceSampleRate)
 
             // LoudnessEqualizer is immutable — swap to new instance at new sample rate
@@ -1322,7 +1372,15 @@ final class ProcessTapController: ProcessTapControlling {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldLE }
             }
 
-
+            // Post AGC Compressor is also immutable — swap to new instance at new sample rate
+            if let oldPAC = postAgcCompressorProcessor {
+                let newPAC = PostAgcCompressor(
+                    settings: oldPAC.currentSettings,
+                    sampleRate: Float(deviceSampleRate)
+                )
+                postAgcCompressorProcessor = newPAC
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldPAC }
+            }
         }
     }
 
@@ -1398,7 +1456,9 @@ final class ProcessTapController: ProcessTapControlling {
         currentVol: inout Float,
         eqProc: EQProcessor?,
         autoEQProc: AutoEQProcessor?,
+        dynamicEqualizerProc: DynamicEqualizer?,
         loudnessEqualizerProc: LoudnessEqualizer?,
+        postAgcCompressorProc: PostAgcCompressor?,
         loudnessCompensatorProc: LoudnessCompensator?,
         brickwallLimiter: BrickwallLimiter?,
         outputMeterChannelPeaks: UnsafeMutablePointer<(Float, Float)>? = nil,
@@ -1535,6 +1595,10 @@ final class ProcessTapController: ProcessTapControlling {
                 eq.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
             }
 
+            if let dynEQ = dynamicEqualizerProc, dynEQ.isEnabled, eqCanProcessStereoInterleaved {
+                dynEQ.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
+            }
+
             // Per-device AutoEQ correction (after per-app EQ)
             if let autoEQProc, autoEQProc.isEnabled, eqCanProcessStereoInterleaved {
                 autoEQProc.process(input: outputSamples, output: outputSamples, frameCount: frameCount)
@@ -1543,6 +1607,11 @@ final class ProcessTapController: ProcessTapControlling {
             // Loudness Equalization (before post-AGC compressor)
             if let loudnessEqualizerProc, loudnessEqualizerProc.isEnabled, eqCanProcessStereoInterleaved {
                 loudnessEqualizerProc.process(input: UnsafePointer(outputSamples), output: outputSamples, frameCount: frameCount, channelCount: outputChannels)
+            }
+
+            // Post AGC Compressor (catches transient overshoots that slow AGC misses)
+            if let postAgcCompressorProc, postAgcCompressorProc.isEnabled, eqCanProcessStereoInterleaved {
+                postAgcCompressorProc.process(input: UnsafePointer(outputSamples), output: outputSamples, frameCount: frameCount, channelCount: outputChannels)
             }
 
             // Loudness compensation (after all EQ, before limiting)
@@ -1698,7 +1767,9 @@ final class ProcessTapController: ProcessTapControlling {
         let stereoRight: Int
         let eqProc: EQProcessor?
         let autoEQProc: AutoEQProcessor?
+        let dynamicEqualizerProc: DynamicEqualizer?
         let loudnessEqualizerProc: LoudnessEqualizer?
+        let postAgcCompressorProc: PostAgcCompressor?
         let loudnessCompensatorProc: LoudnessCompensator?
 
         if isPrimary {
@@ -1712,7 +1783,9 @@ final class ProcessTapController: ProcessTapControlling {
             stereoRight = _primaryPreferredStereoRightChannel
             eqProc = eqProcessor
             autoEQProc = autoEQProcessor
+            dynamicEqualizerProc = dynamicEqualizer
             loudnessEqualizerProc = loudnessEqualizerProcessor
+            postAgcCompressorProc = postAgcCompressorProcessor
             loudnessCompensatorProc = loudnessCompensator
         } else {
             currentVol = _secondaryCurrentVolume
@@ -1724,7 +1797,9 @@ final class ProcessTapController: ProcessTapControlling {
             stereoRight = _secondaryPreferredStereoRightChannel
             eqProc = secondaryEQProcessor
             autoEQProc = secondaryAutoEQProcessor
+            dynamicEqualizerProc = secondaryDynamicEqualizer
             loudnessEqualizerProc = secondaryLoudnessEqualizerProcessor
+            postAgcCompressorProc = secondaryPostAgcCompressorProcessor
             loudnessCompensatorProc = secondaryLoudnessCompensator
         }
 
@@ -1742,7 +1817,9 @@ final class ProcessTapController: ProcessTapControlling {
             currentVol: &currentVol,
             eqProc: eqProc,
             autoEQProc: autoEQProc,
+            dynamicEqualizerProc: dynamicEqualizerProc,
             loudnessEqualizerProc: loudnessEqualizerProc,
+            postAgcCompressorProc: postAgcCompressorProc,
             loudnessCompensatorProc: loudnessCompensatorProc,
             brickwallLimiter: isPrimary ? _primaryBrickwallLimiter : _secondaryBrickwallLimiter,
             outputMeterChannelPeaks: &outputChannelPeaks,

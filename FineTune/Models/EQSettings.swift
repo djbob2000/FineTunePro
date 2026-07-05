@@ -16,9 +16,19 @@ nonisolated struct EQSettings: Codable, Equatable {
     /// Whether EQ processing is enabled
     var isEnabled: Bool
 
-    init(bandGains: [Float] = Array(repeating: 0, count: 10), isEnabled: Bool = true) {
+    /// Whether dynamic AutoEQ processing is enabled
+    var isAutoEQEnabled: Bool
+
+    init(bandGains: [Float] = Array(repeating: 0, count: 10), isEnabled: Bool = true, isAutoEQEnabled: Bool = false) {
         self.bandGains = Self.normalizeBands(bandGains)
         self.isEnabled = isEnabled
+        self.isAutoEQEnabled = isAutoEQEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case bandGains
+        case isEnabled
+        case isAutoEQEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -27,6 +37,7 @@ nonisolated struct EQSettings: Codable, Equatable {
             ?? Array(repeating: 0, count: Self.bandCount)
         self.bandGains = Self.normalizeBands(decoded)
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.isAutoEQEnabled = try container.decodeIfPresent(Bool.self, forKey: .isAutoEQEnabled) ?? false
     }
 
     /// Normalize band gains array to exactly `bandCount` elements,

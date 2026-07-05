@@ -11,7 +11,6 @@ struct AudioTab: View {
     @State private var sortedOutputDevices: [AudioDevice] = []
 
 
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {

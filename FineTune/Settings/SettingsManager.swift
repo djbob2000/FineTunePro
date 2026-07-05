@@ -795,10 +795,6 @@ final class SettingsManager {
         set { updateAppSettings(newValue) }
     }
 
-
-
-
-
     // MARK: - Per-Device Loudness & Equalization
 
     func getLoudnessCompensationEnabled(for deviceUID: String) -> Bool {

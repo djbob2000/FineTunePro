@@ -226,6 +226,26 @@ struct AppSettingsDefaultTests {
     }
 
 
+    @Test("loudnessCompensationEnabled round-trips through JSON as true")
+    func loudnessCompensationEnabledRoundTrip() throws {
+        var settings = AppSettings()
+        settings.loudnessCompensationEnabled = true
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.loudnessCompensationEnabled == true)
+    }
+
+    @Test("loudnessCompensationEnabled persists via SettingsManager")
+    @MainActor
+    func loudnessCompensationEnabledPersistence() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let manager = SettingsManager(directory: tempDir)
+        var newSettings = manager.appSettings
+        newSettings.loudnessCompensationEnabled = true
+        manager.updateAppSettings(newSettings)
+        #expect(manager.appSettings.loudnessCompensationEnabled == true)
+    }
 
     @Test("volumeHotkeyStep defaults to .normal")
     func volumeHotkeyStepDefault() {
