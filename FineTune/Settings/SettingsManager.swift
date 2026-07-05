@@ -29,6 +29,7 @@ nonisolated struct AppSettings: Codable, Equatable {
 
     // Audio
     var defaultNewAppVolume: Float = 1.0      // 100% (unity gain)
+    var autoSwitchToConnectedOutputDevice: Bool = false  // Prefer newly connected outputs over current default
     var maxVolumeBoost: Float = 2.0           // 200% max
     var useLogScale: Bool = false             // Measure volume in dB
         
@@ -70,6 +71,7 @@ nonisolated struct AppSettings: Codable, Equatable {
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         menuBarIconStyle = try c.decodeIfPresent(MenuBarIconStyle.self, forKey: .menuBarIconStyle) ?? .default
         defaultNewAppVolume = try c.decodeIfPresent(Float.self, forKey: .defaultNewAppVolume) ?? 1.0
+        autoSwitchToConnectedOutputDevice = try c.decodeIfPresent(Bool.self, forKey: .autoSwitchToConnectedOutputDevice) ?? false
         lockInputDevice = try c.decodeIfPresent(Bool.self, forKey: .lockInputDevice) ?? true
         showDeviceDisconnectAlerts = try c.decodeIfPresent(Bool.self, forKey: .showDeviceDisconnectAlerts) ?? true
         loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false

@@ -35,6 +35,7 @@ struct SettingsJSONTests {
         original.ddcVolumes = ["monitor-1": 75]
         original.ddcMuteStates = ["monitor-1": false]
         original.autoEQPreampEnabled = false
+        original.appSettings.autoSwitchToConnectedOutputDevice = true
         original.hiddenOutputDeviceUIDs = ["uid-hidden-out-1", "uid-hidden-out-2"]
         original.hiddenInputDeviceUIDs = ["uid-hidden-in-1"]
 
@@ -50,6 +51,7 @@ struct SettingsJSONTests {
         #expect(decoded.ddcVolumes == original.ddcVolumes)
         #expect(decoded.ddcMuteStates == original.ddcMuteStates)
         #expect(decoded.autoEQPreampEnabled == false)
+        #expect(decoded.appSettings.autoSwitchToConnectedOutputDevice == true)
         #expect(decoded.hiddenOutputDeviceUIDs == original.hiddenOutputDeviceUIDs)
         #expect(decoded.hiddenInputDeviceUIDs == original.hiddenInputDeviceUIDs)
     }
@@ -221,8 +223,18 @@ struct AppSettingsDefaultTests {
         #expect(settings.launchAtLogin == false)
         #expect(settings.menuBarIconStyle == .default)
         #expect(settings.defaultNewAppVolume == 1.0)
+        #expect(settings.autoSwitchToConnectedOutputDevice == false)
         #expect(settings.lockInputDevice == true)
         #expect(settings.showDeviceDisconnectAlerts == true)
+    }
+
+    @Test("autoSwitchToConnectedOutputDevice round-trips through JSON as true")
+    func autoSwitchToConnectedOutputDeviceRoundTrip() throws {
+        var settings = AppSettings()
+        settings.autoSwitchToConnectedOutputDevice = true
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.autoSwitchToConnectedOutputDevice == true)
     }
 
 

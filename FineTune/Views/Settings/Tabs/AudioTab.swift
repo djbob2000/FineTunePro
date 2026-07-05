@@ -78,6 +78,16 @@ struct AudioTab: View {
             }
             SettingsRowDivider()
             SettingsRow(
+                "Auto-Switch New Output",
+                description: "Automatically use newly connected output devices"
+            ) {
+                Toggle("", isOn: $settings.appSettings.autoSwitchToConnectedOutputDevice)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+            }
+            SettingsRowDivider()
+            SettingsRow(
                 "Show All Devices",
                 description: "Include all (combined/virtual) devices in device lists"
             ) {
