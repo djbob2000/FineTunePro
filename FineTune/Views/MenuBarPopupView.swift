@@ -631,6 +631,10 @@ struct MenuBarPopupView: View {
                             audioEngine.setAutoEQPreampEnabled(!audioEngine.autoEQPreampEnabled)
                         },
                         isLoudnessEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
+                        isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
+                        onSmartVolumeToggle: { enabled in
+                            audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
+                        },
                         isFocused: hasKeyboardEngaged && selectedRow == .device(uid: device.uid)
                     )
                     .id(PopupKeyboardNavModel.RowID.device(uid: device.uid))
@@ -698,6 +702,10 @@ struct MenuBarPopupView: View {
                         onOverrideChange: { newTier in
                             audioEngine.settingsManager.setDeviceVolumeTierOverride(for: device.uid, to: newTier)
                             deviceVolumeMonitor.applyTierOverrideChange(for: device.id)
+                        },
+                        isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
+                        onSmartVolumeToggle: { enabled in
+                            audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
                         },
                         isLoudnessCompensationEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
                         onLoudnessCompensationToggle: { enabled in
@@ -903,9 +911,9 @@ struct MenuBarPopupView: View {
                 isFollowingDefault: audioEngine.isFollowingDefault(for: app),
                 defaultDeviceUID: deviceVolumeMonitor.defaultDeviceUID,
                 deviceSelectionMode: audioEngine.getDeviceSelectionMode(for: app),
-                boost: audioEngine.getBoost(for: app),
-                onBoostChange: { boost in
-                    audioEngine.setBoost(for: app, to: boost)
+                isSmartVolumeEnabled: audioEngine.getAppSmartVolumeEnabled(for: app),
+                onSmartVolumeToggle: { enabled in
+                    audioEngine.setAppSmartVolumeEnabled(for: app, enabled: enabled)
                 },
                 getAudioLevel: { audioEngine.getAudioLevel(for: app) },
                 isPopupVisible: isPopupVisible,
@@ -975,9 +983,9 @@ struct MenuBarPopupView: View {
             defaultDeviceUID: deviceVolumeMonitor.defaultDeviceUID,
             deviceSelectionMode: audioEngine.getDeviceSelectionModeForInactive(identifier: identifier),
             isMuted: audioEngine.getMuteForInactive(identifier: identifier),
-            boost: audioEngine.getBoostForInactive(identifier: identifier),
-            onBoostChange: { boost in
-                audioEngine.setBoostForInactive(identifier: identifier, to: boost)
+            isSmartVolumeEnabled: audioEngine.settingsManager.getAppSmartVolumeEnabled(for: identifier),
+            onSmartVolumeToggle: { enabled in
+                audioEngine.settingsManager.setAppSmartVolumeEnabled(for: identifier, to: enabled)
             },
             onVolumeChange: { volume in
                 audioEngine.setVolumeForInactive(identifier: identifier, to: volume)

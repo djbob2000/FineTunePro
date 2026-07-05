@@ -18,8 +18,8 @@ struct InactiveAppRow: View {
     let defaultDeviceUID: String?
     let deviceSelectionMode: DeviceSelectionMode
     let isMuted: Bool
-    let boost: BoostLevel
-    let onBoostChange: (BoostLevel) -> Void
+    let isSmartVolumeEnabled: Bool
+    let onSmartVolumeToggle: (Bool) -> Void
     let onVolumeChange: (Float) -> Void
     let onMuteChange: (Bool) -> Void
     let onDeviceSelected: (String) -> Void
@@ -50,8 +50,8 @@ struct InactiveAppRow: View {
         defaultDeviceUID: String? = nil,
         deviceSelectionMode: DeviceSelectionMode = .single,
         isMuted: Bool = false,
-        boost: BoostLevel = .x1,
-        onBoostChange: @escaping (BoostLevel) -> Void = { _ in },
+        isSmartVolumeEnabled: Bool = false,
+        onSmartVolumeToggle: @escaping (Bool) -> Void = { _ in },
         onVolumeChange: @escaping (Float) -> Void,
         onMuteChange: @escaping (Bool) -> Void,
         onDeviceSelected: @escaping (String) -> Void,
@@ -79,8 +79,8 @@ struct InactiveAppRow: View {
         self.defaultDeviceUID = defaultDeviceUID
         self.deviceSelectionMode = deviceSelectionMode
         self.isMuted = isMuted
-        self.boost = boost
-        self.onBoostChange = onBoostChange
+        self.isSmartVolumeEnabled = isSmartVolumeEnabled
+        self.onSmartVolumeToggle = onSmartVolumeToggle
         self.onVolumeChange = onVolumeChange
         self.onMuteChange = onMuteChange
         self.onDeviceSelected = onDeviceSelected
@@ -147,11 +147,11 @@ struct InactiveAppRow: View {
                     isFollowingDefault: isFollowingDefault,
                     defaultDeviceUID: defaultDeviceUID,
                     deviceSelectionMode: deviceSelectionMode,
-                    boost: boost,
+                    isSmartVolumeEnabled: isSmartVolumeEnabled,
                     isEQExpanded: isEQExpanded,
                     onVolumeChange: onVolumeChange,
                     onMuteChange: onMuteChange,
-                    onBoostChange: onBoostChange,
+                    onSmartVolumeToggle: onSmartVolumeToggle,
                     onDeviceSelected: onDeviceSelected,
                     onDevicesSelected: onDevicesSelected,
                     onDeviceModeChange: onDeviceModeChange,

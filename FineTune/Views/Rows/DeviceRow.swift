@@ -42,6 +42,8 @@ struct DeviceRow: View {
     let autoEQPreampEnabled: Bool
     let onAutoEQPreampToggle: (() -> Void)?
     let isLoudnessEnabled: Bool
+    let isSmartVolumeEnabled: Bool
+    let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
 
     @State private var sliderValue: Double
@@ -86,6 +88,8 @@ struct DeviceRow: View {
         autoEQPreampEnabled: Bool = true,
         onAutoEQPreampToggle: (() -> Void)? = nil,
         isLoudnessEnabled: Bool = false,
+        isSmartVolumeEnabled: Bool = false,
+        onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false
     ) {
         self.device = device
@@ -109,6 +113,8 @@ struct DeviceRow: View {
         self.autoEQPreampEnabled = autoEQPreampEnabled
         self.onAutoEQPreampToggle = onAutoEQPreampToggle
         self.isLoudnessEnabled = isLoudnessEnabled
+        self.isSmartVolumeEnabled = isSmartVolumeEnabled
+        self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
         self._sliderValue = State(initialValue: Self.volumeToSlider(volume, backend: volumeBackend))
     }
@@ -232,6 +238,15 @@ struct DeviceRow: View {
                 range: 0...100,
                 isRowFocused: isFocused
             )
+
+            // Smart Volume button
+            if let onSmartVolumeToggle {
+                SmartVolumeButton(
+                    isEnabled: isSmartVolumeEnabled,
+                    isDisabled: device.transportType == .builtIn,
+                    onTap: { onSmartVolumeToggle(!isSmartVolumeEnabled) }
+                )
+            }
         }
         .frame(height: DesignTokens.Dimensions.rowContentHeight)
         .onChange(of: volume) { _, newValue in
