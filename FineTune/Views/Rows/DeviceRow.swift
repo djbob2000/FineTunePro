@@ -41,7 +41,7 @@ struct DeviceRow: View {
     let autoEQImportError: String?
     let autoEQPreampEnabled: Bool
     let onAutoEQPreampToggle: (() -> Void)?
-    let isSmartVolumeEnabled: Bool
+    let isLoudnessEnabled: Bool
     let isFocused: Bool
 
     @State private var sliderValue: Double
@@ -85,7 +85,7 @@ struct DeviceRow: View {
         autoEQImportError: String? = nil,
         autoEQPreampEnabled: Bool = true,
         onAutoEQPreampToggle: (() -> Void)? = nil,
-        isSmartVolumeEnabled: Bool = false,
+        isLoudnessEnabled: Bool = false,
         isFocused: Bool = false
     ) {
         self.device = device
@@ -108,7 +108,7 @@ struct DeviceRow: View {
         self.autoEQImportError = autoEQImportError
         self.autoEQPreampEnabled = autoEQPreampEnabled
         self.onAutoEQPreampToggle = onAutoEQPreampToggle
-        self.isSmartVolumeEnabled = isSmartVolumeEnabled
+        self.isLoudnessEnabled = isLoudnessEnabled
         self.isFocused = isFocused
         self._sliderValue = State(initialValue: Self.volumeToSlider(volume, backend: volumeBackend))
     }
@@ -147,7 +147,7 @@ struct DeviceRow: View {
                         .lineLimit(1)
                         .help(device.name)
 
-                    if let subtitle = Self.deviceSubtitle(profileName: autoEQProfileName, autoEQEnabled: autoEQEnabled, isSmartVolumeEnabled: isSmartVolumeEnabled) {
+                    if let subtitle = Self.deviceSubtitle(profileName: autoEQProfileName, autoEQEnabled: autoEQEnabled, isLoudnessEnabled: isLoudnessEnabled) {
                         Text(subtitle)
                             .font(.system(size: 9))
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
@@ -261,15 +261,15 @@ extension DeviceRow {
     static func deviceSubtitle(
         profileName: String?,
         autoEQEnabled: Bool,
-        isSmartVolumeEnabled: Bool
+        isLoudnessEnabled: Bool
     ) -> String? {
         var components: [String] = []
 
         if let profileName {
             components.append(autoEQEnabled ? profileName : "\(profileName) (off)")
         }
-        if isSmartVolumeEnabled {
-            components.append("Smart Volume")
+        if isLoudnessEnabled {
+            components.append("Loudness")
         }
 
         return components.isEmpty ? nil : components.joined(separator: " · ")

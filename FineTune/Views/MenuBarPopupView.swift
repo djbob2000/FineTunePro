@@ -617,7 +617,7 @@ struct MenuBarPopupView: View {
                         onAutoEQPreampToggle: {
                             audioEngine.setAutoEQPreampEnabled(!audioEngine.autoEQPreampEnabled)
                         },
-                        isSmartVolumeEnabled: audioEngine.settingsManager.getLoudnessEqualizationEnabled(for: device.uid),
+                        isLoudnessEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
                         isFocused: hasKeyboardEngaged && selectedRow == .device(uid: device.uid)
                     )
                     .id(PopupKeyboardNavModel.RowID.device(uid: device.uid))
@@ -686,9 +686,13 @@ struct MenuBarPopupView: View {
                             audioEngine.settingsManager.setDeviceVolumeTierOverride(for: device.uid, to: newTier)
                             deviceVolumeMonitor.applyTierOverrideChange(for: device.id)
                         },
-                        isLoudnessEqualizationEnabled: audioEngine.settingsManager.getLoudnessEqualizationEnabled(for: device.uid),
-                        onLoudnessEqualizationToggle: { enabled in
-                            audioEngine.setLoudnessEqualizationEnabled(for: device.uid, enabled: enabled)
+                        isLoudnessCompensationEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
+                        onLoudnessCompensationToggle: { enabled in
+                            audioEngine.setLoudnessCompensationEnabled(for: device.uid, enabled: enabled)
+                        },
+                        loudnessReferencePhon: audioEngine.settingsManager.getLoudnessReferencePhon(for: device.uid),
+                        onLoudnessReferencePhonChange: { referencePhon in
+                            audioEngine.setLoudnessReferencePhon(for: device.uid, to: referencePhon)
                         },
                         onDismiss: {}
                     )

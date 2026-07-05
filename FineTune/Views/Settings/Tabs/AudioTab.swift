@@ -10,6 +10,7 @@ struct AudioTab: View {
     /// Memoized sorted output devices for the system-sounds picker.
     @State private var sortedOutputDevices: [AudioDevice] = []
 
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -28,6 +29,7 @@ struct AudioTab: View {
                 audioEngine.handleInputLockEnabled()
             }
         }
+
     }
 
     // MARK: - Volume

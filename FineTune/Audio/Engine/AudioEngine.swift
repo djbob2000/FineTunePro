@@ -49,6 +49,7 @@ final class AudioEngine {
     private var staleCleanupTask: Task<Void, Never>?  // Debounced cleanup scheduling
     private var healthMonitorTask: Task<Void, Never>?  // Periodic tap health monitor
     private var tapRecoveryCooldownUntil: [pid_t: Date] = [:]  // Prevents tap recreation thrashing
+
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "AudioEngine")
 
     // MARK: - Priority State Machine
@@ -319,7 +320,7 @@ final class AudioEngine {
         deviceVolumeMonitor.onVolumeChanged = { [weak self] deviceID, newVolume in
             guard let self else { return }
             guard let deviceUID = self.deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid else { return }
-            let loudnessEnabled = false
+            let loudnessEnabled = self.settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
             for (_, tap) in self.taps {
                 if tap.currentDeviceUID == deviceUID {
                     tap.currentDeviceVolume = newVolume
@@ -327,9 +328,12 @@ final class AudioEngine {
                        self.outputVolumeBackend(for: deviceID) == .software {
                         tap.volume = self.effectiveVolume(for: tap.app.id, deviceUIDs: tap.currentDeviceUIDs)
                     }
+                    let referencePhon = self.settingsManager.getLoudnessReferencePhon(for: deviceUID)
                     tap.updateLoudnessCompensation(
                         volume: self.effectiveLoudnessVolume(for: tap),
-                        enabled: loudnessEnabled
+                        enabled: loudnessEnabled,
+                        referencePhon: referencePhon,
+                        gainScale: loudnessEnabled ? 1.0 : 0.0
                     )
                 }
             }
@@ -627,7 +631,12 @@ final class AudioEngine {
             applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: tap.currentDeviceUIDs)
             tap.updateEQSettings(.flat)
             tap.updateAutoEQProfile(nil)
-            tap.updateLoudnessCompensation(volume: effectiveLoudnessVolume(for: tap), enabled: false)
+            tap.updateLoudnessCompensation(
+                volume: effectiveLoudnessVolume(for: tap),
+                enabled: false,
+                referencePhon: ISO226Contours.defaultReferencePhon,
+                gainScale: 0.0
+            )
         }
 
         // 6. Re-apply from clean settings (re-establishes routing to system default)
@@ -636,15 +645,25 @@ final class AudioEngine {
         logger.info("Settings reset: engine state synchronized")
      }
 
-     func setVolume(for app: AudioApp, to volume: Float) {
-         volumeState.setVolume(for: app.id, to: volume, identifier: app.persistenceIdentifier)
-         if let deviceUID = appDeviceRouting[app.id] {
-             ensureTapExists(for: app, deviceUID: deviceUID)
-         }
-         if let tap = taps[app.id] {
-             tap.volume = effectiveVolume(for: app.id, deviceUIDs: tap.currentDeviceUIDs)
-         }
-     }
+    func setVolume(for app: AudioApp, to volume: Float) {
+        volumeState.setVolume(for: app.id, to: volume, identifier: app.persistenceIdentifier)
+        if let deviceUID = appDeviceRouting[app.id] {
+            ensureTapExists(for: app, deviceUID: deviceUID)
+        }
+        if let tap = taps[app.id] {
+            tap.volume = effectiveVolume(for: app.id, deviceUIDs: tap.currentDeviceUIDs)
+            let loudnessEnabled = tap.currentDeviceUID.map { settingsManager.getLoudnessCompensationEnabled(for: $0) } ?? false
+            if loudnessEnabled, let firstDeviceUID = tap.currentDeviceUID {
+                let referencePhon = settingsManager.getLoudnessReferencePhon(for: firstDeviceUID)
+                tap.updateLoudnessCompensation(
+                    volume: effectiveLoudnessVolume(for: tap),
+                    enabled: loudnessEnabled,
+                    referencePhon: referencePhon,
+                    gainScale: 1.0
+                )
+            }
+        }
+    }
 
     func getVolume(for app: AudioApp) -> Float {
         volumeState.getVolume(for: app.id)
@@ -681,14 +700,25 @@ final class AudioEngine {
         return appGain * deviceVolumeMonitor.outputProcessingGain(for: device.id)
     }
 
-    /// Estimated listening level for loudness compensation: device volume × per-app slider.
-    /// Does not include boost (intentional amplification beyond reference).
-    /// The compensator's phon estimation clamps to [0,1] so values > 1 are treated as reference.
     private func effectiveLoudnessVolume(for tap: any ProcessTapControlling) -> Float {
-        tap.currentDeviceVolume * volumeState.getVolume(for: tap.app.id)
+        guard let deviceUID = tap.currentDeviceUID else {
+            return tap.currentDeviceVolume * volumeState.getVolume(for: tap.app.id)
+        }
+        return tap.currentDeviceVolume * volumeState.getVolume(for: tap.app.id)
     }
 
 
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, gainScale: Float) {
+        for tap in taps.values {
+            guard tap.currentDeviceUID == deviceUID else { continue }
+            tap.updateLoudnessCompensation(
+                volume: effectiveLoudnessVolume(for: tap),
+                enabled: enabled,
+                referencePhon: referencePhon,
+                gainScale: gainScale
+            )
+        }
+    }
 
 
     private func applyTapOutputState(to tap: any ProcessTapControlling, for pid: pid_t, deviceUIDs: [String]? = nil) {
@@ -791,23 +821,19 @@ final class AudioEngine {
         }
     }
 
-    func setLoudnessCompensationEnabled(_ enabled: Bool) {
-        for tap in taps.values {
-            tap.updateLoudnessCompensation(volume: effectiveLoudnessVolume(for: tap), enabled: enabled)
-        }
+    func setLoudnessCompensationEnabled(for deviceUID: String, enabled: Bool) {
+        settingsManager.setLoudnessCompensationEnabled(for: deviceUID, to: enabled)
+        let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0)
+    }
+
+    func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
+        settingsManager.setLoudnessReferencePhon(for: deviceUID, to: referencePhon)
+        let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
+        updateTapsLoudness(deviceUID: deviceUID, enabled: enabled, referencePhon: referencePhon, gainScale: enabled ? 1.0 : 0.0)
     }
 
 
-
-    func setLoudnessEqualizationEnabled(for deviceUID: String, enabled: Bool) {
-        settingsManager.setLoudnessEqualizationEnabled(for: deviceUID, to: enabled)
-        var settings = LoudnessEqualizerSettings()
-        settings.enabled = enabled
-        for tap in taps.values {
-            guard tap.currentDeviceUID == deviceUID else { continue }
-            tap.updateLoudnessEqualization(settings)
-        }
-    }
 
     /// Apply AutoEQ profile to all taps currently routed to the given device.
     private func applyAutoEQToTaps(for deviceUID: String) {
@@ -828,13 +854,16 @@ final class AudioEngine {
         // Build initial LoudnessEqualizerSettings (Smart Volume).
         // Note: Populate other settings here if they become customizable per-device.
         var loudnessEqSettings = LoudnessEqualizerSettings()
-        loudnessEqSettings.enabled = settingsManager.getLoudnessEqualizationEnabled(for: primaryDeviceUID)
+        loudnessEqSettings.enabled = false
+        let loudnessEnabled = settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
+        let referencePhon = settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID)
         return TapInitialState(
             eqSettings: settingsManager.getEQSettings(for: app.persistenceIdentifier),
             autoEQProfile: autoEQProfileForActivation(deviceUID: primaryDeviceUID),
             autoEQPreampEnabled: settingsManager.autoEQPreampEnabled,
             loudnessVolume: deviceVolume * volumeState.getVolume(for: app.id),
-            loudnessCompensationEnabled: false,
+            loudnessCompensationEnabled: loudnessEnabled,
+            loudnessReferencePhon: referencePhon,
             loudnessEqualizerSettings: loudnessEqSettings
         )
     }
@@ -881,15 +910,16 @@ final class AudioEngine {
         }
     }
 
-    /// Applies loudness equalization (Smart Volume) settings to the tap.
-    /// - Note: Currently, only the `enabled` field is loaded from the settings manager
-    ///   as other `LoudnessEqualizerSettings` fields are not customizable per-device.
-    ///   If per-device tuning fields are introduced in the future, populate them here.
-    private func applyLoudnessEqualizationToTap(_ tap: any ProcessTapControlling) {
+    private func applyLoudnessCompensationToTap(_ tap: any ProcessTapControlling) {
         guard let deviceUID = tap.currentDeviceUID else { return }
-        var settings = LoudnessEqualizerSettings()
-        settings.enabled = settingsManager.getLoudnessEqualizationEnabled(for: deviceUID)
-        tap.updateLoudnessEqualization(settings)
+        let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
+        let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
+        tap.updateLoudnessCompensation(
+            volume: effectiveLoudnessVolume(for: tap),
+            enabled: enabled,
+            referencePhon: referencePhon,
+            gainScale: enabled ? 1.0 : 0.0
+        )
     }
 
     /// Sets the system default output device, routes followsDefault apps, and registers
@@ -959,7 +989,7 @@ final class AudioEngine {
                     try await tap.switchDevice(to: targetUID, preferredTapSourceDeviceUID: preferredTapSourceUID)
                     self.applyTapOutputState(to: tap, for: app.id, deviceUIDs: [targetUID])
                     self.applyAutoEQToTap(tap)
-                    self.applyLoudnessEqualizationToTap(tap)
+                    self.applyLoudnessCompensationToTap(tap)
                     self.logger.debug("Switched \(app.name) to device: \(targetUID)")
                 } catch {
                     self.logger.error("Failed to switch device for \(app.name): \(error.localizedDescription)")
@@ -1055,7 +1085,7 @@ final class AudioEngine {
                     try await tap.updateDevices(to: deviceUIDs, preferredTapSourceDeviceUID: preferredTapSourceUID)
                     applyTapOutputState(to: tap, for: app.id, deviceUIDs: deviceUIDs)
                     applyAutoEQToTap(tap)
-                    applyLoudnessEqualizationToTap(tap)
+                    applyLoudnessCompensationToTap(tap)
                     logger.debug("Updated \(app.name) to \(deviceUIDs.count) device(s)")
                 } catch {
                     logger.error("Failed to update devices for \(app.name): \(error.localizedDescription)")
@@ -1199,7 +1229,7 @@ final class AudioEngine {
                         try await existingTap.switchDevice(to: deviceUID, preferredTapSourceDeviceUID: preferredSource)
                         self.applyTapOutputState(to: existingTap, for: app.id, deviceUIDs: [deviceUID])
                         self.applyAutoEQToTap(existingTap)
-                        self.applyLoudnessEqualizationToTap(existingTap)
+                        self.applyLoudnessCompensationToTap(existingTap)
                     } catch {
                         self.logger.error("Failed to re-route \(app.name) to \(deviceUID): \(error.localizedDescription)")
                         self.logger.info("Falling back to recreateTap for \(app.name)")
@@ -1345,7 +1375,7 @@ final class AudioEngine {
                     try await tap.switchDevice(to: targetUID, preferredTapSourceDeviceUID: preferredTapSourceUID)
                     self.applyTapOutputState(to: tap, for: app.id, deviceUIDs: [targetUID])
                     self.applyAutoEQToTap(tap)
-                    self.applyLoudnessEqualizationToTap(tap)
+                    self.applyLoudnessCompensationToTap(tap)
                 } catch {
                     self.logger.error("Failed to switch \(app.name) to \(targetUID): \(error.localizedDescription)")
                     self.logger.info("Falling back to recreateTap for \(app.name)")
@@ -1428,7 +1458,7 @@ final class AudioEngine {
                         try await tap.switchDevice(to: fallbackUID, preferredTapSourceDeviceUID: preferredTapSourceUID, sourceDeviceDead: true)
                         self.applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: [fallbackUID])
                         self.applyAutoEQToTap(tap)
-                        self.applyLoudnessEqualizationToTap(tap)
+                        self.applyLoudnessCompensationToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) to fallback: \(error.localizedDescription)")
                         self.logger.info("Falling back to recreateTap for \(tap.app.name)")
@@ -1444,7 +1474,7 @@ final class AudioEngine {
                         try await tap.updateDevices(to: remainingUIDs, preferredTapSourceDeviceUID: preferredTapSourceUID, sourceDeviceDead: true)
                         self.applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: remainingUIDs)
                         self.applyAutoEQToTap(tap)
-                        self.applyLoudnessEqualizationToTap(tap)
+                        self.applyLoudnessCompensationToTap(tap)
                         self.logger.debug("Removed \(deviceName) from \(tap.app.name) multi-device output")
                     } catch {
                         self.logger.error("Failed to update \(tap.app.name) devices: \(error.localizedDescription)")
@@ -1507,7 +1537,7 @@ final class AudioEngine {
                         try await tap.switchDevice(to: deviceUID, preferredTapSourceDeviceUID: preferredTapSourceUID)
                         self.applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: [deviceUID])
                         self.applyAutoEQToTap(tap)
-                        self.applyLoudnessEqualizationToTap(tap)
+                        self.applyLoudnessCompensationToTap(tap)
                     } catch {
                         self.logger.error("Failed to switch \(tap.app.name) back to \(deviceName): \(error.localizedDescription)")
                         self.logger.info("Falling back to recreateTap for \(tap.app.name)")

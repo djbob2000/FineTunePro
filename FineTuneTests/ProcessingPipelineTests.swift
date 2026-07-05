@@ -1042,24 +1042,26 @@ struct LoudnessIntegrationTests {
 
         // Baseline: no loudness processor
         let baselineOutput = TestABL(buffers: [(channels: 2, frames: frames)])
-        var baseVol: Float = 1.0
+        var baseVol: Float = 0.25
         processWithDefaults(
             input: inputABL,
             output: baselineOutput,
+            targetVol: 0.25,
             currentVol: &baseVol
         )
 
         // With loudness compensator at 25% volume (will produce non-flat EQ)
         let compensator = LoudnessCompensator(sampleRate: sampleRate)
-        compensator.updateForVolume(0.25)
+        compensator.updateForVolume(0.25, digitalVolume: 0.25)
         #expect(compensator.isEnabled,
                 "Compensator should enable at non-reference volume")
 
         let compOutput = TestABL(buffers: [(channels: 2, frames: frames)])
-        var compVol: Float = 1.0
+        var compVol: Float = 0.25
         processWithDefaults(
             input: inputABL,
             output: compOutput,
+            targetVol: 0.25,
             currentVol: &compVol,
             loudnessCompensatorProc: compensator
         )

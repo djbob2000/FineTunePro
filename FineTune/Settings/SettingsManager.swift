@@ -37,8 +37,7 @@ nonisolated struct AppSettings: Codable, Equatable {
     var showDeviceDisconnectAlerts: Bool = true
 
     // Audio Processing
-    var loudnessEqualizationEnabled: Bool = false  // Real-time loudness equalization
-    var loudnessEqualizationIntensity: Float = 1.0  // 0.0–1.0, 1.0 = full AGC normalization
+    var loudnessCompensationEnabled: Bool = false  // ISO 226:2023 equal-loudness contour compensation
     
     // Legacy Migration
     private var unifiedLoudnessEnabled: Bool? = nil
@@ -68,8 +67,7 @@ nonisolated struct AppSettings: Codable, Equatable {
         defaultNewAppVolume = try c.decodeIfPresent(Float.self, forKey: .defaultNewAppVolume) ?? 1.0
         lockInputDevice = try c.decodeIfPresent(Bool.self, forKey: .lockInputDevice) ?? true
         showDeviceDisconnectAlerts = try c.decodeIfPresent(Bool.self, forKey: .showDeviceDisconnectAlerts) ?? true
-        loudnessEqualizationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessEqualizationEnabled) ?? false
-        loudnessEqualizationIntensity = try c.decodeIfPresent(Float.self, forKey: .loudnessEqualizationIntensity) ?? 1.0
+        loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false
         hudStyle = try c.decodeIfPresent(HUDStyle.self, forKey: .hudStyle) ?? .tahoe
         mediaKeyControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaKeyControlEnabled) ?? true
         volumeHotkeyStep = try c.decodeIfPresent(VolumeHotkeyStep.self, forKey: .volumeHotkeyStep) ?? .normal
@@ -80,7 +78,7 @@ nonisolated struct AppSettings: Codable, Equatable {
         // Migrate legacy unified loudness
         if let legacyUnified = try c.decodeIfPresent(Bool.self, forKey: .unifiedLoudnessEnabled) {
             if legacyUnified {
-                loudnessEqualizationEnabled = true
+                loudnessCompensationEnabled = true
             }
         }
     }
@@ -143,7 +141,8 @@ final class SettingsManager {
         var autoEQPreampEnabled: Bool = true  // Use profile preamp vs bypass (rely on limiter)
 
         // Per-device loudness settings
-        var deviceLoudnessEqualizationEnabled: [String: Bool] = [:] // deviceUID → enabled
+        var deviceLoudnessCompensationEnabled: [String: Bool] = [:] // deviceUID -> enabled
+        var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> referencePhon (default: ISO226Contours.defaultReferencePhon)
 
         // User-created EQ presets (named EQ curves)
         var userEQPresets: [UserEQPreset] = []
@@ -193,7 +192,8 @@ final class SettingsManager {
             deviceAutoEQ = try c.decodeIfPresent([String: AutoEQSelection].self, forKey: .deviceAutoEQ) ?? [:]
             favoriteAutoEQProfiles = try c.decodeIfPresent(Set<String>.self, forKey: .favoriteAutoEQProfiles) ?? []
             autoEQPreampEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoEQPreampEnabled) ?? true
-            deviceLoudnessEqualizationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessEqualizationEnabled) ?? [:]
+            deviceLoudnessCompensationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessCompensationEnabled) ?? [:]
+            deviceLoudnessReferencePhon = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessReferencePhon) ?? [:]
             userEQPresets = try c.decodeIfPresent([UserEQPreset].self, forKey: .userEQPresets) ?? []
         }
     }
@@ -782,22 +782,23 @@ final class SettingsManager {
         set { updateAppSettings(newValue) }
     }
 
-    var loudnessEqualizationIntensity: Float {
-        get { settings.appSettings.loudnessEqualizationIntensity }
-        set {
-            settings.appSettings.loudnessEqualizationIntensity = newValue
-            scheduleSave()
-        }
-    }
-
     // MARK: - Per-Device Loudness & Equalization
 
-    func getLoudnessEqualizationEnabled(for deviceUID: String) -> Bool {
-        settings.deviceLoudnessEqualizationEnabled[deviceUID] ?? false
+    func getLoudnessCompensationEnabled(for deviceUID: String) -> Bool {
+        settings.deviceLoudnessCompensationEnabled[deviceUID] ?? false
     }
 
-    func setLoudnessEqualizationEnabled(for deviceUID: String, to enabled: Bool) {
-        settings.deviceLoudnessEqualizationEnabled[deviceUID] = enabled
+    func setLoudnessCompensationEnabled(for deviceUID: String, to enabled: Bool) {
+        settings.deviceLoudnessCompensationEnabled[deviceUID] = enabled
+        scheduleSave()
+    }
+
+    func getLoudnessReferencePhon(for deviceUID: String) -> Double {
+        settings.deviceLoudnessReferencePhon[deviceUID] ?? ISO226Contours.defaultReferencePhon
+    }
+
+    func setLoudnessReferencePhon(for deviceUID: String, to referencePhon: Double) {
+        settings.deviceLoudnessReferencePhon[deviceUID] = referencePhon
         scheduleSave()
     }
 
@@ -858,7 +859,8 @@ final class SettingsManager {
         settings.hiddenOutputDeviceUIDs.removeAll()
         settings.hiddenInputDeviceUIDs.removeAll()
         settings.autoEQPreampEnabled = true
-        settings.deviceLoudnessEqualizationEnabled.removeAll()
+        settings.deviceLoudnessCompensationEnabled.removeAll()
+        settings.deviceLoudnessReferencePhon.removeAll()
         settings.deviceAutoEQ.removeAll()
         settings.favoriteAutoEQProfiles.removeAll()
         settings.appDeviceSelectionMode.removeAll()
