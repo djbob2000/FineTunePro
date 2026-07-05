@@ -2,7 +2,7 @@
 import SwiftUI
 import AppKit
 
-/// A percentage display that can be clicked to edit the value directly
+/// A percentage/dB display that can be clicked to edit the value directly
 /// Features a refined edit state with subtle visual feedback
 struct EditablePercentage: View {
     @Binding var sliderValue: Double
@@ -29,22 +29,16 @@ struct EditablePercentage: View {
     @State private var isEditing = false
     @State private var inputText = ""
     @State private var isHovered = false
-    @State private var componentFrame: CGRect = .zero
     @FocusState private var isFocused: Bool
+    @State private var coordinator = ClickOutsideCoordinator()
+    @State private var componentFrame: CGRect = .zero
+    @Environment(PopupTextEntryCoordinator.self) private var textEntry: PopupTextEntryCoordinator?
 
-    @Environment(\.keyboardTextEntry) private var textEntry
-    @StateObject private var coordinator = EditStateCoordinator()
-
-    /// Visual edit state: either mouse-based textfield editing or active keyboard buffer on this row.
-    private var isVisuallyEditing: Bool {
-        isEditing || keyboardBuffer != nil
-    }
-
-    /// Keyboard entry buffer strictly scoped to this row when focused.
+    /// Popup-owned keyboard entry, so first responder never leaves the nav anchor.
     private var keyboardBuffer: String? {
-        guard isRowFocused, let te = textEntry, let buf = te.buffer, !buf.isEmpty else { return nil }
-        return buf
+        isRowFocused ? textEntry?.buffer : nil
     }
+    private var isVisuallyEditing: Bool { isEditing || keyboardBuffer != nil }
 
     /// Text color adapts to state: accent when editing, secondary otherwise
     private var textColor: Color {
@@ -75,9 +69,11 @@ struct EditablePercentage: View {
                     .font(DesignTokens.Typography.percentage)
                     .foregroundStyle(textColor)
                     .multilineTextAlignment(.trailing)
-                Text("%")
-                    .font(DesignTokens.Typography.percentage)
-                    .foregroundStyle(textColor)
+                if !useLogScale {
+                    Text("%")
+                        .font(DesignTokens.Typography.percentage)
+                        .foregroundStyle(textColor)
+                }
             } else if isEditing {
                 TextField("", text: $inputText)
                     .textFieldStyle(.plain)
@@ -112,30 +108,47 @@ struct EditablePercentage: View {
         .background {
             GeometryReader { geo in
                 Color.clear
-                    .onAppear {
-                        componentFrame = geo.frame(in: .global)
-                    }
-                    .onChange(of: geo.frame(in: .global)) { _, newFrame in
-                        componentFrame = newFrame
-                    }
+                    .preference(key: FramePreferenceKey.self, value: geo.frame(in: .global))
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isVisuallyEditing ? DesignTokens.Colors.surfaceHover : (isHovered ? DesignTokens.Colors.surfaceHover.opacity(0.5) : Color.clear))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(isVisuallyEditing ? DesignTokens.Colors.accentPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .onTapGesture {
-            if !isEditing {
-                startEditing()
+        .onPreferenceChange(FramePreferenceKey.self) { frame in
+            updateScreenFrame(from: frame)
+        }
+        .background {
+            if isVisuallyEditing {
+                // Subtle pill background when editing
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(DesignTokens.Colors.accentPrimary.opacity(0.12))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(DesignTokens.Colors.accentPrimary.opacity(0.4), lineWidth: 1)
+                    }
+            } else if isHovered {
+                // Subtle hover background to indicate clickability
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.primary.opacity(0.08))
             }
         }
         .frame(minWidth: width, alignment: .trailing)
+        .contentShape(Rectangle())
+        .onTapGesture { if !isEditing { startEditing() } }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Edit volume percentage")
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onChange(of: isEditing) { _, editing in
+            if !editing {
+                coordinator.removeMonitors()
+                // Mouse edit released first responder; ask the popup to refocus the nav anchor.
+                textEntry?.navRestoreNonce += 1
+            }
+        }
         .onChange(of: textEntry?.commitNonce) { _, _ in
             guard isRowFocused, let te = textEntry, let buffer = te.buffer else { return }
             if let value = parseValue(buffer), range.contains(value) {
@@ -192,16 +205,37 @@ struct EditablePercentage: View {
             sliderValue = value
             onCommit?(value)
         }
-        stopEditing()
+        isEditing = false
     }
 
     private func cancel() {
-        stopEditing()
+        isEditing = false
     }
 
-    private func stopEditing() {
-        isEditing = false
-        isFocused = false
-        coordinator.remove()
+    private func updateScreenFrame(from globalFrame: CGRect) {
+        componentFrame = screenFrame(from: globalFrame)
     }
+}
+
+// MARK: - Preference Key for Frame Tracking
+
+private struct FramePreferenceKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Keyboard Entry Coordinator
+
+/// Shared between the menu-bar popup and its rows. The popup owns keyboard percentage
+/// entry — first responder never leaves the nav anchor — and writes `buffer`; the
+/// keyboard-focused row's field renders it and commits when `commitNonce` changes. A
+/// field raises `navRestoreNonce` when a *mouse* edit ends so the popup refocuses the anchor.
+@MainActor
+@Observable
+final class PopupTextEntryCoordinator {
+    var buffer: String? = nil
+    var commitNonce: Int = 0
+    var navRestoreNonce: Int = 0
 }

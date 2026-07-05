@@ -31,11 +31,11 @@ struct VolumeSlider: View {
             .frame(width: width)
 
             EditablePercentage(
-                percentage: Binding(
-                    get: { Int(round(value * 100)) },
-                    set: { value = Float($0) / 100.0 }
+                sliderValue: Binding(
+                    get: { Double(value) },
+                    set: { value = Float($0) }
                 ),
-                range: percentageRange
+                range: Double(range.lowerBound)...Double(range.upperBound)
             )
             .frame(width: DesignTokens.Dimensions.settingsPercentageWidth, alignment: .trailing)
         }

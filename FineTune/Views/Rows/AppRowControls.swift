@@ -81,21 +81,7 @@ struct AppRowControls: View {
 
             // Volume slider
             LiquidGlassSlider(
-<<<<<<< HEAD
                 value: sliderBinding,
-=======
-                value: Binding(
-                    get: { sliderValue },
-                    set: { newValue in
-                        dragOverrideValue = newValue
-                        let gain = VolumeMapping.sliderToGain(newValue, logScale: useLogScale)
-                        onVolumeChange(gain)
-                        if isMuted {
-                            onMuteChange(false)
-                        }
-                    }
-                ),
->>>>>>> pr-181
                 showUnityMarker: false,
                 onEditingChanged: { editing in
                     if !editing {
