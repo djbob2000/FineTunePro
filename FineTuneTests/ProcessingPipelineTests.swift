@@ -845,6 +845,70 @@ struct ProcessingChainTests {
     }
 }
 
+@Suite("BrickwallLimiter - Best Practice Safety")
+struct BrickwallLimiterBestPracticeTests {
+    @Test("Ceiling is -1 dBTP")
+    func ceilingIsMinusOneDbTP() {
+        let expected = powf(10.0, -1.0 / 20.0)
+
+        #expect(abs(BrickwallLimiter.ceiling - expected) < 0.000_001)
+    }
+
+    @Test("True-peak sidechain catches quarter-rate inter-sample peak")
+    func truePeakSidechainCatchesQuarterRateInterSamplePeak() {
+        let sampleRate: Float = 48_000
+        let toneFrequency: Float = 12_000
+        let phase = Float.pi / 4.0
+        let samples = (0..<256).map { index in
+            sinf((2.0 * Float.pi * toneFrequency / sampleRate * Float(index)) + phase)
+        }
+        let samplePeak = samples.map { abs($0) }.max() ?? 0
+
+        let truePeak = BrickwallLimiter.estimateTruePeakForTesting(samples, channelCount: 1)
+
+        #expect(samplePeak < 0.72)
+        #expect(truePeak > 0.90)
+    }
+
+    @Test("Limiter processes mono without stereo assumptions")
+    func limiterProcessesMono() {
+        var samples = [Float](repeating: 1.25, count: 512)
+        let limiter = BrickwallLimiter()
+
+        samples.withUnsafeMutableBufferPointer { ptr in
+            limiter.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: 1, sampleRate: 48_000)
+        }
+
+        let outputPeak = samples.map { abs($0) }.max() ?? 0
+        #expect(outputPeak <= BrickwallLimiter.ceiling + 0.0001)
+        #expect(samples.contains { abs($0) > 0.0001 })
+    }
+
+    @Test("Limiter processes six-channel interleaved audio with shared gain")
+    func limiterProcessesSixChannelInterleavedAudio() {
+        let channelCount = 6
+        let frameCount = 512
+        var samples = [Float](repeating: 0.0, count: frameCount * channelCount)
+        for frame in 0..<frameCount {
+            samples[frame * channelCount + 0] = 0.25
+            samples[frame * channelCount + 5] = 1.50
+        }
+        let limiter = BrickwallLimiter()
+
+        samples.withUnsafeMutableBufferPointer { ptr in
+            limiter.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: channelCount, sampleRate: 48_000)
+        }
+
+        let outputPeak = samples.map { abs($0) }.max() ?? 0
+        let frontLeftPeak = (0..<frameCount).map { abs(samples[$0 * channelCount + 0]) }.max() ?? 0
+        let rearRightPeak = (0..<frameCount).map { abs(samples[$0 * channelCount + 5]) }.max() ?? 0
+
+        #expect(outputPeak <= BrickwallLimiter.ceiling + 0.0001)
+        #expect(frontLeftPeak > 0.01)
+        #expect(rearRightPeak > frontLeftPeak)
+    }
+}
+
 // MARK: - BiquadProcessor Tests
 
 @Suite("BiquadProcessor — Safety and Bypass")

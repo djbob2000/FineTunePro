@@ -1536,7 +1536,12 @@ final class ProcessTapController: ProcessTapControlling {
             if outputPeak > SoftLimiter.threshold { limiterTriggered = true }
             
             if let brickwallLimiter = brickwallLimiter {
-                brickwallLimiter.process(outputSamples, sampleCount: writtenSampleCount, sampleRate: sampleRate)
+                brickwallLimiter.process(
+                    outputSamples,
+                    sampleCount: writtenSampleCount,
+                    channelCount: outputChannels,
+                    sampleRate: sampleRate
+                )
             } else {
                 SoftLimiter.processBuffer(outputSamples, sampleCount: writtenSampleCount)
             }
