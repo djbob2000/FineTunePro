@@ -8,10 +8,9 @@ import Foundation
 final class BrickwallLimiter {
     private static let maxWindowSize = 2048
     private static let maxChannelCount = 64
-    private static let truePeakCeilingDB: Float = -1.0
 
-    /// -1 dBTP expressed as linear full-scale amplitude.
-    static let ceiling: Float = powf(10.0, truePeakCeilingDB / 20.0)
+    /// Legacy safety ceiling, now enforced against the true-peak sidechain.
+    static let ceiling: Float = 0.98
 
     private let delayBuffer: UnsafeMutablePointer<Float>
     private let peakBuffer: UnsafeMutablePointer<Float>

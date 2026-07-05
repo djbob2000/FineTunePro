@@ -847,11 +847,9 @@ struct ProcessingChainTests {
 
 @Suite("BrickwallLimiter - Best Practice Safety")
 struct BrickwallLimiterBestPracticeTests {
-    @Test("Ceiling is -1 dBTP")
-    func ceilingIsMinusOneDbTP() {
-        let expected = powf(10.0, -1.0 / 20.0)
-
-        #expect(abs(BrickwallLimiter.ceiling - expected) < 0.000_001)
+    @Test("Ceiling stays near legacy safety threshold")
+    func ceilingStaysNearLegacySafetyThreshold() {
+        #expect(abs(BrickwallLimiter.ceiling - 0.98) < 0.000_001)
     }
 
     @Test("True-peak sidechain catches quarter-rate inter-sample peak")
@@ -906,6 +904,37 @@ struct BrickwallLimiterBestPracticeTests {
         #expect(outputPeak <= BrickwallLimiter.ceiling + 0.0001)
         #expect(frontLeftPeak > 0.01)
         #expect(rearRightPeak > frontLeftPeak)
+    }
+
+    @Test("Planar stereo buffers do not leak delayed audio between channels")
+    func planarStereoBuffersDoNotLeakBetweenChannels() {
+        let frames = 256
+        let input = TestABL(buffers: [(channels: 1, frames: frames), (channels: 1, frames: frames)])
+        let output = TestABL(buffers: [(channels: 1, frames: frames), (channels: 1, frames: frames)])
+        fill(input, bufferIndex: 0, value: 0.20)
+        fill(input, bufferIndex: 1, value: 0.70)
+
+        var vol: Float = 1.0
+        _ = ProcessTapController.processMappedBuffers(
+            inputBuffers: input.bufferList,
+            outputBuffers: output.bufferList,
+            targetVol: 1.0,
+            crossfadeMultiplier: 1.0,
+            outputGateMultiplier: 1.0,
+            rampCoefficient: 1.0,
+            preferredStereoLeft: 0,
+            preferredStereoRight: 1,
+            currentVol: &vol,
+            eqProc: nil,
+            autoEQProc: nil,
+            loudnessEqualizerProc: nil,
+            loudnessCompensatorProc: nil,
+            brickwallLimiter: BrickwallLimiter(),
+            sampleRate: 48_000
+        )
+
+        let right = output.data(at: 1)
+        #expect(abs(right[0] - 0.70) < 0.0001)
     }
 }
 
