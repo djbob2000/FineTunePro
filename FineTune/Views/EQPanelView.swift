@@ -211,8 +211,8 @@ struct EQPanelView: View {
                 .foregroundStyle(DesignTokens.Colors.interactiveDefault)
         }
         .buttonStyle(.plain)
-        .help("Save current EQ as preset")
-        .accessibilityLabel("Save current EQ curve as a new preset")
+        .help(L10n.string("Save current EQ as preset"))
+        .accessibilityLabel(L10n.string("Save current EQ curve as a new preset"))
     }
 
     // MARK: - Save Preset Field
@@ -239,8 +239,8 @@ struct EQPanelView: View {
             }
             .buttonStyle(.plain)
             .disabled(savePresetName.trimmingCharacters(in: .whitespaces).isEmpty)
-            .help("Save preset")
-            .accessibilityLabel("Confirm save preset")
+            .help(L10n.string("Save preset"))
+            .accessibilityLabel(L10n.string("Confirm save preset"))
 
             Button {
                 cancelSave()
@@ -250,8 +250,8 @@ struct EQPanelView: View {
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             .buttonStyle(.plain)
-            .help("Cancel")
-            .accessibilityLabel("Cancel saving preset")
+            .help(L10n.string("Cancel"))
+            .accessibilityLabel(L10n.string("Cancel saving preset"))
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 4)
@@ -302,8 +302,8 @@ struct EQPanelView: View {
                 .foregroundStyle(DesignTokens.Colors.interactiveDefault)
         }
         .buttonStyle(.plain)
-        .help("Rename preset")
-        .accessibilityLabel("Rename current preset")
+        .help(L10n.string("Rename preset"))
+        .accessibilityLabel(L10n.string("Rename current preset"))
     }
 
     // MARK: - Rename Preset Field
@@ -330,8 +330,8 @@ struct EQPanelView: View {
             }
             .buttonStyle(.plain)
             .disabled(renamePresetName.trimmingCharacters(in: .whitespaces).isEmpty)
-            .help("Confirm rename")
-            .accessibilityLabel("Confirm rename preset")
+            .help(L10n.string("Confirm rename"))
+            .accessibilityLabel(L10n.string("Confirm rename preset"))
 
             Button {
                 cancelRename()
@@ -341,8 +341,8 @@ struct EQPanelView: View {
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
             }
             .buttonStyle(.plain)
-            .help("Cancel")
-            .accessibilityLabel("Cancel renaming preset")
+            .help(L10n.string("Cancel"))
+            .accessibilityLabel(L10n.string("Cancel renaming preset"))
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 4)
