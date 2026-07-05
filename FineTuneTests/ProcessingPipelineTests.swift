@@ -105,6 +105,7 @@ private func processWithDefaults(
     currentVol: inout Float,
     eqProc: EQProcessor? = nil,
     autoEQProc: AutoEQProcessor? = nil,
+    dynamicEqualizerProc: DynamicEqualizer? = nil,
     loudnessEqualizerProc: LoudnessEqualizer? = nil,
     postAgcCompressorProc: PostAgcCompressor? = nil,
     loudnessCompensatorProc: LoudnessCompensator? = nil
@@ -121,6 +122,7 @@ private func processWithDefaults(
         currentVol: &currentVol,
         eqProc: eqProc,
         autoEQProc: autoEQProc,
+        dynamicEqualizerProc: dynamicEqualizerProc,
         loudnessEqualizerProc: loudnessEqualizerProc,
         postAgcCompressorProc: postAgcCompressorProc,
         loudnessCompensatorProc: loudnessCompensatorProc

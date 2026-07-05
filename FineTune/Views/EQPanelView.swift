@@ -1,5 +1,6 @@
 // FineTune/Views/EQPanelView.swift
 import SwiftUI
+import Combine
 
 struct EQPanelView: View {
     @Binding var settings: EQSettings
@@ -20,18 +21,34 @@ struct EQPanelView: View {
     @State private var renamingPresetID: UUID?
     @FocusState private var isRenameFieldFocused: Bool
 
+    @State private var liveGains: [Float] = [0, 0, 0, 0, 0]
+    @State private var liveGainsTimer: Timer?
+
     private let frequencyLabels = ["32", "64", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+
+    private func frequencyLabel5Band(_ index: Int) -> String {
+        let labels = ["68Hz", "350Hz", "1.4kHz", "4.5kHz", "9.5kHz"]
+        guard index >= 0 && index < labels.count else { return "" }
+        return labels[index]
+    }
 
     // MARK: - Preset Matching
 
     /// Finds the matching built-in preset for the current band gains, if any.
     private var currentBuiltInPreset: EQPreset? {
-        EQPreset.allCases.first { $0.settings.bandGains == settings.bandGains }
+        EQPreset.allCases.first { preset in
+            if preset == .auto {
+                return settings.isAutoEQEnabled
+            } else {
+                return !settings.isAutoEQEnabled && preset.settings.bandGains == settings.bandGains
+            }
+        }
     }
 
     /// Finds the matching user preset for the current band gains, if any.
     private var currentUserPreset: UserEQPreset? {
-        userPresets.first { $0.settings.bandGains == settings.bandGains }
+        guard !settings.isAutoEQEnabled else { return nil }
+        return userPresets.first { $0.settings.bandGains == settings.bandGains }
     }
 
     /// The currently selected picker item (built-in, user, or nil for "Custom").
@@ -48,19 +65,24 @@ struct EQPanelView: View {
     private var isCustomCurve: Bool { selectedPickerItem == nil }
 
     var body: some View {
+        let isEQSectionEnabled = Binding<Bool>(
+            get: { settings.isEnabled },
+            set: { newValue in
+                settings.isEnabled = newValue
+                onSettingsChanged(settings)
+            }
+        )
+
         // Entire EQ panel content inside recessed background
         VStack(spacing: 12) {
             // Header: Toggle left, save field or spacer in middle, Preset right
             HStack {
                 // EQ toggle on left
                 HStack(spacing: 6) {
-                    Toggle("", isOn: $settings.isEnabled)
+                    Toggle("", isOn: isEQSectionEnabled)
                         .toggleStyle(.switch)
                         .scaleEffect(0.7)
                         .labelsHidden()
-                        .onChange(of: settings.isEnabled) { _, _ in
-                            onSettingsChanged(settings)
-                        }
                     Text("EQ")
                         .font(DesignTokens.Typography.pickerText)
                         .foregroundStyle(.primary)
@@ -78,9 +100,11 @@ struct EQPanelView: View {
                     if currentUserPreset != nil {
                         renameButton
                             .transition(.blurReplace.combined(with: .opacity))
+                            .disabled(!isEQSectionEnabled.wrappedValue)
                     } else if isCustomCurve {
                         saveButton
                             .transition(.blurReplace.combined(with: .opacity))
+                            .disabled(!isEQSectionEnabled.wrappedValue)
                     }
                 }
 
@@ -98,29 +122,52 @@ struct EQPanelView: View {
                         onDeleteUserPreset: onDeleteUserPreset,
                         onRenameUserPreset: onRenameUserPreset
                     )
+                    .disabled(!isEQSectionEnabled.wrappedValue)
                 }
             }
             .zIndex(1)  // Ensure dropdown renders above sliders
 
-            HStack(spacing: 0) {
-                ForEach(0..<10, id: \.self) { index in
-                    EQSliderView(
-                        frequency: frequencyLabels[index],
-                        gain: Binding(
-                            get: { settings.bandGains[index] },
-                            set: { newValue in
-                                settings.bandGains[index] = newValue
-                                onSettingsChanged(settings)
-                            }
+            if settings.isAutoEQEnabled {
+                HStack(spacing: 0) {
+                    ForEach(0..<5, id: \.self) { index in
+                        let labels = ["68", "350", "1.4k", "4.5k", "9.5k"]
+                        EQSliderView(
+                            frequency: labels[index],
+                            gain: Binding(
+                                get: { liveGains[index] },
+                                set: { _ in }
+                            ),
+                            isAutoEQ: true
                         )
-                    )
-                    .frame(width: 26, height: 100)
-                    .frame(maxWidth: .infinity)
+                        .frame(width: 44, height: 100)
+                        .frame(maxWidth: .infinity)
+                        .allowsHitTesting(false)
+                    }
                 }
+                .opacity(1.0)
+                .transition(.opacity)
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(0..<10, id: \.self) { index in
+                        EQSliderView(
+                            frequency: frequencyLabels[index],
+                            gain: Binding(
+                                get: { settings.bandGains[index] },
+                                set: { newValue in
+                                    settings.bandGains[index] = newValue
+                                    onSettingsChanged(settings)
+                                }
+                            ),
+                            isAutoEQ: false
+                        )
+                        .frame(width: 26, height: 100)
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .opacity(settings.isEnabled ? 1.0 : 0.3)
+                .allowsHitTesting(settings.isEnabled)
+                .transition(.opacity)
             }
-            .opacity(settings.isEnabled ? 1.0 : 0.3)
-            .allowsHitTesting(settings.isEnabled)
-            .animation(.easeInOut(duration: 0.2), value: settings.isEnabled)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -133,6 +180,19 @@ struct EQPanelView: View {
         .padding(.bottom, DesignTokens.Spacing.xs)
         .animation(DesignTokens.Animation.quick, value: isSaving)
         .animation(DesignTokens.Animation.quick, value: isRenaming)
+        .onAppear {
+            startLiveGainsTimer()
+        }
+        .onDisappear {
+            stopLiveGainsTimer()
+        }
+        .onChange(of: settings.isAutoEQEnabled) { _, isEnabled in
+            if isEnabled {
+                startLiveGainsTimer()
+            } else {
+                stopLiveGainsTimer()
+            }
+        }
     }
 
     // MARK: - Save Button
@@ -311,6 +371,22 @@ struct EQPanelView: View {
         isRenaming = false
         renamePresetName = ""
         renamingPresetID = nil
+    }
+
+    private func startLiveGainsTimer() {
+        guard liveGainsTimer == nil else { return }
+        liveGainsTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                if settings.isAutoEQEnabled {
+                    self.liveGains = DynamicEqualizer.debugGains
+                }
+            }
+        }
+    }
+
+    private func stopLiveGainsTimer() {
+        liveGainsTimer?.invalidate()
+        liveGainsTimer = nil
     }
 }
 

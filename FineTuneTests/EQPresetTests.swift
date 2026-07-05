@@ -11,9 +11,9 @@ import Foundation
 @Suite("EQPreset — Catalog")
 struct EQPresetCatalogTests {
 
-    @Test("allCases count is 20")
+    @Test("allCases count is 21")
     func allCasesCount() {
-        #expect(EQPreset.allCases.count == 20)
+        #expect(EQPreset.allCases.count == 21)
     }
 
     @Test("Every preset has a non-empty name")
@@ -250,5 +250,22 @@ struct EQSettingsCodableTests {
         #expect(decoded.bandGains[0] == 5.0)
         #expect(decoded.bandGains[1] == 3.0)
         #expect(decoded.bandGains[2] == 0)
+    }
+
+    @Test("Decoding with missing isAutoEQEnabled defaults to false")
+    func missingIsAutoEQEnabled() throws {
+        let json = #"{"bandGains": [0,0,0,0,0,0,0,0,0,0], "isEnabled": true}"#
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(EQSettings.self, from: data)
+        #expect(!decoded.isAutoEQEnabled)
+    }
+
+    @Test("Round-trip encoding preserves isAutoEQEnabled")
+    func roundTripWithAutoEQ() throws {
+        let original = EQSettings(bandGains: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], isEnabled: true, isAutoEQEnabled: true)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(EQSettings.self, from: data)
+        #expect(decoded == original)
+        #expect(decoded.isAutoEQEnabled)
     }
 }
