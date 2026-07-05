@@ -48,6 +48,13 @@ nonisolated struct AppSettings: Codable, Equatable {
     // Legacy Migration
     private var unifiedLoudnessEnabled: Bool? = nil
 
+    // Monitor (DDC/CI) volume control
+    // When enabled, FineTune probes external displays over I2C (DDC/CI) so monitor
+    // speakers appear as volume-controllable outputs. Probing writes to the display's
+    // DDC bus; some USB-C→HDMI / DisplayPort adapters mishandle this and drop the
+    // video link (monitor goes dark). Disable to skip all DDC probing/writes.
+    var ddcVolumeControlEnabled: Bool = true
+
     // Media Keys & HUD
     var hudStyle: HUDStyle = .tahoe                // Visual style of the volume HUD
     var mediaKeyControlEnabled: Bool = true        // Intercept F10/F11/F12 to drive the default output device
@@ -76,6 +83,7 @@ nonisolated struct AppSettings: Codable, Equatable {
         lockInputDevice = try c.decodeIfPresent(Bool.self, forKey: .lockInputDevice) ?? true
         showDeviceDisconnectAlerts = try c.decodeIfPresent(Bool.self, forKey: .showDeviceDisconnectAlerts) ?? true
         loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false
+        ddcVolumeControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .ddcVolumeControlEnabled) ?? true
         hudStyle = try c.decodeIfPresent(HUDStyle.self, forKey: .hudStyle) ?? .tahoe
         mediaKeyControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaKeyControlEnabled) ?? true
         volumeHotkeyStep = try c.decodeIfPresent(VolumeHotkeyStep.self, forKey: .volumeHotkeyStep) ?? .normal
