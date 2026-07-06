@@ -258,4 +258,48 @@ struct DynamicEqualizerTests {
             #expect(abs(val) <= 0.501, "Output sample \(val) should not exceed input amplitude 0.5 due to negative makeup gain")
         }
     }
+
+    @Test("Coefficient recompute is skipped when gain delta is below threshold")
+    func coefficientRecomputeSkippedForSmallDelta() {
+        let eq = DynamicEqualizer(sampleRate: 48000.0)
+
+        // Set known gains and force coefficient computation
+        eq.currentGains = [3.0, 1.0, 2.0, 1.5, -1.0]
+        eq.setupFilters() // This will initialize lastComputedGains to currentGains
+
+        // Snapshot the coefficients
+        let snapB0 = (0..<5).map { eq.peakingFilters[$0].coeffs.b0 }
+
+        // Process a buffer where envelope analysis produces gains very close to current
+        eq.envelopes = [0.1, 0.1, 0.1, 0.1, 0.1]
+        // Target is flat Harman [4.25, 0.5, 1.75, 1.25, -1.0]
+        // With dt = 128/48000, currentGains will move by ~0.002 dB (well below 0.05 dB threshold)
+
+        let frameCount = 128
+        var input = [Float](repeating: 0.001, count: frameCount * 2)
+        var output = [Float](repeating: 0, count: frameCount * 2)
+        eq.process(input: input, output: &output, frameCount: frameCount)
+
+        // Verify coefficients were NOT recomputed (b0 remains identical)
+        for i in 0..<5 {
+            let newB0 = eq.peakingFilters[i].coeffs.b0
+            #expect(newB0 == snapB0[i], "Band \(i) coefficients recomputed despite small gain delta: \(newB0) vs \(snapB0[i])")
+        }
+
+        // Now change envelopes/target drastically to force a gain change >= 0.05 dB
+        eq.envelopes = [10.0, 10.0, 10.0, 10.0, 10.0]
+        for _ in 0..<30 {
+            eq.process(input: input, output: &output, frameCount: frameCount)
+        }
+
+        // Verify coefficients HAVE been recomputed (b0 has changed)
+        var atLeastOneChanged = false
+        for i in 0..<5 {
+            let finalB0 = eq.peakingFilters[i].coeffs.b0
+            if finalB0 != snapB0[i] {
+                atLeastOneChanged = true
+            }
+        }
+        #expect(atLeastOneChanged, "Coefficients were not recomputed even after large gain changes")
+    }
 }
