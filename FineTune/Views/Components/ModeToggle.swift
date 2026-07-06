@@ -18,14 +18,7 @@ struct ModeToggle: View {
                 optionButton(option.mode, label: option.label)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .fill(.regularMaterial)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .strokeBorder(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
-        }
+        .glassStyle(cornerRadius: DesignTokens.Dimensions.buttonRadius, borderColor: DesignTokens.Colors.glassBorder, borderWidth: 0.5)
     }
 
     @ViewBuilder

@@ -42,11 +42,65 @@ extension View {
     /// Applies the popup's translucent glass background. Adapts to light and
     /// dark via DesignTokens; the underlying NSVisualEffectView uses the
     /// `.popover` material so it tracks system appearance natively.
-    /// Name kept for source compatibility; rename pending a follow-up sweep.
+    /// On macOS 26.0+, uses SwiftUI's native Liquid Glass `.glassEffect()`.
+    @ViewBuilder
     func darkGlassBackground() -> some View {
-        self
-            .background(Color.popupBackgroundOverlay)
-            .background(VisualEffectBackground(material: .popover, blendingMode: .behindWindow))
+        if #available(macOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Dimensions.cornerRadius))
+        } else {
+            self
+                .background(Color.popupBackgroundOverlay)
+                .background(VisualEffectBackground(material: .popover, blendingMode: .behindWindow))
+        }
+    }
+
+    /// Applies a glass effect style suitable for cards, panels, or HUDs.
+    /// On macOS 26.0+, uses native Liquid Glass `.glassEffect()`.
+    /// On older versions, falls back to a `.regularMaterial` fill background with optional border.
+    @ViewBuilder
+    func glassStyle(
+        cornerRadius: CGFloat = DesignTokens.Dimensions.cornerRadius,
+        borderColor: Color? = nil,
+        borderWidth: CGFloat = 0.5
+    ) -> some View {
+        if #available(macOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self
+                .background {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.regularMaterial)
+                }
+                .overlay {
+                    if let borderColor {
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .strokeBorder(borderColor, lineWidth: borderWidth)
+                    }
+                }
+        }
+    }
+
+    /// Applies a glass effect style suitable for dropdown popover menus.
+    /// On macOS 26.0+, uses native Liquid Glass `.glassEffect()`.
+    /// On older versions, falls back to `.menu` visual effect view background and overlay border.
+    @ViewBuilder
+    func menuGlassStyle(
+        cornerRadius: CGFloat = 8,
+        borderColor: Color = DesignTokens.Colors.glassBorder
+    ) -> some View {
+        if #available(macOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self
+                .background(
+                    VisualEffectBackground(material: .menu, blendingMode: .behindWindow)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(borderColor, lineWidth: 0.5)
+                }
+        }
     }
 
     /// Applies the lifted-card background used by the EQ panel.

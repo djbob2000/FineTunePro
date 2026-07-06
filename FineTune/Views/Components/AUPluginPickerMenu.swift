@@ -152,14 +152,7 @@ private struct AUPluginPickerPopover: View {
             .frame(maxHeight: 300)
         }
         .frame(width: popoverWidth)
-        .background(
-            VisualEffectBackground(material: .menu, blendingMode: .behindWindow)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
-        }
+        .menuGlassStyle(cornerRadius: 8)
     }
 
     private func sectionHeader(_ title: String) -> some View {

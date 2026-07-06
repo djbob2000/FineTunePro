@@ -63,14 +63,7 @@ struct ClassicStyleHUD: View {
             tileSection
         }
         .frame(width: Self.frameSize, height: Self.frameSize)
-        .background {
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .strokeBorder(DesignTokens.Colors.hudBorder, lineWidth: 1)
-        }
+        .glassStyle(cornerRadius: Self.cornerRadius, borderColor: DesignTokens.Colors.hudBorder, borderWidth: 1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
     }

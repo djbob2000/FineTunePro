@@ -65,17 +65,11 @@ struct DropdownMenu<Item: Identifiable, Label: View, ItemContent: View>: View wh
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .strokeBorder(
-                    isButtonHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
-                    lineWidth: 0.5
-                )
-        }
+        .glassStyle(
+            cornerRadius: DesignTokens.Dimensions.buttonRadius,
+            borderColor: isButtonHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
+            borderWidth: 0.5
+        )
         .onHover { isButtonHovered = $0 }
         .animation(DesignTokens.Animation.hover, value: isButtonHovered)
     }
@@ -144,14 +138,7 @@ private struct DropdownContentView<Item: Identifiable, ItemContent: View>: View 
         .scrollIndicators(.hidden)
         .scrollPosition(id: .constant(selectedItem?.id), anchor: .center)
         .frame(width: width, height: menuHeight)
-        .background(
-            VisualEffectBackground(material: .menu, blendingMode: .behindWindow)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
-        }
+        .menuGlassStyle(cornerRadius: cornerRadius)
     }
 }
 
@@ -245,17 +232,11 @@ struct GroupedDropdownMenu<Section: Identifiable & Hashable, Item: Identifiable,
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .strokeBorder(
-                    isButtonHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
-                    lineWidth: 0.5
-                )
-        }
+        .glassStyle(
+            cornerRadius: DesignTokens.Dimensions.buttonRadius,
+            borderColor: isButtonHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
+            borderWidth: 0.5
+        )
         .onHover { isButtonHovered = $0 }
         .animation(DesignTokens.Animation.hover, value: isButtonHovered)
     }
@@ -339,13 +320,6 @@ private struct GroupedDropdownContentView<Section: Identifiable & Hashable, Item
         .scrollIndicators(.hidden)
         .frame(width: width)
         .frame(maxHeight: maxHeight)
-        .background(
-            VisualEffectBackground(material: .menu, blendingMode: .behindWindow)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
-        }
+        .menuGlassStyle(cornerRadius: cornerRadius)
     }
 }

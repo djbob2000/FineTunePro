@@ -85,27 +85,41 @@ struct GlassButtonStyleModifier: ViewModifier {
     @State private var isHovered = false
     @State private var isPressed = false
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-            }
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        isHovered ? DesignTokens.Colors.glassBorderHover : DesignTokens.Colors.glassBorder,
-                        lineWidth: 0.5
-                    )
-            }
-            .scaleEffect(isPressed ? 0.97 : (isHovered ? 1.02 : 1.0))
-            .onHover { hovering in
-                isHovered = hovering
-            }
-            .animation(DesignTokens.Animation.hover, value: isHovered)
-            .animation(DesignTokens.Animation.quick, value: isPressed)
+        if #available(macOS 26.0, *) {
+            content
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.vertical, DesignTokens.Spacing.xs)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .scaleEffect(isPressed ? 0.97 : (isHovered ? 1.02 : 1.0))
+                .onHover { hovering in
+                    isHovered = hovering
+                }
+                .animation(DesignTokens.Animation.hover, value: isHovered)
+                .animation(DesignTokens.Animation.quick, value: isPressed)
+        } else {
+            content
+                .padding(.horizontal, DesignTokens.Spacing.sm)
+                .padding(.vertical, DesignTokens.Spacing.xs)
+                .background {
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                }
+                .overlay {
+                    Capsule()
+                        .strokeBorder(
+                            isHovered ? DesignTokens.Colors.glassBorderHover : DesignTokens.Colors.glassBorder,
+                            lineWidth: 0.5
+                        )
+                }
+                .scaleEffect(isPressed ? 0.97 : (isHovered ? 1.02 : 1.0))
+                .onHover { hovering in
+                    isHovered = hovering
+                }
+                .animation(DesignTokens.Animation.hover, value: isHovered)
+                .animation(DesignTokens.Animation.quick, value: isPressed)
+        }
     }
 }
 
