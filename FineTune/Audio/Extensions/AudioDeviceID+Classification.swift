@@ -131,6 +131,9 @@ extension AudioDeviceID {
     /// Returns an appropriate SF Symbol name based on device name and transport type.
     /// Used as fallback when kAudioDevicePropertyIcon is not available.
     func suggestedIconSymbol() -> String {
+        if readTransportType() == .builtIn && builtInHasHeadphonesActive() {
+            return "headphones"
+        }
         let name = (try? readDeviceName()) ?? ""
         let transport = readTransportType()
         return Self.iconSymbol(forName: name, transport: transport)

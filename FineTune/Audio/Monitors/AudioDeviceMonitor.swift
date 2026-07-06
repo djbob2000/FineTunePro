@@ -194,7 +194,8 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
                 // or via showAllDevices setting.
                 if deviceID.hasOutputStreams() && (showAllDevices || !deviceID.isVirtualDevice()) {
                     // Try Core Audio icon first (via LRU cache), fall back to SF Symbol
-                    let icon = DeviceIconCache.shared.icon(for: uid) {
+                    let cacheKey = uid + (deviceID.readTransportType() == .builtIn ? (deviceID.builtInHasHeadphonesActive() ? "-hdpn" : "-spk") : "")
+                    let icon = DeviceIconCache.shared.icon(for: cacheKey) {
                         deviceID.readDeviceIcon()
                     } ?? NSImage(systemSymbolName: deviceID.suggestedIconSymbol(), accessibilityDescription: name)
 
@@ -214,7 +215,8 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
                 // here; the hide toggle provides per-device suppression.
                 if deviceID.hasInputStreams() {
                     // Try Core Audio icon first, fall back to smart detection
-                    let icon = DeviceIconCache.shared.icon(for: uid) {
+                    let cacheKey = uid + (deviceID.readTransportType() == .builtIn ? (deviceID.builtInHasHeadphonesActive() ? "-hdpn" : "-spk") : "")
+                    let icon = DeviceIconCache.shared.icon(for: cacheKey) {
                         deviceID.readDeviceIcon()
                     } ?? NSImage(systemSymbolName: deviceID.suggestedInputIconSymbol(),
                                  accessibilityDescription: name)
