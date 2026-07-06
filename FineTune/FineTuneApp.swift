@@ -187,8 +187,12 @@ struct FineTuneApp: App {
         // placeholder, so non-speaker styles don't briefly flash a speaker icon at launch.
         let launchVolumeMonitor = engine.deviceVolumeMonitor
         let launchID = launchVolumeMonitor.defaultDeviceID
+        let launchStyle = MenuBarIconState.resolveStyle(
+            defaultDeviceID: launchID,
+            configuredStyle: settings.appSettings.menuBarIconStyle
+        )
         let launchState = MenuBarIconState.baseline(
-            style: settings.appSettings.menuBarIconStyle,
+            style: launchStyle,
             volume: launchVolumeMonitor.volumes[launchID] ?? 1.0,
             muted: launchVolumeMonitor.muteStates[launchID] ?? false,
             deviceSymbol: MenuBarDeviceIconResolver.resolveSymbol(
