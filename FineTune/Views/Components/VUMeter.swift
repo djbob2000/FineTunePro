@@ -181,7 +181,7 @@ struct OutputLevelMeter: View {
                     ForEach(Self.labelDBs, id: \.self) { db in
                         Text(label(for: db))
                             .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(DesignTokens.Colors.vuYellow)
+                            .foregroundStyle(DesignTokens.Colors.vuScaleLabel)
                             .position(x: xPosition(for: db, width: proxy.size.width), y: 5)
                     }
                 }
