@@ -395,12 +395,17 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
             
-            // Sum Dry + Wet, and apply gain correction factor to guarantee peak <= 0 dBFS
-            output[idxL] = (xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)) * correction
-            output[idxR] = (xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)) * correction
+            // Sum Dry + Wet, apply gain correction factor, and inline stereo boost in a single pass
+            let outL = (xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)) * correction
+            let outR = (xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)) * correction
+            
+            let mid = (outL + outR) * 0.5
+            let side = (outL - outR) * 0.5
+            let filteredSide = _sideHPF.process(side)
+            let boostedSide = filteredSide * Self.stereoSideBoost
+            output[idxL] = mid + boostedSide
+            output[idxR] = mid - boostedSide
         }
-
-        applyStereoBoost(output: output, frameCount: frameCount)
     }
 
     @inline(__always)
@@ -600,23 +605,23 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
 // MARK: - RT-Safe Biquad State Struct
 
 struct BiquadState {
-    var b0: Double = 1.0, b1: Double = 0.0, b2: Double = 0.0
-    var a1: Double = 0.0, a2: Double = 0.0
+    var b0: Float = 1.0, b1: Float = 0.0, b2: Float = 0.0
+    var a1: Float = 0.0, a2: Float = 0.0
     
     var x1: Float = 0.0, x2: Float = 0.0
     var y1: Float = 0.0, y2: Float = 0.0
     
     mutating func updateCoefficients(b0: Double, b1: Double, b2: Double, a1: Double, a2: Double) {
-        self.b0 = b0
-        self.b1 = b1
-        self.b2 = b2
-        self.a1 = a1
-        self.a2 = a2
+        self.b0 = Float(b0)
+        self.b1 = Float(b1)
+        self.b2 = Float(b2)
+        self.a1 = Float(a1)
+        self.a2 = Float(a2)
     }
     
     @inline(__always)
     mutating func process(_ x: Float) -> Float {
-        let y = Float(b0) * x + Float(b1) * x1 + Float(b2) * x2 - Float(a1) * y1 - Float(a2) * y2
+        let y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
         x2 = x1
         x1 = x
         y2 = y1
