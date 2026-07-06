@@ -4,6 +4,8 @@
 // The AppKit NSImage bridge lives in MenuBarIconImage+NSImage.swift.
 
 import Foundation
+import AudioToolbox
+
 
 nonisolated enum MenuBarIconImage: Equatable {
     case systemSymbol(String)
@@ -80,3 +82,17 @@ extension MenuBarIconState {
         }
     }
 }
+
+extension MenuBarIconState {
+    static func resolveStyle(
+        defaultDeviceID: AudioDeviceID,
+        configuredStyle: MenuBarIconStyle,
+        isBluetooth: (AudioDeviceID) -> Bool = { $0.isBluetoothDevice() }
+    ) -> MenuBarIconStyle {
+        if isBluetooth(defaultDeviceID) {
+            return .device
+        }
+        return configuredStyle
+    }
+}
+
