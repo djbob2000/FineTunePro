@@ -96,14 +96,13 @@ enum DesignTokens {
         // MARK: Glass Effects
 
         /// Popup background overlay. Sits over NSVisualEffectView's `.popover`
-        /// material. Light bumped from 0.10 → 0.50 so the popup reads as
-        /// crisp white-tilted glass over arbitrary wallpapers (Control Center
-        /// sweet spot) instead of muddy gray. The earlier 0.55 wash killed
-        /// vibrancy entirely; 0.50 keeps a hint of desktop tint.
+        /// material. Light/dark at 0.12 — just enough to warm-tint the glass
+        /// surface without smothering the vibrancy. Higher values (0.4–0.5)
+        /// killed translucency and made the popup nearly opaque.
         static let popupOverlay = dynamicColor(
             name: "popupOverlay",
-            light: NSColor.white.withAlphaComponent(0.50),
-            dark: NSColor.black.withAlphaComponent(0.4)
+            light: NSColor.white.withAlphaComponent(0.12),
+            dark: NSColor.black.withAlphaComponent(0.12)
         )
 
         /// Recessed panel background (EQ panel). Light mode is nearly flush

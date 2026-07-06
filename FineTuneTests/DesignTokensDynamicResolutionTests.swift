@@ -59,13 +59,12 @@ struct DesignTokensDynamicResolutionTests {
 
     @Test("popupOverlay resolves correctly in light and dark")
     func popupOverlay() {
-        // Light bumped from 0.10 → 0.50: lifts the popup from muddy gray
-        // to crisp white-tilted glass over the .popover material.
+        // Light/dark at 0.12: minimal tint preserves vibrancy.
         expectColor(DesignTokens.Colors.popupOverlay,
-                    equals: NSColor.white.withAlphaComponent(0.50),
+                    equals: NSColor.white.withAlphaComponent(0.12),
                     in: Self.aqua)
         expectColor(DesignTokens.Colors.popupOverlay,
-                    equals: NSColor.black.withAlphaComponent(0.4),
+                    equals: NSColor.black.withAlphaComponent(0.12),
                     in: Self.darkAqua)
     }
 
