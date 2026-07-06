@@ -2,10 +2,10 @@ import Foundation
 import Accelerate
 
 struct DynamicEqualizerBiquadState {
-    var x1: Double = 0
-    var x2: Double = 0
-    var y1: Double = 0
-    var y2: Double = 0
+    var x1: Float = 0
+    var x2: Float = 0
+    var y1: Float = 0
+    var y2: Float = 0
     
     mutating func reset() {
         x1 = 0
@@ -16,11 +16,11 @@ struct DynamicEqualizerBiquadState {
 }
 
 struct BiquadCoefficients {
-    var b0: Double = 1
-    var b1: Double = 0
-    var b2: Double = 0
-    var a1: Double = 0
-    var a2: Double = 0
+    var b0: Float = 1
+    var b1: Float = 0
+    var b2: Float = 0
+    var a1: Float = 0
+    var a2: Float = 0
 }
 
 struct StereoBiquad {
@@ -33,7 +33,7 @@ struct StereoBiquad {
         stateR.reset()
     }
     
-    mutating func process(left xL: Double, right xR: Double) -> (left: Double, right: Double) {
+    mutating func process(left xL: Float, right xR: Float) -> (left: Float, right: Float) {
         let yL = coeffs.b0 * xL + coeffs.b1 * stateL.x1 + coeffs.b2 * stateL.x2 - coeffs.a1 * stateL.y1 - coeffs.a2 * stateL.y2
         stateL.x2 = stateL.x1
         stateL.x1 = xL
@@ -146,17 +146,23 @@ final class DynamicEqualizer: @unchecked Sendable {
         let a2 = 1.0 - alpha
         
         return BiquadCoefficients(
-            b0: b0 / a0,
-            b1: b1 / a0,
-            b2: b2 / a0,
-            a1: a1 / a0,
-            a2: a2 / a0
+            b0: Float(b0 / a0),
+            b1: Float(b1 / a0),
+            b2: Float(b2 / a0),
+            a1: Float(a1 / a0),
+            a2: Float(a2 / a0)
         )
     }
     
     private func peakingCoefficients(frequency: Double, gainDB: Float, sampleRate: Double) -> BiquadCoefficients {
         let coeffs = BiquadMath.peakingEQCoefficients(frequency: frequency, gainDB: gainDB, q: 1.0, sampleRate: sampleRate)
-        return BiquadCoefficients(b0: coeffs[0], b1: coeffs[1], b2: coeffs[2], a1: coeffs[3], a2: coeffs[4])
+        return BiquadCoefficients(
+            b0: Float(coeffs[0]),
+            b1: Float(coeffs[1]),
+            b2: Float(coeffs[2]),
+            a1: Float(coeffs[3]),
+            a2: Float(coeffs[4])
+        )
     }
     
     func calculateTargetGains() -> [Float] {
@@ -205,17 +211,40 @@ final class DynamicEqualizer: @unchecked Sendable {
         let oneMinusAlpha = 1.0 - alpha
         
         // 1. Run per-frame processing to update bandpass filters and envelope followers
+        // Extract filters to stack variables to avoid copy-on-write and subscript check overhead
+        var bp0 = bandpassFilters[0]
+        var bp1 = bandpassFilters[1]
+        var bp2 = bandpassFilters[2]
+        var bp3 = bandpassFilters[3]
+        var bp4 = bandpassFilters[4]
+        
         for frame in 0..<frameCount {
             let idx = frame * 2
-            let xL = Double(input[idx])
-            let xR = Double(input[idx + 1])
+            let xL = input[idx]
+            let xR = input[idx + 1]
             
-            for i in 0..<5 {
-                let bp = bandpassFilters[i].process(left: xL, right: xR)
-                let rect = Float(max(abs(bp.left), abs(bp.right)))
-                envelopes[i] = alpha * envelopes[i] + oneMinusAlpha * rect
-            }
+            // Unroll loop for 5 bands
+            let out0 = bp0.process(left: xL, right: xR)
+            envelopes[0] = alpha * envelopes[0] + oneMinusAlpha * max(abs(out0.left), abs(out0.right))
+            
+            let out1 = bp1.process(left: xL, right: xR)
+            envelopes[1] = alpha * envelopes[1] + oneMinusAlpha * max(abs(out1.left), abs(out1.right))
+            
+            let out2 = bp2.process(left: xL, right: xR)
+            envelopes[2] = alpha * envelopes[2] + oneMinusAlpha * max(abs(out2.left), abs(out2.right))
+            
+            let out3 = bp3.process(left: xL, right: xR)
+            envelopes[3] = alpha * envelopes[3] + oneMinusAlpha * max(abs(out3.left), abs(out3.right))
+            
+            let out4 = bp4.process(left: xL, right: xR)
+            envelopes[4] = alpha * envelopes[4] + oneMinusAlpha * max(abs(out4.left), abs(out4.right))
         }
+        
+        bandpassFilters[0] = bp0
+        bandpassFilters[1] = bp1
+        bandpassFilters[2] = bp2
+        bandpassFilters[3] = bp3
+        bandpassFilters[4] = bp4
         
         // 2. Recalculate target gains based on envelopes
         let targetGains = calculateTargetGains()
@@ -257,21 +286,35 @@ final class DynamicEqualizer: @unchecked Sendable {
         
         // Calculate makeup gain to ensure the maximum peak gain of the EQ does not exceed 0 dB
         let maxGain = currentGains.max() ?? 0.0
-        let makeupGain = maxGain > 0.0 ? Double(pow(10.0, -maxGain / 20.0)) : 1.0
+        let makeupGain = maxGain > 0.0 ? Float(pow(10.0, -maxGain / 20.0)) : 1.0
+        
+        // Extract peaking filters to stack variables
+        var pk0 = peakingFilters[0]
+        var pk1 = peakingFilters[1]
+        var pk2 = peakingFilters[2]
+        var pk3 = peakingFilters[3]
+        var pk4 = peakingFilters[4]
         
         for frame in 0..<frameCount {
             let idx = frame * 2
-            var xL = Double(output[idx])
-            var xR = Double(output[idx + 1])
+            let xL = output[idx]
+            let xR = output[idx + 1]
             
-            for i in 0..<5 {
-                let out = peakingFilters[i].process(left: xL, right: xR)
-                xL = out.left
-                xR = out.right
-            }
+            // Process peaking filters in unrolled cascade
+            let out0 = pk0.process(left: xL, right: xR)
+            let out1 = pk1.process(left: out0.left, right: out0.right)
+            let out2 = pk2.process(left: out1.left, right: out1.right)
+            let out3 = pk3.process(left: out2.left, right: out2.right)
+            let out4 = pk4.process(left: out3.left, right: out3.right)
             
-            output[idx] = Float(xL * makeupGain)
-            output[idx + 1] = Float(xR * makeupGain)
+            output[idx] = out4.left * makeupGain
+            output[idx + 1] = out4.right * makeupGain
         }
+        
+        peakingFilters[0] = pk0
+        peakingFilters[1] = pk1
+        peakingFilters[2] = pk2
+        peakingFilters[3] = pk3
+        peakingFilters[4] = pk4
     }
 }
