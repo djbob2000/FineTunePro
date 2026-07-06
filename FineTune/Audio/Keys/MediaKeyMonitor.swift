@@ -59,6 +59,21 @@ final class MediaKeyMonitor {
     /// Plays the system volume-feedback pop on volume key steps. Wired by FineTuneApp after init.
     var feedbackPlayer: VolumeFeedbackPlayer?
 
+    nonisolated(unsafe) private let settingsLock = NSLock()
+    nonisolated(unsafe) private var cachedMediaKeyControlEnabled: Bool = false
+
+    nonisolated var isMediaKeyControlEnabled: Bool {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        return cachedMediaKeyControlEnabled
+    }
+
+    private func updateCachedSettings() {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        cachedMediaKeyControlEnabled = settingsManager.appSettings.mediaKeyControlEnabled
+    }
+
     init(
         decoder: any MediaKeyEventDecoding,
         audioEngine: AudioEngine,
@@ -76,6 +91,7 @@ final class MediaKeyMonitor {
         self.popupVisibility = popupVisibility
         self.mediaKeyStatus = mediaKeyStatus
         subscribeToWorkspaceLifecycle()
+        updateCachedSettings()
     }
 
     isolated deinit {
@@ -94,8 +110,9 @@ final class MediaKeyMonitor {
 
     /// Idempotent. No-op unless media keys are enabled and Accessibility is trusted.
     func start() {
+        updateCachedSettings()
         guard tap == nil else { return }
-        guard settingsManager.appSettings.mediaKeyControlEnabled else {
+        guard cachedMediaKeyControlEnabled else {
             logger.debug("Media key control disabled in settings; tap not installed")
             return
         }
@@ -133,7 +150,8 @@ final class MediaKeyMonitor {
 
     /// Reconciles tap state against settings + Accessibility trust. Idempotent.
     func reconcile() {
-        if settingsManager.appSettings.mediaKeyControlEnabled && accessibility.isTrusted {
+        updateCachedSettings()
+        if cachedMediaKeyControlEnabled && accessibility.isTrusted {
             // Post-regrant taps can come up inert; arm a probe to surface that to the user.
             let wasOffline = (tap == nil)
             start()
