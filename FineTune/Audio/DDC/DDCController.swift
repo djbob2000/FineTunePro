@@ -81,20 +81,27 @@ final class DDCController {
             settingsManager.setDDCVolume(for: uid, to: clamped)
         }
 
-        // Keep the work item @Sendable and avoid `self`; otherwise it inherits
-        // @MainActor isolation here and traps when run on `ddcQueue`.
         debounceTimers[deviceID]?.cancel()
         let service = services[deviceID]
         let logger = self.logger
-        let item = DispatchWorkItem { @Sendable in
+        let item = Self.makeVolumeWorkItem(service: service, volume: clamped, deviceID: deviceID, logger: logger)
+        debounceTimers[deviceID] = item
+        ddcQueue.asyncAfter(deadline: .now() + .milliseconds(100), execute: item)
+    }
+
+    private nonisolated static func makeVolumeWorkItem(
+        service: DDCService?,
+        volume: Int,
+        deviceID: AudioDeviceID,
+        logger: Logger
+    ) -> DispatchWorkItem {
+        DispatchWorkItem { @Sendable in
             do {
-                try service?.setAudioVolume(clamped)
+                try service?.setAudioVolume(volume)
             } catch {
                 logger.error("DDC write failed for device \(deviceID): \(error)")
             }
         }
-        debounceTimers[deviceID] = item
-        ddcQueue.asyncAfter(deadline: .now() + .milliseconds(100), execute: item)
     }
 
     /// Software mute: saves current volume, sets to 0.
