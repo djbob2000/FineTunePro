@@ -91,7 +91,7 @@ struct GlassButtonStyleModifier: ViewModifier {
             content
                 .padding(.horizontal, DesignTokens.Spacing.sm)
                 .padding(.vertical, DesignTokens.Spacing.xs)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffect(.clear.interactive(), in: .capsule)
                 .scaleEffect(isPressed ? 0.97 : (isHovered ? 1.02 : 1.0))
                 .onHover { hovering in
                     isHovered = hovering
@@ -104,7 +104,7 @@ struct GlassButtonStyleModifier: ViewModifier {
                 .padding(.vertical, DesignTokens.Spacing.xs)
                 .background {
                     Capsule()
-                        .fill(.ultraThinMaterial)
+                        .fill(Color.primary.opacity(0.06))
                 }
                 .overlay {
                     Capsule()
