@@ -239,17 +239,11 @@ struct DevicePicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .strokeBorder(
-                    isButtonHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
-                    lineWidth: 0.5
-                )
-        }
+        .glassStyle(
+            cornerRadius: DesignTokens.Dimensions.buttonRadius,
+            borderColor: isButtonHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
+            borderWidth: 0.5
+        )
         .onHover { isButtonHovered = $0 }
         .animation(DesignTokens.Animation.hover, value: isButtonHovered)
     }
@@ -323,14 +317,7 @@ struct DevicePicker: View {
             .frame(maxHeight: 220)
         }
         .frame(width: popoverWidth)
-        .background(
-            VisualEffectBackground(material: .menu, blendingMode: .behindWindow)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
-        }
+        .menuGlassStyle(cornerRadius: cornerRadius)
     }
 
     // MARK: - Device Row
