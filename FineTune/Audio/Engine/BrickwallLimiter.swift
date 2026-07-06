@@ -14,6 +14,7 @@ final class BrickwallLimiter {
 
     private let delayBuffer: UnsafeMutablePointer<Float>
     private let peakBuffer: UnsafeMutablePointer<Float>
+    private let dequeIndices: UnsafeMutablePointer<Int>
 
     // Pre-allocated buffers for channel mapping to avoid real-time heap allocations
     private let channelPointers: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>
@@ -26,12 +27,20 @@ final class BrickwallLimiter {
     private var windowSize = 96
     private var releaseCoeff: Float = 0.005
 
+    private var dequeHead = 0
+    private var dequeTail = 0
+    private var frameCounter = 0
+
+    private static let maxDequeCapacity = 4096
+    private static let dequeMask = maxDequeCapacity - 1
+
     private let lookAheadMs = 2.0
     private let releaseTimeMs = 80.0
 
     init() {
         delayBuffer = UnsafeMutablePointer<Float>.allocate(capacity: Self.maxWindowSize * Self.maxChannelCount)
         peakBuffer = UnsafeMutablePointer<Float>.allocate(capacity: Self.maxWindowSize)
+        dequeIndices = UnsafeMutablePointer<Int>.allocate(capacity: Self.maxDequeCapacity)
 
         channelPointers = UnsafeMutablePointer<UnsafeMutablePointer<Float>?>.allocate(capacity: Self.maxChannelCount)
         channelStrides = UnsafeMutablePointer<Int>.allocate(capacity: Self.maxChannelCount)
@@ -39,6 +48,7 @@ final class BrickwallLimiter {
 
         delayBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize * Self.maxChannelCount)
         peakBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize)
+        dequeIndices.initialize(repeating: 0, count: Self.maxDequeCapacity)
 
         channelPointers.initialize(repeating: nil, count: Self.maxChannelCount)
         channelStrides.initialize(repeating: 0, count: Self.maxChannelCount)
@@ -48,6 +58,7 @@ final class BrickwallLimiter {
     deinit {
         delayBuffer.deallocate()
         peakBuffer.deallocate()
+        dequeIndices.deallocate()
         channelPointers.deallocate()
         channelStrides.deallocate()
         channelOffsets.deallocate()
@@ -59,6 +70,9 @@ final class BrickwallLimiter {
         peakBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize)
         bufferIndex = 0
         currentGain = 1.0
+        frameCounter = 0
+        dequeHead = 0
+        dequeTail = 0
     }
 
     /// Process AudioBufferList in-place (handles interleaved, non-interleaved/planar and mixed formats).
@@ -104,10 +118,32 @@ final class BrickwallLimiter {
 
             peakBuffer[bufferIndex] = samplePeak
 
-            var windowMaxPeak: Float = 0.0
-            for i in 0..<windowSize {
-                windowMaxPeak = max(windowMaxPeak, peakBuffer[i])
+            // Pop expired front entries
+            while dequeHead != dequeTail {
+                let frontAbsIdx = dequeIndices[dequeHead & Self.dequeMask]
+                if frameCounter - frontAbsIdx >= windowSize {
+                    dequeHead += 1
+                } else {
+                    break
+                }
             }
+
+            // Pop back entries smaller than or equal to current peak
+            while dequeHead != dequeTail {
+                let backAbsIdx = dequeIndices[(dequeTail - 1) & Self.dequeMask]
+                if peakBuffer[backAbsIdx % windowSize] <= samplePeak {
+                    dequeTail -= 1
+                } else {
+                    break
+                }
+            }
+
+            // Push current index
+            dequeIndices[dequeTail & Self.dequeMask] = frameCounter
+            dequeTail += 1
+
+            // Front of deque is the window maximum
+            let windowMaxPeak = peakBuffer[dequeIndices[dequeHead & Self.dequeMask] % windowSize]
 
             let targetGain = windowMaxPeak > Self.ceiling ? Self.ceiling / windowMaxPeak : 1.0
             if targetGain < currentGain {
@@ -127,6 +163,7 @@ final class BrickwallLimiter {
             }
 
             bufferIndex = (bufferIndex + 1) % windowSize
+            frameCounter += 1
         }
     }
 
@@ -153,10 +190,32 @@ final class BrickwallLimiter {
 
             peakBuffer[bufferIndex] = samplePeak
 
-            var windowMaxPeak: Float = 0.0
-            for i in 0..<windowSize {
-                windowMaxPeak = max(windowMaxPeak, peakBuffer[i])
+            // Pop expired front entries
+            while dequeHead != dequeTail {
+                let frontAbsIdx = dequeIndices[dequeHead & Self.dequeMask]
+                if frameCounter - frontAbsIdx >= windowSize {
+                    dequeHead += 1
+                } else {
+                    break
+                }
             }
+
+            // Pop back entries smaller than or equal to current peak
+            while dequeHead != dequeTail {
+                let backAbsIdx = dequeIndices[(dequeTail - 1) & Self.dequeMask]
+                if peakBuffer[backAbsIdx % windowSize] <= samplePeak {
+                    dequeTail -= 1
+                } else {
+                    break
+                }
+            }
+
+            // Push current index
+            dequeIndices[dequeTail & Self.dequeMask] = frameCounter
+            dequeTail += 1
+
+            // Front of deque is the window maximum
+            let windowMaxPeak = peakBuffer[dequeIndices[dequeHead & Self.dequeMask] % windowSize]
 
             let targetGain = windowMaxPeak > Self.ceiling ? Self.ceiling / windowMaxPeak : 1.0
             if targetGain < currentGain {
@@ -172,6 +231,7 @@ final class BrickwallLimiter {
             }
 
             bufferIndex = (bufferIndex + 1) % windowSize
+            frameCounter += 1
         }
     }
 

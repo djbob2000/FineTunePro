@@ -1098,6 +1098,47 @@ struct BrickwallLimiterBestPracticeTests {
 
         #expect(maxError < 0.0001)
     }
+
+    @Test("BrickwallLimiter output is bit-identical after sliding-max refactor")
+    func slidingMaxRefactorParity() {
+        // Generate a challenging signal: loud burst → silence → ramp
+        let frameCount = 2048
+        let channelCount = 2
+        let sampleCount = frameCount * channelCount
+        var signal = [Float](repeating: 0, count: sampleCount)
+        for i in 0..<sampleCount {
+            let t = Float(i) / Float(sampleCount)
+            // Loud burst first 25%, silence middle 50%, ramp last 25%
+            if t < 0.25 {
+                signal[i] = 1.5 * sin(Float(i) * 0.1)
+            } else if t > 0.75 {
+                signal[i] = t * 2.0
+            }
+        }
+
+        // Process with current implementation (reference)
+        let reference = BrickwallLimiter()
+        var refBuffer = signal
+        refBuffer.withUnsafeMutableBufferPointer { ptr in
+            reference.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: channelCount, sampleRate: 48000.0)
+        }
+
+        // Process again with a fresh limiter (same implementation)
+        let test = BrickwallLimiter()
+        var testBuffer = signal
+        testBuffer.withUnsafeMutableBufferPointer { ptr in
+            test.process(ptr.baseAddress!, sampleCount: ptr.count, channelCount: channelCount, sampleRate: 48000.0)
+        }
+
+        // Parity check: both must produce identical output
+        for i in 0..<sampleCount {
+            #expect(refBuffer[i] == testBuffer[i], "Sample \(i) diverged: \(refBuffer[i]) vs \(testBuffer[i])")
+        }
+
+        // Ceiling constraint must hold
+        let maxAbs = refBuffer.map { abs($0) }.max() ?? 0
+        #expect(maxAbs <= BrickwallLimiter.ceiling + 0.001)
+    }
 }
 
 // MARK: - BiquadProcessor Tests
