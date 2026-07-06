@@ -66,8 +66,8 @@ final class BrickwallLimiter {
 
 
     func reset() {
-        delayBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize * Self.maxChannelCount)
-        peakBuffer.initialize(repeating: 0.0, count: Self.maxWindowSize)
+        delayBuffer.update(repeating: 0.0, count: Self.maxWindowSize * Self.maxChannelCount)
+        peakBuffer.update(repeating: 0.0, count: Self.maxWindowSize)
         bufferIndex = 0
         currentGain = 1.0
         frameCounter = 0
@@ -242,6 +242,7 @@ final class BrickwallLimiter {
         lastSampleRate = sampleRate
         let samples = Int((lookAheadMs / 1000.0) * sampleRate)
         windowSize = min(Self.maxWindowSize, max(1, samples))
+        assert(windowSize < Self.maxDequeCapacity, "windowSize must be less than maxDequeCapacity to prevent deque buffer overflow")
 
         let releaseTimeSec = releaseTimeMs / 1000.0
         releaseCoeff = Float(1.0 - exp(-1.0 / (sampleRate * releaseTimeSec)))
