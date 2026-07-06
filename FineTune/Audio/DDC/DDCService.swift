@@ -115,8 +115,9 @@ final class DDCService: @unchecked Sendable {
         for _ in 0..<numWriteCycles {
             usleep(writeSleepTime)
             let result = packet.withUnsafeBufferPointer { buf in
-                IOAVServiceLoader.writeI2C(service: service, chipAddress: chipAddress,
-                                           dataAddress: writeAddress, buffer: buf.baseAddress!, size: UInt32(buf.count))
+                guard let base = buf.baseAddress else { return kIOReturnError }
+                return IOAVServiceLoader.writeI2C(service: service, chipAddress: chipAddress,
+                                           dataAddress: writeAddress, buffer: base, size: UInt32(buf.count))
             }
             if result == kIOReturnSuccess { writeSuccess = true }
         }
@@ -128,8 +129,9 @@ final class DDCService: @unchecked Sendable {
         // Read response (11 bytes) — read address is 0, not 0x51
         var reply = [UInt8](repeating: 0, count: 11)
         let readResult = reply.withUnsafeMutableBufferPointer { buf in
-            IOAVServiceLoader.readI2C(service: service, chipAddress: chipAddress,
-                                      dataAddress: 0, buffer: buf.baseAddress!, size: UInt32(buf.count))
+            guard let base = buf.baseAddress else { return kIOReturnError }
+            return IOAVServiceLoader.readI2C(service: service, chipAddress: chipAddress,
+                                      dataAddress: 0, buffer: base, size: UInt32(buf.count))
         }
         guard readResult == kIOReturnSuccess else { throw DDCError.readFailed(readResult) }
 
@@ -144,8 +146,9 @@ final class DDCService: @unchecked Sendable {
         for _ in 0..<numWriteCycles {
             usleep(writeSleepTime)
             lastResult = packet.withUnsafeBufferPointer { buf in
-                IOAVServiceLoader.writeI2C(service: service, chipAddress: chipAddress,
-                                           dataAddress: writeAddress, buffer: buf.baseAddress!, size: UInt32(buf.count))
+                guard let base = buf.baseAddress else { return kIOReturnError }
+                return IOAVServiceLoader.writeI2C(service: service, chipAddress: chipAddress,
+                                           dataAddress: writeAddress, buffer: base, size: UInt32(buf.count))
             }
         }
         guard lastResult == kIOReturnSuccess else { throw DDCError.writeFailed(lastResult) }
@@ -226,8 +229,9 @@ final class DDCService: @unchecked Sendable {
         let edidAddress: UInt32 = 0x50
         var edidData = [UInt8](repeating: 0, count: 128)
         let result = edidData.withUnsafeMutableBufferPointer { buf in
-            IOAVServiceLoader.readI2C(service: service, chipAddress: edidAddress,
-                                      dataAddress: 0, buffer: buf.baseAddress!, size: 128)
+            guard let base = buf.baseAddress else { return kIOReturnError }
+            return IOAVServiceLoader.readI2C(service: service, chipAddress: edidAddress,
+                                      dataAddress: 0, buffer: base, size: 128)
         }
         guard result == kIOReturnSuccess else { return nil }
 
