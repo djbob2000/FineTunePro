@@ -102,8 +102,11 @@ private struct SampleRatePickerValue: View {
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .fixedSize()
-        .background(pickerBackground)
-        .overlay(pickerBorder)
+        .glassStyle(
+            cornerRadius: DesignTokens.Dimensions.buttonRadius,
+            borderColor: isHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
+            borderWidth: 0.5
+        )
         .onHover { isHovered = $0 }
         .animation(DesignTokens.Animation.hover, value: isHovered)
         .accessibilityLabel(L10n.format("Sample rate: %@. Activate to change.", currentDisplay))
@@ -121,19 +124,6 @@ private struct SampleRatePickerValue: View {
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-    }
-
-    private var pickerBackground: some View {
-        RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-            .fill(.regularMaterial)
-    }
-
-    private var pickerBorder: some View {
-        RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-            .strokeBorder(
-                isHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
-                lineWidth: 0.5
-            )
     }
 }
 

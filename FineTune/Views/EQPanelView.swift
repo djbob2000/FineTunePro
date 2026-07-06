@@ -255,14 +255,7 @@ struct EQPanelView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 4)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .strokeBorder(DesignTokens.Colors.menuBorderHover, lineWidth: 0.5)
-        }
+        .glassStyle(cornerRadius: DesignTokens.Dimensions.buttonRadius, borderColor: DesignTokens.Colors.menuBorderHover, borderWidth: 0.5)
     }
 
     // MARK: - Save Actions
@@ -346,14 +339,7 @@ struct EQPanelView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
         .padding(.vertical, 4)
-        .background {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                .strokeBorder(DesignTokens.Colors.menuBorderHover, lineWidth: 0.5)
-        }
+        .glassStyle(cornerRadius: DesignTokens.Dimensions.buttonRadius, borderColor: DesignTokens.Colors.menuBorderHover, borderWidth: 0.5)
     }
 
     // MARK: - Rename Actions
