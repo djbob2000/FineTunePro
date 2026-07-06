@@ -64,12 +64,12 @@ extension View {
         borderWidth: CGFloat = 0.5
     ) -> some View {
         if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            self.glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
         } else {
             self
                 .background {
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(.regularMaterial)
+                        .fill(Color.primary.opacity(0.06))
                 }
                 .overlay {
                     if let borderColor {
@@ -89,13 +89,13 @@ extension View {
         borderColor: Color = DesignTokens.Colors.glassBorder
     ) -> some View {
         if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            self.glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
         } else {
             self
-                .background(
-                    VisualEffectBackground(material: .menu, blendingMode: .behindWindow)
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                )
+                .background {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(Color.primary.opacity(0.06))
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius)
                         .strokeBorder(borderColor, lineWidth: 0.5)
