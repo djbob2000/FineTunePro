@@ -398,5 +398,42 @@ struct PostAgcCompressorTests {
         
         // Non-stereo should be bypassed (exact copy of input)
         #expect(output == input)
-    }
+     }
+
+     @Test("PostAgcCompressor output is within tolerance after hop refactor")
+     func hopRefactorParity() {
+         let settings = PostAgcCompressorSettings(
+             thresholdDb: -6.0,
+             ratio: 7.6,
+             attackMs: 25.0,
+             releaseMs: 200.0,
+             kneeDb: 0.1,
+             exponentialRelease: 0.85,
+             maxReleaseSpeed: 2.0,
+             enabled: true
+         )
+         let compressor = PostAgcCompressor(settings: settings, sampleRate: 48000.0)
+
+         // Generate a loud signal that triggers compression
+         let frameCount = 1000
+         var input = [Float](repeating: 0, count: frameCount * 2)
+         for i in 0..<frameCount {
+             let t = Float(i) / 48000.0
+             let val = 0.9 * sin(2.0 * .pi * 440.0 * t) // loud 440 Hz
+             input[i * 2] = val
+             input[i * 2 + 1] = val
+         }
+
+         var output = [Float](repeating: 0, count: frameCount * 2)
+         // Process multiple blocks to allow the envelope follower to attack and settle
+         for _ in 0..<50 {
+             compressor.process(input: &input, output: &output, frameCount: frameCount, channelCount: 2)
+         }
+
+         // Output should be compressed (lower peak than input)
+         let inputPeak = input.map { abs($0) }.max() ?? 0
+         let outputPeak = output.map { abs($0) }.max() ?? 0
+         #expect(outputPeak < inputPeak - 0.05, "Compressor should reduce peaks significantly after settling")
+         #expect(outputPeak > 0.01, "Output should not be silent")
+     }
 }

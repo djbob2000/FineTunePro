@@ -60,11 +60,12 @@ final class PostAgcCompressor: @unchecked Sendable {
             self.slope = 1.0 - 1.0 / max(ratio, 1.0)
             self.kneeHalfDb = kneeDb * 0.5
             let samplePeriodMs: Float = 1000.0 / sampleRate
+            let stepMsHop = samplePeriodMs * Float(PostAgcCompressor.hopSize)
             let attackTau = attackMs / 1.966
-            self.attackCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: attackTau, stepMs: samplePeriodMs)
-            self.releaseCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: releaseMs, stepMs: samplePeriodMs)
+            self.attackCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: attackTau, stepMs: stepMsHop)
+            self.releaseCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: releaseMs, stepMs: stepMsHop)
             let maxReleaseSpeed = max(self.maxReleaseSpeed, 0.001)
-            self.maxReleaseCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: releaseMs / maxReleaseSpeed, stepMs: samplePeriodMs)
+            self.maxReleaseCoeff = LoudnessEqualizerMath.timeConstantCoefficient(timeMs: releaseMs / maxReleaseSpeed, stepMs: stepMsHop)
         }
         
         func calculateGainReduction(levelDb: Float, globalThresholdDb: Float) -> Float {
@@ -163,6 +164,15 @@ final class PostAgcCompressor: @unchecked Sendable {
     private var band2Samples: [Float] = []
     private var band3Samples: [Float] = []
 
+    private static let hopSize = 32
+    private var hopCounter = 0
+    private var hopPeak1: Float = 0.0
+    private var hopPeak2: Float = 0.0
+    private var hopPeak3: Float = 0.0
+    private var currentGain1: Float = 1.0
+    private var currentGain2: Float = 1.0
+    private var currentGain3: Float = 1.0
+
     /// Process audio from an interleaved input buffer to an interleaved output buffer.
     ///
     /// - Parameters:
@@ -199,10 +209,6 @@ final class PostAgcCompressor: @unchecked Sendable {
         for frame in 0..<frameCount {
             let base = frame * channelCount
 
-            var peakBand1: Float = 0
-            var peakBand2: Float = 0
-            var peakBand3: Float = 0
-
             for ch in 0..<channelCount {
                 var sample = input[base + ch]
                 if sample.isNaN {
@@ -219,21 +225,29 @@ final class PostAgcCompressor: @unchecked Sendable {
                 let abs2 = abs(high77)
                 let abs3 = abs(high200)
 
-                if abs1 > peakBand1 { peakBand1 = abs1 }
-                if abs2 > peakBand2 { peakBand2 = abs2 }
-                if abs3 > peakBand3 { peakBand3 = abs3 }
+                if abs1 > hopPeak1 { hopPeak1 = abs1 }
+                if abs2 > hopPeak2 { hopPeak2 = abs2 }
+                if abs3 > hopPeak3 { hopPeak3 = abs3 }
             }
 
-            let level1Db = LoudnessEqualizerMath.linearToDb(peakBand1)
-            let level2Db = LoudnessEqualizerMath.linearToDb(peakBand2)
-            let level3Db = LoudnessEqualizerMath.linearToDb(peakBand3)
+            hopCounter += 1
+            if hopCounter >= Self.hopSize {
+                let level1Db = LoudnessEqualizerMath.linearToDb(hopPeak1)
+                let level2Db = LoudnessEqualizerMath.linearToDb(hopPeak2)
+                let level3Db = LoudnessEqualizerMath.linearToDb(hopPeak3)
 
-            let gain1 = band1.calculateGainReduction(levelDb: level1Db, globalThresholdDb: globalThresholdDb)
-            let gain2 = band2.calculateGainReduction(levelDb: level2Db, globalThresholdDb: globalThresholdDb)
-            let gain3 = band3.calculateGainReduction(levelDb: level3Db, globalThresholdDb: globalThresholdDb)
+                currentGain1 = band1.calculateGainReduction(levelDb: level1Db, globalThresholdDb: globalThresholdDb)
+                currentGain2 = band2.calculateGainReduction(levelDb: level2Db, globalThresholdDb: globalThresholdDb)
+                currentGain3 = band3.calculateGainReduction(levelDb: level3Db, globalThresholdDb: globalThresholdDb)
+
+                hopCounter = 0
+                hopPeak1 = 0.0
+                hopPeak2 = 0.0
+                hopPeak3 = 0.0
+            }
 
             for ch in 0..<channelCount {
-                output[base + ch] = band1Samples[ch] * gain1 + band2Samples[ch] * gain2 + band3Samples[ch] * gain3
+                output[base + ch] = band1Samples[ch] * currentGain1 + band2Samples[ch] * currentGain2 + band3Samples[ch] * currentGain3
             }
         }
     }
