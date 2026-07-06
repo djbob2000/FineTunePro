@@ -59,6 +59,21 @@ final class MediaKeyMonitor {
     /// Plays the system volume-feedback pop on volume key steps. Wired by FineTuneApp after init.
     var feedbackPlayer: VolumeFeedbackPlayer?
 
+    nonisolated(unsafe) private let settingsLock = NSLock()
+    nonisolated(unsafe) private var cachedMediaKeyControlEnabled: Bool = false
+
+    nonisolated var isMediaKeyControlEnabled: Bool {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        return cachedMediaKeyControlEnabled
+    }
+
+    private func updateCachedSettings() {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        cachedMediaKeyControlEnabled = settingsManager.appSettings.mediaKeyControlEnabled
+    }
+
     init(
         decoder: any MediaKeyEventDecoding,
         audioEngine: AudioEngine,
@@ -76,6 +91,7 @@ final class MediaKeyMonitor {
         self.popupVisibility = popupVisibility
         self.mediaKeyStatus = mediaKeyStatus
         subscribeToWorkspaceLifecycle()
+        updateCachedSettings()
     }
 
     isolated deinit {
@@ -94,8 +110,9 @@ final class MediaKeyMonitor {
 
     /// Idempotent. No-op unless media keys are enabled and Accessibility is trusted.
     func start() {
+        updateCachedSettings()
         guard tap == nil else { return }
-        guard settingsManager.appSettings.mediaKeyControlEnabled else {
+        guard cachedMediaKeyControlEnabled else {
             logger.debug("Media key control disabled in settings; tap not installed")
             return
         }
@@ -133,7 +150,8 @@ final class MediaKeyMonitor {
 
     /// Reconciles tap state against settings + Accessibility trust. Idempotent.
     func reconcile() {
-        if settingsManager.appSettings.mediaKeyControlEnabled && accessibility.isTrusted {
+        updateCachedSettings()
+        if cachedMediaKeyControlEnabled && accessibility.isTrusted {
             // Post-regrant taps can come up inert; arm a probe to surface that to the user.
             let wasOffline = (tap == nil)
             start()
@@ -374,29 +392,33 @@ final class MediaKeyMonitor {
     // MARK: - Callback bridge
 
     /// Returns `true` if the caller should swallow the event.
-    fileprivate func processSystemDefined(_ cgEvent: CGEvent) -> Bool {
+    nonisolated func processSystemDefined(_ cgEvent: CGEvent) -> Bool {
         // Pass through if disabled mid-race; never silently eat another app's media keys.
-        guard settingsManager.appSettings.mediaKeyControlEnabled else { return false }
+        guard isMediaKeyControlEnabled else { return false }
         guard let nsEvent = NSEvent(cgEvent: cgEvent) else { return false }
         // Subtype 8 is the media-key channel; aux-button / brightness are pass-through.
         guard nsEvent.subtype.rawValue == 8 else { return false }
         let data1 = nsEvent.data1
         guard let mediaEvent = decoder.decode(data1: data1) else { return false }
 
-        hudController.swallowObserved()
-        handle(
-            mediaEvent,
-            shiftHeld: cgEvent.flags.contains(.maskShift),
-            optionHeld: cgEvent.flags.contains(.maskAlternate)
-        )
+        let shiftHeld = cgEvent.flags.contains(.maskShift)
+        let optionHeld = cgEvent.flags.contains(.maskAlternate)
+
+        Task { @MainActor in
+            hudController.swallowObserved()
+            handle(
+                mediaEvent,
+                shiftHeld: shiftHeld,
+                optionHeld: optionHeld
+            )
+        }
         return true
     }
 }
 
 // MARK: - CGEventTap C callback
 
-// Tap installs on `CFRunLoopGetMain()` so this runs on main; `assumeIsolated`
-// preserves ordering against the next event (a Task-hop would reorder).
+// Tap installs on `CFRunLoopGetMain()` so this runs on main.
 private let mediaKeyTapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo = userInfo else {
         return Unmanaged.passUnretained(event)
@@ -404,7 +426,7 @@ private let mediaKeyTapCallback: CGEventTapCallBack = { _, type, event, userInfo
     let monitor = Unmanaged<MediaKeyMonitor>.fromOpaque(userInfo).takeUnretainedValue()
 
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-        MainActor.assumeIsolated {
+        Task { @MainActor in
             monitor.handleTapDisabled()
         }
         return nil
@@ -415,13 +437,6 @@ private let mediaKeyTapCallback: CGEventTapCallBack = { _, type, event, userInfo
         return Unmanaged.passUnretained(event)
     }
 
-    // CGEvent is a CF type without Swift's Sendable conformance, so wrap it for
-    // the synchronous hop into MainActor — assumeIsolated runs inline on the
-    // current (main) thread, no real cross-actor send happens.
-    struct EventBox: @unchecked Sendable { let event: CGEvent }
-    let box = EventBox(event: event)
-    let shouldSwallow = MainActor.assumeIsolated {
-        monitor.processSystemDefined(box.event)
-    }
+    let shouldSwallow = monitor.processSystemDefined(event)
     return shouldSwallow ? nil : Unmanaged.passUnretained(event)
 }

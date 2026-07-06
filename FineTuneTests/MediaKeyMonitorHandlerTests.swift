@@ -5,6 +5,7 @@
 // Strategy: call handleCore directly, injecting closure stubs. No real CoreAudio is touched.
 
 import Testing
+import AppKit
 import Foundation
 import AudioToolbox
 import CoreGraphics
@@ -28,7 +29,8 @@ struct MediaKeyMonitorHandlerTests {
 
     private func makeMonitor(
         hudController: HUDWindowController? = nil,
-        popupVisible: Bool = false
+        popupVisible: Bool = false,
+        decoder: StubMediaKeyDecoder = StubMediaKeyDecoder()
     ) -> (monitor: MediaKeyMonitor, hud: HUDWindowController, popup: PopupVisibilityService, settingsManager: SettingsManager) {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -38,7 +40,12 @@ struct MediaKeyMonitorHandlerTests {
         settings.updateAppSettings(appSettings)
 
         let deviceMonitor = MockAudioDeviceMonitor()
+        let device = AudioDevice(id: 1, uid: "test-device-uid", name: "Test Device", icon: nil, supportsAutoEQ: false, transportType: .unknown)
+        deviceMonitor.addOutputDevice(device)
+        
         let mockVolume = MockDeviceVolumeProviding(deviceMonitor: deviceMonitor)
+        mockVolume.defaultDeviceID = 1
+        
         let engine = AudioEngine(
             permission: AudioRecordingPermission(),
             settingsManager: settings,
@@ -57,7 +64,7 @@ struct MediaKeyMonitorHandlerTests {
         hud.foregroundAppFullscreenProvider = { false }
 
         let monitor = MediaKeyMonitor(
-            decoder: StubMediaKeyDecoder(),
+            decoder: decoder,
             audioEngine: engine,
             settingsManager: settings,
             accessibility: MockAccessibilityTrustProviding(isTrusted: true),
@@ -593,5 +600,41 @@ struct MediaKeyMonitorHandlerTests {
         )
         #expect(writtenMute == true)
         #expect(feedbackCalls == 1)
+    }
+
+    @Test("processSystemDefined swallows media key event and triggers HUD asynchronously")
+    func processSystemDefinedSwallowsAndTriggersHUD() async throws {
+        let decoder = StubMediaKeyDecoder()
+        let (monitor, hud, _, _) = makeMonitor(popupVisible: false, decoder: decoder)
+        
+        let event = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: NSPoint.zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: 8,
+            data1: Int((0 << 16) | (0xa << 8)),
+            data2: -1
+        )
+        
+        guard let cgEvent = event?.cgEvent else {
+            Issue.record("Failed to create CGEvent")
+            return
+        }
+        
+        decoder.nextEvent = .volumeUp(isRepeat: false)
+        
+        let shouldSwallow = monitor.processSystemDefined(cgEvent)
+        #expect(shouldSwallow == true)
+        
+        // Wait up to 1 second for the asynchronous MainActor Task to complete
+        for _ in 0..<100 {
+            if hud.showCallCount > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        
+        #expect(hud.showCallCount == 1)
     }
 }
