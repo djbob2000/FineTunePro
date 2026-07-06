@@ -870,13 +870,14 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
     private func handleVolumeChanged(for deviceID: AudioDeviceID) {
         guard deviceID.isValid else { return }
 
-        if outputVolumeBackend(for: deviceID) == .software { return }
-
-        #if !APP_STORE
-        // DDC-backed devices don't have real CoreAudio volume changes;
-        // ignore HAL callbacks (they always report 1.0)
-        if let ddcController, ddcController.isDDCBacked(deviceID) { return }
-        #endif
+        let backend = outputVolumeBackend(for: deviceID)
+        if backend == .software || backend == .ddc {
+            if deviceID.readOutputVolumeScalar() != 1.0 {
+                logger.info("Forcing physical volume to 1.0 for software/DDC device \(deviceID)")
+                _ = deviceID.setOutputVolumeScalar(1.0)
+            }
+            return
+        }
 
         let newVolume = clampedVolume(deviceID.readOutputVolumeScalar())
 
@@ -936,7 +937,14 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
 
     private func handleMuteChanged(for deviceID: AudioDeviceID) {
         guard deviceID.isValid else { return }
-        if outputVolumeBackend(for: deviceID) == .software { return }
+        let backend = outputVolumeBackend(for: deviceID)
+        if backend == .software || backend == .ddc {
+            if deviceID.readMuteState() {
+                logger.info("Forcing physical mute to false for software/DDC device \(deviceID)")
+                _ = deviceID.setMuteState(false)
+            }
+            return
+        }
         let newMuteState = deviceID.readMuteState()
         muteStates[deviceID] = newMuteState
         onMuteChanged?(deviceID, newMuteState)
@@ -967,6 +975,17 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
             let visibleVolume = settingsManager.getSoftwareDeviceVolume(for: device.uid) ?? defaultVolume
             volumes[deviceID] = Self.storedVolume(visibleVolume, tier: backend)
             muteStates[deviceID] = muted
+
+            // Force physical device volume to 1.0 (unity) and mute to false (unmuted)
+            // to prevent hardware-level attenuation or mute lockups.
+            if deviceID.readMuteState() {
+                logger.info("On read, forcing physical mute to false for software device \(deviceID)")
+                _ = deviceID.setMuteState(false)
+            }
+            if deviceID.readOutputVolumeScalar() != 1.0 {
+                logger.info("On read, forcing physical volume to 1.0 for software device \(deviceID)")
+                _ = deviceID.setOutputVolumeScalar(1.0)
+            }
             return
         }
 
@@ -979,6 +998,17 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
                 volumes[deviceID] = 0.5
             }
             muteStates[deviceID] = ddcController.isMuted(for: deviceID)
+
+            // Force physical device volume to 1.0 (unity) and mute to false (unmuted)
+            // to prevent hardware-level attenuation or mute lockups.
+            if deviceID.readMuteState() {
+                logger.info("On read, forcing physical mute to false for DDC device \(deviceID)")
+                _ = deviceID.setMuteState(false)
+            }
+            if deviceID.readOutputVolumeScalar() != 1.0 {
+                logger.info("On read, forcing physical volume to 1.0 for DDC device \(deviceID)")
+                _ = deviceID.setOutputVolumeScalar(1.0)
+            }
             return
         }
         #endif
