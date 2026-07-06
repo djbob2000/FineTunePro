@@ -28,7 +28,7 @@ struct EQSliderView: View {
     }
 
     private func formatGainValue(_ gain: Float) -> String {
-        return String(format: "%+.1f", gain)
+        return String(format: "%+.1f", gain) + "dB"
     }
 
     var body: some View {
