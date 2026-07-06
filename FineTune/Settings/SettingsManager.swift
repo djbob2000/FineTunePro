@@ -628,9 +628,19 @@ final class SettingsManager {
         scheduleSave()
     }
 
-    func ensureDeviceInPriority(_ uid: String) {
+    func ensureDeviceInPriority(_ uid: String, isBuiltInSpeaker: Bool = false) {
         guard !settings.outputDevicePriority.contains(uid) else { return }
-        settings.outputDevicePriority.append(uid)
+        if isBuiltInSpeaker {
+            settings.outputDevicePriority.append(uid)
+        } else {
+            if let speakerIndex = settings.outputDevicePriority.firstIndex(where: {
+                $0.lowercased().contains("speaker") || $0.lowercased().contains("builtin")
+            }) {
+                settings.outputDevicePriority.insert(uid, at: speakerIndex)
+            } else {
+                settings.outputDevicePriority.append(uid)
+            }
+        }
         scheduleSave()
     }
 

@@ -45,9 +45,10 @@ struct OutputDeviceAutoSwitchTests {
     @Test("Pending macOS auto-switch is accepted when connected-output auto-switch is enabled")
     func pendingAutoSwitchAcceptsConnectedDeviceWhenSettingEnabled() {
         let decision = AudioEngine.resolvePendingAutoSwitchDecision(
-            newDefaultUID: "headphones",
-            pendingConnectedDeviceUID: "headphones",
+            newDefaultUID: "external-device",
+            pendingConnectedDeviceUID: "external-device",
             autoSwitchToConnectedOutputDevice: true,
+            isHeadphone: false,
             lastAutoSwitchOverrideTime: nil,
             now: Date(timeIntervalSince1970: 100)
         )
@@ -55,12 +56,13 @@ struct OutputDeviceAutoSwitchTests {
         #expect(decision == .acceptConnectedDevice)
     }
 
-    @Test("Pending macOS auto-switch restores prior default when the setting is disabled")
+    @Test("Pending macOS auto-switch restores prior default when the setting is disabled for non-headphones")
     func pendingAutoSwitchRestoresPreviousDefaultWhenSettingDisabled() {
         let decision = AudioEngine.resolvePendingAutoSwitchDecision(
-            newDefaultUID: "headphones",
-            pendingConnectedDeviceUID: "headphones",
+            newDefaultUID: "external-device",
+            pendingConnectedDeviceUID: "external-device",
             autoSwitchToConnectedOutputDevice: false,
+            isHeadphone: false,
             lastAutoSwitchOverrideTime: nil,
             now: Date(timeIntervalSince1970: 100)
         )
@@ -68,12 +70,27 @@ struct OutputDeviceAutoSwitchTests {
         #expect(decision == .restoreConfirmedDefault)
     }
 
-    @Test("Settled device change is treated as user intent even when the setting is disabled")
-    func pendingAutoSwitchAcceptsSettledUserChange() {
+    @Test("Pending macOS auto-switch accepts headphones even when auto-switch setting is disabled")
+    func pendingAutoSwitchAcceptsHeadphonesWhenSettingDisabled() {
         let decision = AudioEngine.resolvePendingAutoSwitchDecision(
             newDefaultUID: "headphones",
             pendingConnectedDeviceUID: "headphones",
             autoSwitchToConnectedOutputDevice: false,
+            isHeadphone: true,
+            lastAutoSwitchOverrideTime: nil,
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        #expect(decision == .acceptConnectedDevice)
+    }
+
+    @Test("Settled device change is treated as user intent even when the setting is disabled")
+    func pendingAutoSwitchAcceptsSettledUserChange() {
+        let decision = AudioEngine.resolvePendingAutoSwitchDecision(
+            newDefaultUID: "external-device",
+            pendingConnectedDeviceUID: "external-device",
+            autoSwitchToConnectedOutputDevice: false,
+            isHeadphone: false,
             lastAutoSwitchOverrideTime: Date(timeIntervalSince1970: 98),
             now: Date(timeIntervalSince1970: 100)
         )

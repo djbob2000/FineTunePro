@@ -121,6 +121,8 @@ final class AudioEngine {
         deviceMonitor.inputDevices
     }
 
+    private var previousConfirmedDefaultUID: String?
+
     /// Output devices sorted by user-defined priority order.
     /// Devices in the priority list appear in that order; new/unknown devices are appended alphabetically.
     var prioritySortedOutputDevices: [AudioDevice] {
@@ -174,7 +176,8 @@ final class AudioEngine {
     /// Call this when devices change (not from computed properties).
     func registerNewDevicesInPriority() {
         for device in outputDevices {
-            settingsManager.ensureDeviceInPriority(device.uid)
+            let isSpeaker = (device.transportType == .builtIn) && !device.uid.lowercased().contains("headphone")
+            settingsManager.ensureDeviceInPriority(device.uid, isBuiltInSpeaker: isSpeaker)
         }
         for device in inputDevices {
             settingsManager.ensureInputDeviceInPriority(device.uid)
@@ -223,10 +226,11 @@ final class AudioEngine {
         newDefaultUID: String,
         pendingConnectedDeviceUID: String,
         autoSwitchToConnectedOutputDevice: Bool,
+        isHeadphone: Bool,
         lastAutoSwitchOverrideTime: Date?,
         now: Date = Date()
     ) -> PendingOutputAutoSwitchDecision {
-        if autoSwitchToConnectedOutputDevice {
+        if autoSwitchToConnectedOutputDevice || isHeadphone {
             return .acceptConnectedDevice
         }
 
@@ -1974,7 +1978,10 @@ final class AudioEngine {
     }
 
     private func confirmOutputDefault(_ uid: String) {
-        lastConfirmedDefaultUID = uid
+        if lastConfirmedDefaultUID != uid {
+            previousConfirmedDefaultUID = lastConfirmedDefaultUID
+            lastConfirmedDefaultUID = uid
+        }
         routeFollowsDefaultApps(to: uid)
     }
 
@@ -2172,14 +2179,22 @@ final class AudioEngine {
 
         // If the disconnected device was the system default, override to priority fallback
         if wasDefaultOutput {
-            reEvaluateOutputDefault(excluding: deviceUID)
+            if let restoreUID = previousConfirmedDefaultUID,
+               restoreUID != deviceUID,
+               let device = deviceMonitor.device(for: restoreUID),
+               isAliveCheck(device.id) {
+                _ = applyOutputDefault(to: device)
+            } else {
+                reEvaluateOutputDefault(excluding: deviceUID)
+            }
         }
     }
 
     /// Called when a device appears - switches pinned apps back to their preferred device
     private func handleDeviceConnected(_ deviceUID: String, name deviceName: String) {
         // Register newly connected device in priority list
-        settingsManager.ensureDeviceInPriority(deviceUID)
+        let isSpeaker = (deviceMonitor.device(for: deviceUID)?.transportType == .builtIn) && !deviceUID.lowercased().contains("headphone")
+        settingsManager.ensureDeviceInPriority(deviceUID, isBuiltInSpeaker: isSpeaker)
 
         var affectedApps: [AudioApp] = []
         var tapsToSwitch: [any ProcessTapControlling] = []
@@ -2450,10 +2465,20 @@ final class AudioEngine {
             }
 
             if newDefaultUID == pendingUID {
+                let isHeadphone: Bool
+                if let device = deviceMonitor.device(for: pendingUID) {
+                    let name = device.name.lowercased()
+                    let transport = device.transportType
+                    isHeadphone = name.contains("headphone") || name.contains("airpods") || name.contains("beats") || transport == .bluetooth || transport == .bluetoothLE || (transport == .builtIn && device.id.builtInHasHeadphonesActive())
+                } else {
+                    isHeadphone = false
+                }
+
                 switch Self.resolvePendingAutoSwitchDecision(
                     newDefaultUID: newDefaultUID,
                     pendingConnectedDeviceUID: pendingUID,
                     autoSwitchToConnectedOutputDevice: settingsManager.appSettings.autoSwitchToConnectedOutputDevice,
+                    isHeadphone: isHeadphone,
                     lastAutoSwitchOverrideTime: lastAutoSwitchOverrideTime
                 ) {
                 case .acceptConnectedDevice:
