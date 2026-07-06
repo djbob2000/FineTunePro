@@ -392,7 +392,7 @@ final class MediaKeyMonitor {
     // MARK: - Callback bridge
 
     /// Returns `true` if the caller should swallow the event.
-    nonisolated fileprivate func processSystemDefined(_ cgEvent: CGEvent) -> Bool {
+    nonisolated func processSystemDefined(_ cgEvent: CGEvent) -> Bool {
         // Pass through if disabled mid-race; never silently eat another app's media keys.
         guard isMediaKeyControlEnabled else { return false }
         guard let nsEvent = NSEvent(cgEvent: cgEvent) else { return false }
