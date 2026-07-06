@@ -44,6 +44,22 @@ final class LoudnessEqualizer: @unchecked Sendable {
     /// Per-sample fallback coefficient (from silenceGateFallbackTimeS).
     private let fallbackAlpha: Float
 
+    // MARK: - Downsampling control path properties (every 32 samples)
+    private let hopSize: Int = 32
+    private var hopCounter: Int = 0
+    private var weightedSumSq: Float = 0.0
+    private var bassSumSq: Float = 0.0
+    private var masterSumSq: Float = 0.0
+    private var blockBassDrivenPeak: Float = 0.0
+    private var blockMasterDrivenPeak: Float = 0.0
+
+    private let envAttackCoeffHop: Float
+    private let envReleaseCoeffHop: Float
+    private let sjpAttackCoeffHop: Float
+    private let attackNormHop: Float
+    private let releaseNormHop: Float
+    private let fallbackAlphaHop: Float
+
     private struct AgcBandState {
         var envelopeSq: Float = 0
         var currentGainDb: Float
@@ -98,8 +114,28 @@ final class LoudnessEqualizer: @unchecked Sendable {
             self.fallbackAlpha = 0.0
         }
 
-        // Envelope follower: 10 ms attack, 200 ms release
+        // Precompute hop-specific coefficients (32x step size)
+        let hop = Float(32)
+        self.attackNormHop = self.attackSpeedNorm * hop
+        self.releaseNormHop = self.releaseSpeedNorm * hop
         let samplePeriodMs: Float = 1000.0 / sampleRate
+        let stepMsHop = samplePeriodMs * hop
+        self.envAttackCoeffHop = LoudnessEqualizerMath.timeConstantCoefficient(
+            timeMs: 10, stepMs: stepMsHop
+        )
+        self.envReleaseCoeffHop = LoudnessEqualizerMath.timeConstantCoefficient(
+            timeMs: 200, stepMs: stepMsHop
+        )
+        self.sjpAttackCoeffHop = LoudnessEqualizerMath.timeConstantCoefficient(
+            timeMs: 5.0, stepMs: stepMsHop
+        )
+        if fallbackTime > 0 {
+            self.fallbackAlphaHop = Float(1.0 - exp(-Double(32) / (Double(sampleRate) * Double(fallbackTime))))
+        } else {
+            self.fallbackAlphaHop = 0.0
+        }
+
+        // Keep standard coefficients for fallback or legacy uses
         self.envAttackCoeff = LoudnessEqualizerMath.timeConstantCoefficient(
             timeMs: 10, stepMs: samplePeriodMs
         )
@@ -159,8 +195,6 @@ final class LoudnessEqualizer: @unchecked Sendable {
         let effectiveDriveDb = max(0.0, Double(settings.driveDb))
         let effectiveDrive = LoudnessEqualizerMath.dbToLinear(Float(effectiveDriveDb))
         let targetDb = settings.targetLevelDb
-        let attackNorm = attackSpeedNorm
-        let releaseNorm = releaseSpeedNorm
         let jumpProtection = settings.suddenJumpProtectionEnabled
         let silenceGateThreshold = settings.silenceGateThresholdDb
         let silenceGateSlowdown = settings.silenceGateSlowdownDb
@@ -198,66 +232,87 @@ final class LoudnessEqualizer: @unchecked Sendable {
                     master: masterMono
                 )
 
-                // 4. Update broadband envelope and gating factor
-                let sampleSq = weighted * weighted
-                if sampleSq > envSq {
-                    envSq += envAttackCoeff * (sampleSq - envSq)
-                } else {
-                    envSq += envReleaseCoeff * (sampleSq - envSq)
-                }
-                let levelDb = LoudnessEqualizerMath.meanSquareToDb(envSq)
-                let gateRange = silenceGateSlowdown - silenceGateThreshold
-                let gatingFactor: Float
-                if gateRange > 0 {
-                    gatingFactor = LoudnessEqualizerMath.clamp((levelDb - silenceGateThreshold) / gateRange, min: 0.0, max: 1.0)
-                } else {
-                    gatingFactor = levelDb >= silenceGateThreshold ? 1.0 : 0.0
-                }
+                // Accumulate power and peak for block-based update
+                weightedSumSq += weighted * weighted
+                bassSumSq += bassMonoWeighted * bassMonoWeighted
+                masterSumSq += masterMonoWeighted * masterMonoWeighted
 
                 let bassDrivenPeak = max(abs(lowL), abs(lowR))
+                if bassDrivenPeak > blockBassDrivenPeak { blockBassDrivenPeak = bassDrivenPeak }
                 let masterDrivenPeak = max(abs(highL), abs(highR))
+                if masterDrivenPeak > blockMasterDrivenPeak { blockMasterDrivenPeak = masterDrivenPeak }
 
-                // 5. Process AGC for both bands
-                processBandSample(
-                    band: &bassBand,
-                    weighted: bassMonoWeighted,
-                    drivenPeak: bassDrivenPeak,
-                    targetDb: targetDb,
-                    attackNorm: attackNorm,
-                    releaseNorm: releaseNorm,
-                    jumpProtection: jumpProtection,
-                    broadbandGatingFactor: gatingFactor,
-                    silenceGateSlowdown: silenceGateSlowdown,
-                    suddenDropProtection: suddenDropProtection,
-                    suddenDropThresholdDb: suddenDropThreshold,
-                    suddenDropSpeedup: suddenDropSpeedup,
-                    agcWindowSize: agcWindowSize,
-                    targetIdleGain: targetIdleGain
-                )
+                hopCounter += 1
+                if hopCounter >= hopSize {
+                    let weightedMS = weightedSumSq / Float(hopSize)
+                    let bassMS = bassSumSq / Float(hopSize)
+                    let masterMS = masterSumSq / Float(hopSize)
 
-                processBandSample(
-                    band: &masterBand,
-                    weighted: masterMonoWeighted,
-                    drivenPeak: masterDrivenPeak,
-                    targetDb: targetDb,
-                    attackNorm: attackNorm,
-                    releaseNorm: releaseNorm,
-                    jumpProtection: jumpProtection,
-                    broadbandGatingFactor: gatingFactor,
-                    silenceGateSlowdown: silenceGateSlowdown,
-                    suddenDropProtection: suddenDropProtection,
-                    suddenDropThresholdDb: suddenDropThreshold,
-                    suddenDropSpeedup: suddenDropSpeedup,
-                    agcWindowSize: agcWindowSize,
-                    targetIdleGain: targetIdleGain
-                )
+                    // 4. Update broadband envelope and gating factor
+                    if weightedMS > envSq {
+                        envSq += envAttackCoeffHop * (weightedMS - envSq)
+                    } else {
+                        envSq += envReleaseCoeffHop * (weightedMS - envSq)
+                    }
+                    let levelDb = LoudnessEqualizerMath.meanSquareToDb(envSq)
+                    let gateRange = silenceGateSlowdown - silenceGateThreshold
+                    let gatingFactor: Float
+                    if gateRange > 0 {
+                        gatingFactor = LoudnessEqualizerMath.clamp((levelDb - silenceGateThreshold) / gateRange, min: 0.0, max: 1.0)
+                    } else {
+                        gatingFactor = levelDb >= silenceGateThreshold ? 1.0 : 0.0
+                    }
 
-                // 6. Apply Bass-to-Master coupling clamp
-                let maxBassGain = masterBand.currentGainDb + 3.0
-                let minBassGain = masterBand.currentGainDb - 3.0
-                bassBand.currentGainDb = max(min(bassBand.currentGainDb, maxBassGain), minBassGain)
-                if bassBand.currentGainDb > 0 { bassBand.currentGainDb = 0 }
-                bassBand.currentGainLinear = LoudnessEqualizerMath.dbToLinear(bassBand.currentGainDb)
+                    // 5. Process AGC for both bands
+                    processBandHop(
+                        band: &bassBand,
+                        weightedMS: bassMS,
+                        drivenPeak: blockBassDrivenPeak,
+                        targetDb: targetDb,
+                        attackNormHop: attackNormHop,
+                        releaseNormHop: releaseNormHop,
+                        jumpProtection: jumpProtection,
+                        broadbandGatingFactor: gatingFactor,
+                        silenceGateSlowdown: silenceGateSlowdown,
+                        suddenDropProtection: suddenDropProtection,
+                        suddenDropThresholdDb: suddenDropThreshold,
+                        suddenDropSpeedup: suddenDropSpeedup,
+                        agcWindowSize: agcWindowSize,
+                        targetIdleGain: targetIdleGain
+                    )
+
+                    processBandHop(
+                        band: &masterBand,
+                        weightedMS: masterMS,
+                        drivenPeak: blockMasterDrivenPeak,
+                        targetDb: targetDb,
+                        attackNormHop: attackNormHop,
+                        releaseNormHop: releaseNormHop,
+                        jumpProtection: jumpProtection,
+                        broadbandGatingFactor: gatingFactor,
+                        silenceGateSlowdown: silenceGateSlowdown,
+                        suddenDropProtection: suddenDropProtection,
+                        suddenDropThresholdDb: suddenDropThreshold,
+                        suddenDropSpeedup: suddenDropSpeedup,
+                        agcWindowSize: agcWindowSize,
+                        targetIdleGain: targetIdleGain
+                    )
+
+                    // 6. Apply Bass-to-Master coupling clamp
+                    let maxBassGain = masterBand.currentGainDb + 3.0
+                    let minBassGain = masterBand.currentGainDb - 3.0
+                    bassBand.currentGainDb = max(min(bassBand.currentGainDb, maxBassGain), minBassGain)
+                    if bassBand.currentGainDb > 0 { bassBand.currentGainDb = 0 }
+                    bassBand.currentGainLinear = LoudnessEqualizerMath.dbToLinear(bassBand.currentGainDb)
+
+                    // Reset boundary accumulators
+                    hopCounter = 0
+                    weightedSumSq = 0.0
+                    bassSumSq = 0.0
+                    masterSumSq = 0.0
+                    blockBassDrivenPeak = 0.0
+                    blockMasterDrivenPeak = 0.0
+                }
 
                 // 7. Apply gains to bands and sum
                 let outL = lowL * bassBand.currentGainLinear + highL * masterBand.currentGainLinear
@@ -281,66 +336,87 @@ final class LoudnessEqualizer: @unchecked Sendable {
                     master: high
                 )
 
-                // 4. Update broadband envelope and gating factor
-                let sampleSq = weighted * weighted
-                if sampleSq > envSq {
-                    envSq += envAttackCoeff * (sampleSq - envSq)
-                } else {
-                    envSq += envReleaseCoeff * (sampleSq - envSq)
-                }
-                let levelDb = LoudnessEqualizerMath.meanSquareToDb(envSq)
-                let gateRange = silenceGateSlowdown - silenceGateThreshold
-                let gatingFactor: Float
-                if gateRange > 0 {
-                    gatingFactor = LoudnessEqualizerMath.clamp((levelDb - silenceGateThreshold) / gateRange, min: 0.0, max: 1.0)
-                } else {
-                    gatingFactor = levelDb >= silenceGateThreshold ? 1.0 : 0.0
-                }
+                // Accumulate power and peak for block-based update
+                weightedSumSq += weighted * weighted
+                bassSumSq += bassMonoWeighted * bassMonoWeighted
+                masterSumSq += masterMonoWeighted * masterMonoWeighted
 
                 let bassDrivenPeak = abs(low)
+                if bassDrivenPeak > blockBassDrivenPeak { blockBassDrivenPeak = bassDrivenPeak }
                 let masterDrivenPeak = abs(high)
+                if masterDrivenPeak > blockMasterDrivenPeak { blockMasterDrivenPeak = masterDrivenPeak }
 
-                // 5. Process AGC for both bands
-                processBandSample(
-                    band: &bassBand,
-                    weighted: bassMonoWeighted,
-                    drivenPeak: bassDrivenPeak,
-                    targetDb: targetDb,
-                    attackNorm: attackNorm,
-                    releaseNorm: releaseNorm,
-                    jumpProtection: jumpProtection,
-                    broadbandGatingFactor: gatingFactor,
-                    silenceGateSlowdown: silenceGateSlowdown,
-                    suddenDropProtection: suddenDropProtection,
-                    suddenDropThresholdDb: suddenDropThreshold,
-                    suddenDropSpeedup: suddenDropSpeedup,
-                    agcWindowSize: agcWindowSize,
-                    targetIdleGain: targetIdleGain
-                )
+                hopCounter += 1
+                if hopCounter >= hopSize {
+                    let weightedMS = weightedSumSq / Float(hopSize)
+                    let bassMS = bassSumSq / Float(hopSize)
+                    let masterMS = masterSumSq / Float(hopSize)
 
-                processBandSample(
-                    band: &masterBand,
-                    weighted: masterMonoWeighted,
-                    drivenPeak: masterDrivenPeak,
-                    targetDb: targetDb,
-                    attackNorm: attackNorm,
-                    releaseNorm: releaseNorm,
-                    jumpProtection: jumpProtection,
-                    broadbandGatingFactor: gatingFactor,
-                    silenceGateSlowdown: silenceGateSlowdown,
-                    suddenDropProtection: suddenDropProtection,
-                    suddenDropThresholdDb: suddenDropThreshold,
-                    suddenDropSpeedup: suddenDropSpeedup,
-                    agcWindowSize: agcWindowSize,
-                    targetIdleGain: targetIdleGain
-                )
+                    // 4. Update broadband envelope and gating factor
+                    if weightedMS > envSq {
+                        envSq += envAttackCoeffHop * (weightedMS - envSq)
+                    } else {
+                        envSq += envReleaseCoeffHop * (weightedMS - envSq)
+                    }
+                    let levelDb = LoudnessEqualizerMath.meanSquareToDb(envSq)
+                    let gateRange = silenceGateSlowdown - silenceGateThreshold
+                    let gatingFactor: Float
+                    if gateRange > 0 {
+                        gatingFactor = LoudnessEqualizerMath.clamp((levelDb - silenceGateThreshold) / gateRange, min: 0.0, max: 1.0)
+                    } else {
+                        gatingFactor = levelDb >= silenceGateThreshold ? 1.0 : 0.0
+                    }
 
-                // 6. Apply Bass-to-Master coupling clamp
-                let maxBassGain = masterBand.currentGainDb + 3.0
-                let minBassGain = masterBand.currentGainDb - 3.0
-                bassBand.currentGainDb = max(min(bassBand.currentGainDb, maxBassGain), minBassGain)
-                if bassBand.currentGainDb > 0 { bassBand.currentGainDb = 0 }
-                bassBand.currentGainLinear = LoudnessEqualizerMath.dbToLinear(bassBand.currentGainDb)
+                    // 5. Process AGC for both bands
+                    processBandHop(
+                        band: &bassBand,
+                        weightedMS: bassMS,
+                        drivenPeak: blockBassDrivenPeak,
+                        targetDb: targetDb,
+                        attackNormHop: attackNormHop,
+                        releaseNormHop: releaseNormHop,
+                        jumpProtection: jumpProtection,
+                        broadbandGatingFactor: gatingFactor,
+                        silenceGateSlowdown: silenceGateSlowdown,
+                        suddenDropProtection: suddenDropProtection,
+                        suddenDropThresholdDb: suddenDropThreshold,
+                        suddenDropSpeedup: suddenDropSpeedup,
+                        agcWindowSize: agcWindowSize,
+                        targetIdleGain: targetIdleGain
+                    )
+
+                    processBandHop(
+                        band: &masterBand,
+                        weightedMS: masterMS,
+                        drivenPeak: blockMasterDrivenPeak,
+                        targetDb: targetDb,
+                        attackNormHop: attackNormHop,
+                        releaseNormHop: releaseNormHop,
+                        jumpProtection: jumpProtection,
+                        broadbandGatingFactor: gatingFactor,
+                        silenceGateSlowdown: silenceGateSlowdown,
+                        suddenDropProtection: suddenDropProtection,
+                        suddenDropThresholdDb: suddenDropThreshold,
+                        suddenDropSpeedup: suddenDropSpeedup,
+                        agcWindowSize: agcWindowSize,
+                        targetIdleGain: targetIdleGain
+                    )
+
+                    // 6. Apply Bass-to-Master coupling clamp
+                    let maxBassGain = masterBand.currentGainDb + 3.0
+                    let minBassGain = masterBand.currentGainDb - 3.0
+                    bassBand.currentGainDb = max(min(bassBand.currentGainDb, maxBassGain), minBassGain)
+                    if bassBand.currentGainDb > 0 { bassBand.currentGainDb = 0 }
+                    bassBand.currentGainLinear = LoudnessEqualizerMath.dbToLinear(bassBand.currentGainDb)
+
+                    // Reset boundary accumulators
+                    hopCounter = 0
+                    weightedSumSq = 0.0
+                    bassSumSq = 0.0
+                    masterSumSq = 0.0
+                    blockBassDrivenPeak = 0.0
+                    blockMasterDrivenPeak = 0.0
+                }
 
                 // 7. Apply gains to bands and sum
                 output[frame] = low * bassBand.currentGainLinear + high * masterBand.currentGainLinear
@@ -362,46 +438,60 @@ final class LoudnessEqualizer: @unchecked Sendable {
                 drivenMono *= invCh
 
                 // Filter sidechains in parallel via SIMD.
-                // Bass lane ([1]) is unused in multi-channel — no crossover splitting.
-                // The zero input accumulates harmless filter state; lane is discarded via `_`.
                 let (weighted, _, masterMonoWeighted) = sidechainFilter.process(
                     mono: drivenMono,
                     bass: 0.0,
                     master: drivenMono
                 )
 
-                // Broadband Envelope
-                let sampleSq = weighted * weighted
-                if sampleSq > envSq {
-                    envSq += envAttackCoeff * (sampleSq - envSq)
-                } else {
-                    envSq += envReleaseCoeff * (sampleSq - envSq)
-                }
-                let levelDb = LoudnessEqualizerMath.meanSquareToDb(envSq)
-                let gateRange = silenceGateSlowdown - silenceGateThreshold
-                let gatingFactor: Float
-                if gateRange > 0 {
-                    gatingFactor = LoudnessEqualizerMath.clamp((levelDb - silenceGateThreshold) / gateRange, min: 0.0, max: 1.0)
-                } else {
-                    gatingFactor = levelDb >= silenceGateThreshold ? 1.0 : 0.0
-                }
+                // Accumulate power and peak for block-based update
+                weightedSumSq += weighted * weighted
+                masterSumSq += masterMonoWeighted * masterMonoWeighted
+                if maxDrivenAbs > blockMasterDrivenPeak { blockMasterDrivenPeak = maxDrivenAbs }
 
-                processBandSample(
-                    band: &masterBand,
-                    weighted: masterMonoWeighted,
-                    drivenPeak: maxDrivenAbs,
-                    targetDb: targetDb,
-                    attackNorm: attackNorm,
-                    releaseNorm: releaseNorm,
-                    jumpProtection: jumpProtection,
-                    broadbandGatingFactor: gatingFactor,
-                    silenceGateSlowdown: silenceGateSlowdown,
-                    suddenDropProtection: suddenDropProtection,
-                    suddenDropThresholdDb: suddenDropThreshold,
-                    suddenDropSpeedup: suddenDropSpeedup,
-                    agcWindowSize: agcWindowSize,
-                    targetIdleGain: targetIdleGain
-                )
+                hopCounter += 1
+                if hopCounter >= hopSize {
+                    let weightedMS = weightedSumSq / Float(hopSize)
+                    let masterMS = masterSumSq / Float(hopSize)
+
+                    // 4. Update broadband envelope and gating factor
+                    if weightedMS > envSq {
+                        envSq += envAttackCoeffHop * (weightedMS - envSq)
+                    } else {
+                        envSq += envReleaseCoeffHop * (weightedMS - envSq)
+                    }
+                    let levelDb = LoudnessEqualizerMath.meanSquareToDb(envSq)
+                    let gateRange = silenceGateSlowdown - silenceGateThreshold
+                    let gatingFactor: Float
+                    if gateRange > 0 {
+                        gatingFactor = LoudnessEqualizerMath.clamp((levelDb - silenceGateThreshold) / gateRange, min: 0.0, max: 1.0)
+                    } else {
+                        gatingFactor = levelDb >= silenceGateThreshold ? 1.0 : 0.0
+                    }
+
+                    processBandHop(
+                        band: &masterBand,
+                        weightedMS: masterMS,
+                        drivenPeak: blockMasterDrivenPeak,
+                        targetDb: targetDb,
+                        attackNormHop: attackNormHop,
+                        releaseNormHop: releaseNormHop,
+                        jumpProtection: jumpProtection,
+                        broadbandGatingFactor: gatingFactor,
+                        silenceGateSlowdown: silenceGateSlowdown,
+                        suddenDropProtection: suddenDropProtection,
+                        suddenDropThresholdDb: suddenDropThreshold,
+                        suddenDropSpeedup: suddenDropSpeedup,
+                        agcWindowSize: agcWindowSize,
+                        targetIdleGain: targetIdleGain
+                    )
+
+                    // Reset boundary accumulators
+                    hopCounter = 0
+                    weightedSumSq = 0.0
+                    masterSumSq = 0.0
+                    blockMasterDrivenPeak = 0.0
+                }
 
                 // Apply masterBand gain to all channels
                 for ch in 0..<channelCount {
@@ -416,16 +506,16 @@ final class LoudnessEqualizer: @unchecked Sendable {
         envelopeSq = envSq
     }
 
-    // MARK: - AGC Core (per-sample)
+    // MARK: - AGC Core (per-hop)
 
     @inline(__always)
-    private func processBandSample(
+    private func processBandHop(
         band: inout AgcBandState,
-        weighted: Float,
+        weightedMS: Float,
         drivenPeak: Float,
         targetDb: Float,
-        attackNorm: Float,
-        releaseNorm: Float,
+        attackNormHop: Float,
+        releaseNormHop: Float,
         jumpProtection: Bool,
         broadbandGatingFactor: Float,
         silenceGateSlowdown: Float,
@@ -436,12 +526,11 @@ final class LoudnessEqualizer: @unchecked Sendable {
         agcWindowSize: Float,
         targetIdleGain: Float
     ) {
-        // 1. Envelope detection (asymmetric one-pole on squared magnitude)
-        let sampleSq = weighted * weighted
-        if sampleSq > band.envelopeSq {
-            band.envelopeSq += envAttackCoeff * (sampleSq - band.envelopeSq)
+        // 1. Envelope detection (asymmetric one-pole on mean-square magnitude)
+        if weightedMS > band.envelopeSq {
+            band.envelopeSq += envAttackCoeffHop * (weightedMS - band.envelopeSq)
         } else {
-            band.envelopeSq += envReleaseCoeff * (sampleSq - band.envelopeSq)
+            band.envelopeSq += envReleaseCoeffHop * (weightedMS - band.envelopeSq)
         }
         let levelDb = LoudnessEqualizerMath.meanSquareToDb(band.envelopeSq)
 
@@ -459,7 +548,7 @@ final class LoudnessEqualizer: @unchecked Sendable {
         if deltaOutput > halfWindow {
             // Output is too loud — ATTACK towards targetGainDb (never gated, to prevent clipping)
             let overshootDb = deltaInput - halfWindow
-            let attackDelta = attackNorm * max(overshootDb, 0)
+            let attackDelta = attackNormHop * max(overshootDb, 0)
             gainDb -= attackDelta
             if gainDb < targetGainDb { gainDb = targetGainDb }
         } else if deltaOutput < -halfWindow {
@@ -474,11 +563,11 @@ final class LoudnessEqualizer: @unchecked Sendable {
                 speedMult *= suddenDropSpeedup
             }
 
-            let activeAlpha = releaseNorm * speedMult
+            let activeAlpha = releaseNormHop * speedMult
 
             // Interpolate target and speed between active release and idle gain fallback
             let effectiveTargetGainDb = gatingFactor * activeTargetGainDb + (1.0 - gatingFactor) * targetIdleGain
-            let effectiveAlpha = gatingFactor * activeAlpha + (1.0 - gatingFactor) * (1.0 - gatingFactor) * fallbackAlpha
+            let effectiveAlpha = gatingFactor * activeAlpha + (1.0 - gatingFactor) * (1.0 - gatingFactor) * fallbackAlphaHop
 
             let releaseDeficitDb = effectiveTargetGainDb - gainDb
             gainDb += releaseDeficitDb * effectiveAlpha
@@ -487,8 +576,8 @@ final class LoudnessEqualizer: @unchecked Sendable {
         } else {
             // Output is within comfort zone (window)
             // If gatingFactor < 1.0, we drift towards idle gain, but with a speed scaled quadratically by (1 - gatingFactor)^2
-            if fallbackAlpha > 0 {
-                let effectiveAlpha = (1.0 - gatingFactor) * (1.0 - gatingFactor) * fallbackAlpha
+            if fallbackAlphaHop > 0 {
+                let effectiveAlpha = (1.0 - gatingFactor) * (1.0 - gatingFactor) * fallbackAlphaHop
                 let deficitDb = targetIdleGain - gainDb
                 gainDb += deficitDb * effectiveAlpha
                 if gainDb > 0 { gainDb = 0 }
@@ -502,10 +591,7 @@ final class LoudnessEqualizer: @unchecked Sendable {
             let jumpThresholdDb = targetDb + 4.0
             if outputDb > jumpThresholdDb {
                 let targetSjpGainDb = jumpThresholdDb - drivenPeakDb
-                // Smoothly attack toward the jump protection target gain.
-                // We use a fast attack time constant (5.0 ms) to pull the gain down
-                // without introducing a step discontinuity (which causes clicks/pops).
-                gainDb += sjpAttackCoeff * (targetSjpGainDb - gainDb)
+                gainDb += sjpAttackCoeffHop * (targetSjpGainDb - gainDb)
             }
         }
 
