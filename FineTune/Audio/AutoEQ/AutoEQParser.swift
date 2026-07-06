@@ -86,11 +86,23 @@ nonisolated enum AutoEQParser {
         }
         guard let type = filterType else { return nil }
 
-        // Extract Fc (frequency), Gain, Q
+        // Extract Fc (frequency), Gain
         guard let frequency = extractValue(after: "Fc", in: tokens),
-              let gainDB = extractValue(after: "Gain", in: tokens),
-              let q = extractValue(after: "Q", in: tokens) else {
+              let gainDB = extractValue(after: "Gain", in: tokens) else {
             return nil
+        }
+
+        // Extract Q or fall back to default based on type
+        let q: Float
+        if let parsedQ = extractValue(after: "Q", in: tokens) {
+            q = parsedQ
+        } else {
+            switch type {
+            case .peaking:
+                q = 1.0
+            case .lowShelf, .highShelf:
+                q = 0.707
+            }
         }
 
         // Validate ranges
