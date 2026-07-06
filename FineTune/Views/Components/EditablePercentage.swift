@@ -69,11 +69,9 @@ struct EditablePercentage: View {
                     .font(DesignTokens.Typography.percentage)
                     .foregroundStyle(textColor)
                     .multilineTextAlignment(.trailing)
-                if !useLogScale {
-                    Text("%")
-                        .font(DesignTokens.Typography.percentage)
-                        .foregroundStyle(textColor)
-                }
+                Text(useLogScale ? "dB" : "%")
+                    .font(DesignTokens.Typography.percentage)
+                    .foregroundStyle(textColor)
             } else if isEditing {
                 TextField("", text: $inputText)
                     .textFieldStyle(.plain)
@@ -85,15 +83,13 @@ struct EditablePercentage: View {
                     .onExitCommand { cancel() }
                     .fixedSize()  // Size to content
 
-                if !useLogScale {
-                    Text("%")
-                        .font(DesignTokens.Typography.percentage)
-                        .foregroundStyle(textColor)
-                }
+                Text(useLogScale ? "dB" : "%")
+                    .font(DesignTokens.Typography.percentage)
+                    .foregroundStyle(textColor)
             } else {
                 // Display mode: tappable percentage
                 if useLogScale {
-                    Text(decibels)
+                    Text("\(decibels)dB")
                         .font(DesignTokens.Typography.percentage)
                         .foregroundStyle(isHovered ? DesignTokens.Colors.textPrimary : textColor)
                 } else {
@@ -188,6 +184,7 @@ struct EditablePercentage: View {
     private func parseValue(_ input: String) -> Double? {
         let cleaned = input
             .replacing("%", with: "")
+            .replacingOccurrences(of: "dB", with: "", options: .caseInsensitive)
             .trimmingCharacters(in: .whitespaces)
 
         guard let newValue = Float(cleaned) else { return nil }
