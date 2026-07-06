@@ -2,7 +2,5 @@
 
 | Task | Status | Description |
 | --- | --- | --- |
-| Task 1 | `[x]` completed | Implement Treble Crossover and Amount in Settings & Engine |
-| Task 2 | `[x]` completed | Implement Treble Crossover and Amount in DSP (LoudnessCompensator) |
-| Task 3 | `[x]` completed | Implement Treble Crossover and Amount in UI (DeviceDetailSheet & MenuBarPopupView) |
-| Task 4 | `[x]` completed | Update Tests and Verify |
+| Task 1 | `[x]` completed   | Create Unit Tests for Optional Q Parser Logic |
+| Task 2 | `[x]` completed   | Implement Optional Q Parsing Logic in AutoEQParser |
