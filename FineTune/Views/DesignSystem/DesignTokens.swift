@@ -263,6 +263,13 @@ enum DesignTokens {
         /// VU meter muted state
         static let vuMuted: Color = .primary.opacity(0.35)
 
+        /// Volume meter scale labels color. White in dark mode, black in light mode.
+        static let vuScaleLabel = dynamicColor(
+            name: "vuScaleLabel",
+            light: NSColor.black,
+            dark: NSColor.white
+        )
+
         // MARK: AutoEQ
 
         /// AutoEQ empty-state dashed border. Light bumped so the dashed
@@ -438,7 +445,7 @@ enum DesignTokens {
         static let percentageWidth: CGFloat = 40
 
         /// Decibels text width (fixed to prevent layout shift)
-        static let decibelsWidth: CGFloat = 44
+        static let decibelsWidth: CGFloat = 56
 
         // MARK: VU Meter
 
