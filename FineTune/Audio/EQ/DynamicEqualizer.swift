@@ -89,6 +89,12 @@ final class DynamicEqualizer: @unchecked Sendable {
     // 5 current dynamic gains (internal for unit testing)
     var currentGains: [Float] = [0, 0, 0, 0, 0]
     
+    // Last gains for which peaking coefficients were actually computed.
+    private var lastComputedGains: [Float] = [0, 0, 0, 0, 0]
+    
+    // Minimum gain change (dB) to trigger coefficient recompute.
+    private static let coeffRecomputeThreshold: Float = 0.05
+    
     var isEnabled: Bool = true
     
     init(sampleRate: Double = 48000.0) {
@@ -112,6 +118,9 @@ final class DynamicEqualizer: @unchecked Sendable {
             filter.coeffs = peakingCoefficients(frequency: Self.frequencies[i], gainDB: currentGains[i], sampleRate: sampleRate)
             return filter
         }
+        for i in 0..<5 {
+            lastComputedGains[i] = currentGains[i]
+        }
     }
     
     func reset() {
@@ -120,6 +129,7 @@ final class DynamicEqualizer: @unchecked Sendable {
             peakingFilters[i].reset()
             envelopes[i] = 0.0
             currentGains[i] = 0.0
+            lastComputedGains[i] = 0.0
         }
         setupFilters()
     }
@@ -154,7 +164,7 @@ final class DynamicEqualizer: @unchecked Sendable {
         )
     }
     
-    private func peakingCoefficients(frequency: Double, gainDB: Float, sampleRate: Double) -> BiquadCoefficients {
+    func peakingCoefficients(frequency: Double, gainDB: Float, sampleRate: Double) -> BiquadCoefficients {
         let coeffs = BiquadMath.peakingEQCoefficients(frequency: frequency, gainDB: gainDB, q: 1.0, sampleRate: sampleRate)
         return BiquadCoefficients(
             b0: Float(coeffs[0]),
@@ -268,12 +278,15 @@ final class DynamicEqualizer: @unchecked Sendable {
             let beta = Float(exp(-dt / tau))
             currentGains[i] = beta * currentGains[i] + (1.0 - beta) * target
             
-            // Recompute peaking filter coefficients with currentGains[i]
-            peakingFilters[i].coeffs = peakingCoefficients(
-                frequency: Self.frequencies[i],
-                gainDB: currentGains[i],
-                sampleRate: sampleRate
-            )
+            // Only recompute coefficients when gain changed meaningfully
+            if abs(currentGains[i] - lastComputedGains[i]) >= Self.coeffRecomputeThreshold {
+                peakingFilters[i].coeffs = peakingCoefficients(
+                    frequency: Self.frequencies[i],
+                    gainDB: currentGains[i],
+                    sampleRate: sampleRate
+                )
+                lastComputedGains[i] = currentGains[i]
+            }
         }
         
         // Update shared debug gains for the UI
