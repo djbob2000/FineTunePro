@@ -43,7 +43,8 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
                 context.coordinator.updateContent(
                     content,
                     preferredColorScheme: preferredColorScheme,
-                    nsAppearance: nsAppearance
+                    nsAppearance: nsAppearance,
+                    from: nsView
                 )
             }
         } else {
@@ -67,6 +68,24 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
 
         init(isPresented: Binding<Bool>) {
             self._isPresented = isPresented
+        }
+
+        private func positionPanel(from parentView: NSView) {
+            guard let panel = panel, let parentWindow = parentWindow else { return }
+
+            let parentFrame = parentView.convert(parentView.bounds, to: nil)
+            let screenFrame = parentWindow.convertToScreen(parentFrame)
+
+            let screen = parentWindow.screen ?? NSScreen.main
+            let visibleFrame = screen?.visibleFrame ?? NSRect.zero
+
+            let targetOrigin = PopoverPositioner.computePosition(
+                panelSize: panel.frame.size,
+                triggerFrame: screenFrame,
+                visibleFrame: visibleFrame
+            )
+
+            panel.setFrameOrigin(targetOrigin)
         }
 
         func showPanel<V: View>(
@@ -104,14 +123,10 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
             panel.setContentSize(hosting.fittingSize)
             self.hostingView = hosting
 
+            self.panel = panel
+
             // Position below trigger
-            let parentFrame = parentView.convert(parentView.bounds, to: nil)
-            let screenFrame = parentWindow.convertToScreen(parentFrame)
-            let panelOrigin = NSPoint(
-                x: screenFrame.origin.x,
-                y: screenFrame.origin.y - panel.frame.height - 4
-            )
-            panel.setFrameOrigin(panelOrigin)
+            positionPanel(from: parentView)
 
             // Add as child window - links to parent's event stream
             parentWindow.addChildWindow(panel, ordered: .above)
@@ -123,8 +138,6 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
             parentWindow.delegate = nil
             panel.makeKeyAndOrderFront(nil)
             parentWindow.delegate = savedDelegate
-
-            self.panel = panel
 
             // Get trigger button frame in screen coordinates
             let triggerFrame = parentWindow.convertToScreen(parentView.convert(parentView.bounds, to: nil))
@@ -163,7 +176,8 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
         func updateContent<V: View>(
             _ content: () -> V,
             preferredColorScheme: ColorScheme?,
-            nsAppearance: NSAppearance?
+            nsAppearance: NSAppearance?,
+            from parentView: NSView
         ) {
             guard let hostingView = hostingView else { return }
             // Re-apply appearance in case the preference changed while the
@@ -177,6 +191,7 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
             if let panel = panel, panel.frame.size != newSize {
                 panel.setContentSize(newSize)
             }
+            positionPanel(from: parentView)
         }
 
         /// - Parameter reKeyParent: When `true`, restores key status to the parent
@@ -235,3 +250,40 @@ struct PopoverHost<Content: View>: NSViewRepresentable {
         }
     }
 }
+
+/// A non-generic helper to calculate the screen-clamped position for popover panels.
+struct PopoverPositioner {
+    static func computePosition(
+        panelSize: NSSize,
+        triggerFrame: NSRect,
+        visibleFrame: NSRect
+    ) -> NSPoint {
+        // Default position: below the trigger, left-aligned
+        var targetX = triggerFrame.origin.x
+        var targetY = triggerFrame.origin.y - panelSize.height - 4
+
+        // Adjust horizontally if the panel extends past the right edge
+        if targetX + panelSize.width > visibleFrame.maxX {
+            targetX = visibleFrame.maxX - panelSize.width
+        }
+        // Keep the panel's left edge within the screen's left edge
+        if targetX < visibleFrame.minX {
+            targetX = visibleFrame.minX
+        }
+
+        // Adjust vertically if the panel extends below the bottom edge
+        if targetY < visibleFrame.minY {
+            // Try to flip above the trigger
+            let alternateY = triggerFrame.maxY + 4
+            if alternateY + panelSize.height <= visibleFrame.maxY {
+                targetY = alternateY
+            } else {
+                // Clamp to the bottom edge if it doesn't fit above either
+                targetY = visibleFrame.minY
+            }
+        }
+
+        return NSPoint(x: targetX, y: targetY)
+    }
+}
+
