@@ -175,7 +175,7 @@ struct EditablePercentage: View {
         coordinator.install(
             excludingFrame: componentFrame,
             onClickOutside: { [self] in
-                cancel()
+                commit()
             }
         )
 

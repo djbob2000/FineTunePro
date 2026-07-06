@@ -253,7 +253,7 @@ private struct EditablePriority: View {
         coordinator.install(
             excludingFrame: componentFrame,
             onClickOutside: { [self] in
-                cancel()
+                commit()
             }
         )
 
