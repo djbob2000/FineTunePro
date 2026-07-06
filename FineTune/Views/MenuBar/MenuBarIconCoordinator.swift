@@ -81,8 +81,12 @@ final class MenuBarIconCoordinator: MediaKeyIconFlashing {
         let id = deviceVolumeMonitor.defaultDeviceID
         let volume = deviceVolumeMonitor.volumes[id] ?? 0
         let muted = deviceVolumeMonitor.muteStates[id] ?? false
+        let style = MenuBarIconState.resolveStyle(
+            defaultDeviceID: id,
+            configuredStyle: settings.appSettings.menuBarIconStyle
+        )
         return MenuBarIconState.baseline(
-            style: settings.appSettings.menuBarIconStyle,
+            style: style,
             volume: volume,
             muted: muted,
             deviceSymbol: currentDeviceSymbol()

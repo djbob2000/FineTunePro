@@ -252,3 +252,32 @@ struct StyleIconNameConsistencyTests {
         #expect(baseline.image == .systemSymbol(MenuBarIconStyle.device.iconName))
     }
 }
+
+@Suite("MenuBarIconState.resolveStyle — Bluetooth override")
+struct MenuBarIconStyleResolveTests {
+
+    @Test("Bluetooth device active → overrides any configured style to .device")
+    func bluetoothDeviceOverridesToDevice() {
+        for style in MenuBarIconStyle.allCases {
+            let resolved = MenuBarIconState.resolveStyle(
+                defaultDeviceID: 42,
+                configuredStyle: style,
+                isBluetooth: { _ in true }
+            )
+            #expect(resolved == .device, "style \(style) should be overridden to .device")
+        }
+    }
+
+    @Test("Non-Bluetooth device active → respects configured style")
+    func nonBluetoothDeviceRespectsStyle() {
+        for style in MenuBarIconStyle.allCases {
+            let resolved = MenuBarIconState.resolveStyle(
+                defaultDeviceID: 42,
+                configuredStyle: style,
+                isBluetooth: { _ in false }
+            )
+            #expect(resolved == style, "style \(style) should be respected")
+        }
+    }
+}
+
