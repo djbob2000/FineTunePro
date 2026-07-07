@@ -1690,7 +1690,7 @@ struct ObservedInactiveAppRow: View {
             isSmartVolumeEnabled: audioEngine.settingsManager.getAppSmartVolumeEnabled(for: identifier),
             useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
             onSmartVolumeToggle: { enabled in
-                audioEngine.settingsManager.setAppSmartVolumeEnabled(for: identifier, to: enabled)
+                audioEngine.setAppSmartVolumeEnabledForInactive(identifier: identifier, enabled: enabled)
             },
             onVolumeChange: { volume in
                 audioEngine.setVolumeForInactive(identifier: identifier, to: volume)

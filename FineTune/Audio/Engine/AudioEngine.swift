@@ -1247,7 +1247,43 @@ final class AudioEngine {
 
     func setAppSmartVolumeEnabled(for app: AudioApp, enabled: Bool) {
         settingsManager.setAppSmartVolumeEnabled(for: app.persistenceIdentifier, to: enabled)
-        updateTapSmartVolume(forApp: app)
+        var didDisableDevice = false
+        if enabled {
+            if let deviceUID = effectiveDeviceUID(forIdentifier: app.persistenceIdentifier) {
+                if getSmartVolumeEnabled(for: deviceUID) {
+                    setSmartVolumeEnabled(for: deviceUID, enabled: false)
+                    didDisableDevice = true
+                }
+            }
+        }
+        if !didDisableDevice {
+            updateTapSmartVolume(forApp: app)
+        }
+    }
+
+    func setAppSmartVolumeEnabledForInactive(identifier: String, enabled: Bool) {
+        settingsManager.setAppSmartVolumeEnabled(for: identifier, to: enabled)
+        var didDisableDevice = false
+        if enabled {
+            if let deviceUID = effectiveDeviceUID(forIdentifier: identifier) {
+                if getSmartVolumeEnabled(for: deviceUID) {
+                    setSmartVolumeEnabled(for: deviceUID, enabled: false)
+                    didDisableDevice = true
+                }
+            }
+        }
+        if !didDisableDevice {
+            if let tap = taps.values.first(where: { $0.app.persistenceIdentifier == identifier }) {
+                updateTapSmartVolume(forApp: tap.app)
+            }
+        }
+    }
+
+    private func effectiveDeviceUID(forIdentifier identifier: String) -> String? {
+        if let tap = taps.values.first(where: { $0.app.persistenceIdentifier == identifier }) {
+            return appDeviceRouting[tap.app.id] ?? deviceVolumeMonitor.defaultDeviceUID
+        }
+        return settingsManager.getDeviceRouting(for: identifier) ?? deviceVolumeMonitor.defaultDeviceUID
     }
 
     func getSmartVolumeEnabled(for deviceUID: String) -> Bool {
@@ -1256,6 +1292,10 @@ final class AudioEngine {
 
     func setSmartVolumeEnabled(for deviceUID: String, enabled: Bool) {
         settingsManager.setSmartVolumeEnabled(for: deviceUID, to: enabled)
+        if enabled {
+            let defaultUID = deviceVolumeMonitor.defaultDeviceUID ?? ""
+            settingsManager.disableAppSmartVolumeForDevice(deviceUID: deviceUID, defaultDeviceUID: defaultUID)
+        }
         updateTapsSmartVolume(forDevice: deviceUID)
     }
 
