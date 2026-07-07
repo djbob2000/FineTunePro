@@ -203,9 +203,11 @@ private struct EditablePriority: View {
         .padding(.horizontal, isEditing ? 4 : 2)
         .padding(.vertical, isEditing ? 2 : 1)
         .background {
-            GeometryReader { geo in
-                Color.clear
-                    .preference(key: PriorityFrameKey.self, value: geo.frame(in: .global))
+            if isEditing {
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: PriorityFrameKey.self, value: geo.frame(in: .global))
+                }
             }
         }
         .onPreferenceChange(PriorityFrameKey.self) { frame in
@@ -238,7 +240,16 @@ private struct EditablePriority: View {
             }
         }
         .onChange(of: isEditing) { _, editing in
-            if !editing {
+            if editing {
+                DispatchQueue.main.async {
+                    coordinator.install(
+                        excludingFrame: componentFrame,
+                        onClickOutside: { [self] in
+                            commit()
+                        }
+                    )
+                }
+            } else {
                 coordinator.removeMonitors()
             }
         }
@@ -249,13 +260,6 @@ private struct EditablePriority: View {
     private func startEditing() {
         inputText = "\(displayNumber)"
         isEditing = true
-
-        coordinator.install(
-            excludingFrame: componentFrame,
-            onClickOutside: { [self] in
-                commit()
-            }
-        )
 
         Task { @MainActor in
             isFocused = true

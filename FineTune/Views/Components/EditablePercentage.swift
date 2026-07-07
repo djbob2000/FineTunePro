@@ -102,9 +102,11 @@ struct EditablePercentage: View {
         .padding(.horizontal, isVisuallyEditing ? 6 : 4)
         .padding(.vertical, isVisuallyEditing ? 2 : 1)
         .background {
-            GeometryReader { geo in
-                Color.clear
-                    .preference(key: FramePreferenceKey.self, value: geo.frame(in: .global))
+            if isVisuallyEditing {
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: FramePreferenceKey.self, value: geo.frame(in: .global))
+                }
             }
         }
         .onPreferenceChange(FramePreferenceKey.self) { frame in
@@ -139,7 +141,18 @@ struct EditablePercentage: View {
             }
         }
         .onChange(of: isEditing) { _, editing in
-            if !editing {
+            if editing {
+                // When editing starts, wait for the next runloop / layout pass
+                // where the frame is resolved by the newly rendered GeometryReader.
+                DispatchQueue.main.async {
+                    coordinator.install(
+                        excludingFrame: componentFrame,
+                        onClickOutside: { [self] in
+                            commit()
+                        }
+                    )
+                }
+            } else {
                 coordinator.removeMonitors()
                 // Mouse edit released first responder; ask the popup to refocus the nav anchor.
                 textEntry?.navRestoreNonce += 1
@@ -156,7 +169,7 @@ struct EditablePercentage: View {
         .animation(.easeOut(duration: 0.15), value: isEditing)
         .animation(.easeOut(duration: 0.1), value: isHovered)
     }
-
+ 
     private func startEditing() {
         // A mouse edit supersedes any in-progress keyboard entry on this row.
         textEntry?.buffer = nil
@@ -166,15 +179,7 @@ struct EditablePercentage: View {
             inputText = "\(percentage)"
         }
         isEditing = true
-
-        // Install monitors via coordinator (handles local, global, and app deactivation)
-        coordinator.install(
-            excludingFrame: componentFrame,
-            onClickOutside: { [self] in
-                commit()
-            }
-        )
-
+ 
         // Delay focus to next runloop to ensure TextField is rendered
         Task { @MainActor in
             isFocused = true

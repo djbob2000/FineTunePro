@@ -76,11 +76,12 @@ private struct VUMeterBar: View {
     /// Matches professional audio meter standards (logarithmic scale)
     private static let dbThresholds: [Float] = [-40, -30, -20, -14, -10, -6, -3, 0]
 
+    /// Precomputed linear thresholds: 10^(dB/20)
+    private static let linearThresholds: [Float] = dbThresholds.map { powf(10, $0 / 20) }
+
     /// Threshold for this bar (0-1) using dB scale
-    /// Converts dB to linear: 10^(dB/20)
     private var threshold: Float {
-        let db = Self.dbThresholds[min(index, Self.dbThresholds.count - 1)]
-        return powf(10, db / 20)
+        Self.linearThresholds[min(index, Self.linearThresholds.count - 1)]
     }
 
     /// Whether this bar should be lit based on current level
@@ -90,11 +91,10 @@ private struct VUMeterBar: View {
 
     /// Whether this bar is the peak indicator
     private var isPeakIndicator: Bool {
-        // Find which bar the peak level falls into using dB thresholds
+        // Find which bar the peak level falls into using linear thresholds
         var peakBarIndex = 0
-        for i in 0..<Self.dbThresholds.count {
-            let thresh = powf(10, Self.dbThresholds[i] / 20)
-            if peakLevel >= thresh {
+        for i in 0..<Self.linearThresholds.count {
+            if peakLevel >= Self.linearThresholds[i] {
                 peakBarIndex = i
             }
         }
@@ -293,7 +293,11 @@ struct OutputLevelMeter: View {
     }
 
     private func label(for db: Float) -> String {
-        "\(Int(db))"
+        if db == Self.labelDBs.first {
+            return "\(Int(db))"
+        } else {
+            return "\(Int(db))dB"
+        }
     }
 
     private func updateLevelHold(_ levels: [Float]) {
