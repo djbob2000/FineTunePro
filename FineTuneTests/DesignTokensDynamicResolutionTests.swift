@@ -237,4 +237,14 @@ struct DesignTokensDynamicResolutionTests {
                     equals: NSColor.white.withAlphaComponent(0.70),
                     in: Self.darkAqua)
     }
+
+    @Test("vuScaleLabel resolves correctly in light and dark")
+    func vuScaleLabel() {
+        expectColor(DesignTokens.Colors.vuScaleLabel,
+                    equals: NSColor.black,
+                    in: Self.aqua)
+        expectColor(DesignTokens.Colors.vuScaleLabel,
+                    equals: NSColor.white,
+                    in: Self.darkAqua)
+    }
 }

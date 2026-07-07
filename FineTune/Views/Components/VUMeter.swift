@@ -76,11 +76,12 @@ private struct VUMeterBar: View {
     /// Matches professional audio meter standards (logarithmic scale)
     private static let dbThresholds: [Float] = [-40, -30, -20, -14, -10, -6, -3, 0]
 
+    /// Precomputed linear thresholds: 10^(dB/20)
+    private static let linearThresholds: [Float] = dbThresholds.map { powf(10, $0 / 20) }
+
     /// Threshold for this bar (0-1) using dB scale
-    /// Converts dB to linear: 10^(dB/20)
     private var threshold: Float {
-        let db = Self.dbThresholds[min(index, Self.dbThresholds.count - 1)]
-        return powf(10, db / 20)
+        Self.linearThresholds[min(index, Self.linearThresholds.count - 1)]
     }
 
     /// Whether this bar should be lit based on current level
@@ -90,11 +91,10 @@ private struct VUMeterBar: View {
 
     /// Whether this bar is the peak indicator
     private var isPeakIndicator: Bool {
-        // Find which bar the peak level falls into using dB thresholds
+        // Find which bar the peak level falls into using linear thresholds
         var peakBarIndex = 0
-        for i in 0..<Self.dbThresholds.count {
-            let thresh = powf(10, Self.dbThresholds[i] / 20)
-            if peakLevel >= thresh {
+        for i in 0..<Self.linearThresholds.count {
+            if peakLevel >= Self.linearThresholds[i] {
                 peakBarIndex = i
             }
         }
@@ -132,11 +132,10 @@ struct OutputLevelMeter: View {
     let level: Float
     var channelLevels: [Float]? = nil
     let limiterIntensity: Float
+    let width: CGFloat
 
-    static let segmentCount = 81
-    static let minDB: Float = -24
+    static let minDB: Float = -30
     static let maxDB: Float = 0
-    static let firstRedSegmentIndex = 80
     static let holdSeconds = 0.05
     private static let holdDuration: Duration = .milliseconds(50)
     static let peakHoldFrames = 30
@@ -149,8 +148,21 @@ struct OutputLevelMeter: View {
     @State private var peakHoldTimers: [Int] = []
     @State private var isLimiterHeld = false
     @State private var limiterHoldTask: Task<Void, Never>?
+    @Environment(\.colorScheme) private var colorScheme
 
-    static let labelDBs: [Float] = [-24, -18, -12, -9, -6, -3, 0]
+    static let labelDBs: [Float] = [-30, -20, -15, -10, -6, -3, 0]
+
+    var segmentCount: Int {
+        return Int((width + 1) / 3)
+    }
+
+    var firstRedSegmentIndex: Int {
+        segmentCount - 1
+    }
+
+    var segmentsWidth: CGFloat {
+        CGFloat(segmentCount * 3 - 1)
+    }
 
     private var meterLevels: [Float] {
         channelLevels?.count == 2 ? channelLevels! : [level]
@@ -165,37 +177,29 @@ struct OutputLevelMeter: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(spacing: 2) {
-                VStack(spacing: 3) {
-                    ForEach(Array(meterLevels.enumerated()), id: \.offset) { index, channelLevel in
-                        meterRow(
-                            level: displayLevels.indices.contains(index) ? displayLevels[index] : channelLevel,
-                            peakLevel: displayPeakLevels.indices.contains(index) ? displayPeakLevels[index] : channelLevel
-                        )
-                    }
+        VStack(spacing: 0) {
+            VStack(spacing: 3) {
+                ForEach(Array(meterLevels.enumerated()), id: \.offset) { index, channelLevel in
+                    meterRow(
+                        level: displayLevels.indices.contains(index) ? displayLevels[index] : channelLevel,
+                        peakLevel: displayPeakLevels.indices.contains(index) ? displayPeakLevels[index] : channelLevel
+                    )
                 }
-                .padding(.vertical, 2)
-
-                GeometryReader { proxy in
-                    ForEach(Self.labelDBs, id: \.self) { db in
-                        Text(label(for: db))
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(DesignTokens.Colors.vuYellow)
-                            .position(x: xPosition(for: db, width: proxy.size.width), y: 5)
-                    }
-                }
-                .frame(height: 10)
             }
+            .padding(.vertical, 2)
 
-            Circle()
-                .fill(DesignTokens.Colors.vuRed.opacity(limiterLEDOpacity))
-                .frame(width: 7, height: 7)
-                .shadow(color: DesignTokens.Colors.vuRed.opacity(limiterLEDOpacity), radius: limiterLEDOpacity > 0.3 ? 3 : 0)
-                .offset(y: -6)
-                .animation(.linear(duration: 0.03), value: limiterIntensity)
+            GeometryReader { proxy in
+                ForEach(Self.labelDBs, id: \.self) { db in
+                    let x = xPosition(for: db)
+                    Text(label(for: db))
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(DesignTokens.Colors.vuScaleLabel)
+                        .position(x: x, y: 4.5)
+                }
+            }
+            .frame(width: segmentsWidth, height: 9)
         }
-        .frame(width: 322)
+        .frame(width: width)
         .accessibilityLabel("Output level")
         .onAppear {
             displayLevels = meterLevels
@@ -218,17 +222,17 @@ struct OutputLevelMeter: View {
     private func meterRow(level: Float, peakLevel: Float) -> some View {
         let channelDB = db(for: level)
         let peakDB = db(for: peakLevel)
-        let peakIndex = Self.peakSegmentIndex(forDB: peakDB)
-        return HStack(spacing: 1.5) {
-            ForEach(0..<Self.segmentCount, id: \.self) { index in
+        let peakIndex = peakSegmentIndex(forDB: peakDB)
+        return HStack(spacing: 1.0) {
+            ForEach(0..<segmentCount, id: \.self) { index in
                 let isLit = isLit(index, levelDB: channelDB)
                 let isPeak = peakDB > channelDB && index == peakIndex
-                RoundedRectangle(cornerRadius: 1)
+                Rectangle()
                     .fill(color(for: index, isLit: isLit || isPeak))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 3)
+                    .frame(width: 2, height: 3)
             }
         }
+        .frame(width: segmentsWidth)
         .animation(DesignTokens.Animation.vuMeterLevel, value: channelDB)
     }
 
@@ -238,49 +242,47 @@ struct OutputLevelMeter: View {
     }
 
     private func isLit(_ index: Int, levelDB: Float) -> Bool {
-        levelDB >= Self.db(forSegment: index)
+        levelDB >= db(forSegment: index)
     }
 
     private func color(for index: Int, isLit: Bool) -> Color {
         guard isLit else { return DesignTokens.Colors.vuUnlit }
 
-        if index >= Self.firstRedSegmentIndex {
+        if index >= firstRedSegmentIndex {
             return DesignTokens.Colors.vuRed
-        } else if Self.db(forSegment: index) >= -3 {
+        } else if db(forSegment: index) >= -3 {
             return DesignTokens.Colors.vuOrange
-        } else if Self.db(forSegment: index) >= -6 {
+        } else if db(forSegment: index) >= -6 {
             return DesignTokens.Colors.vuYellow
         } else {
             return DesignTokens.Colors.vuGreen
         }
     }
 
-    static func db(forSegment index: Int) -> Float {
+    func db(forSegment index: Int) -> Float {
         if index == firstRedSegmentIndex { return 0 }
 
         let fraction = Float(index) / Float(max(firstRedSegmentIndex, 1))
-        // Power-based warping (exponent 1.8) maps index fraction to a non-linear dB scale.
-        // This compresses the lower range (near -40 dB) and expands the upper range (near 0 dB).
-        let warpedFraction = powf(fraction, 1.0 / scaleExponent)
-        return minDB + (0 - minDB) * warpedFraction
+        let warpedFraction = powf(fraction, 1.0 / Self.scaleExponent)
+        return Self.minDB + (0 - Self.minDB) * warpedFraction
     }
 
-    private func xPosition(for db: Float, width: CGFloat) -> CGFloat {
-        let fraction = CGFloat(Self.labelPositionFraction(for: db))
-        return min(width - 6, max(6, width * fraction))
+    func segmentIndex(forDB db: Float) -> Int {
+        guard let index = peakSegmentIndex(forDB: db) else { return 0 }
+        return index
     }
 
-    static func labelPositionFraction(for db: Float) -> Float {
-        let linearFraction = (db - minDB) / (0 - minDB)
-        return powf(max(0, min(1, linearFraction)), scaleExponent)
+    func xPosition(for db: Float) -> CGFloat {
+        let index = segmentIndex(forDB: db)
+        return CGFloat(index) * 3.0 + 1.0
     }
 
-    static func peakSegmentIndex(forDB db: Float) -> Int? {
-        guard db >= minDB else { return nil }
+    func peakSegmentIndex(forDB db: Float) -> Int? {
+        guard db >= Self.minDB else { return nil }
         if db >= 0 { return firstRedSegmentIndex }
 
-        let linearFraction = (db - minDB) / (0 - minDB)
-        let warpedFraction = powf(linearFraction, scaleExponent)
+        let linearFraction = (db - Self.minDB) / (0 - Self.minDB)
+        let warpedFraction = powf(linearFraction, Self.scaleExponent)
         return min(firstRedSegmentIndex - 1, max(0, Int(floor(warpedFraction * Float(firstRedSegmentIndex)))))
     }
 
@@ -293,7 +295,11 @@ struct OutputLevelMeter: View {
     }
 
     private func label(for db: Float) -> String {
-        "\(Int(db))"
+        if db == 0 {
+            return "0dB"
+        } else {
+            return "\(Int(db))"
+        }
     }
 
     private func updateLevelHold(_ levels: [Float]) {
@@ -382,11 +388,11 @@ struct OutputLevelMeter: View {
 #Preview("Output Level Meter") {
     ComponentPreviewContainer {
         VStack(spacing: DesignTokens.Spacing.md) {
-            OutputLevelMeter(level: 0.05, limiterIntensity: 0)
-            OutputLevelMeter(level: 0.45, channelLevels: [0.35, 0.45], limiterIntensity: 0)
-            OutputLevelMeter(level: 0.98, limiterIntensity: 0)
-            OutputLevelMeter(level: 0.42, limiterIntensity: 1)
-            OutputLevelMeter(level: 1.12, limiterIntensity: 0)
+            OutputLevelMeter(level: 0.05, limiterIntensity: 0, width: 322)
+            OutputLevelMeter(level: 0.45, channelLevels: [0.35, 0.45], limiterIntensity: 0, width: 322)
+            OutputLevelMeter(level: 0.98, limiterIntensity: 0, width: 322)
+            OutputLevelMeter(level: 0.42, limiterIntensity: 1, width: 322)
+            OutputLevelMeter(level: 1.12, limiterIntensity: 0, width: 322)
         }
         .padding()
     }

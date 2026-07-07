@@ -111,6 +111,21 @@ final class SettingsManager {
     private let settingsURL: URL
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "SettingsManager")
 
+    private var isSettingUp = false
+    var appSettings: AppSettings {
+        didSet {
+            guard !isSettingUp else { return }
+            if appSettings.launchAtLogin != settings.appSettings.launchAtLogin {
+                setLaunchAtLogin(appSettings.launchAtLogin)
+            }
+            if appSettings.languagePreference != settings.appSettings.languagePreference {
+                appSettings.languagePreference.apply()
+            }
+            settings.appSettings = appSettings
+            scheduleSave()
+        }
+    }
+
     struct Settings: Codable {
         var version: Int = 11
         var appVolumes: [String: Float] = [:]
@@ -248,7 +263,11 @@ final class SettingsManager {
         let baseDir = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("FineTune")
         self.settingsURL = baseDir.appendingPathComponent("settings.json")
         self.settings = Settings()
+        self.appSettings = AppSettings()
+        self.isSettingUp = true
         loadFromDisk()
+        self.appSettings = settings.appSettings
+        self.isSettingUp = false
     }
 
     func getVolume(for identifier: String) -> Float? {
@@ -952,10 +971,7 @@ final class SettingsManager {
 
     // MARK: - App-Wide Settings
 
-    var appSettings: AppSettings {
-        get { settings.appSettings }
-        set { updateAppSettings(newValue) }
-    }
+    // (Stored appSettings property is declared at the top of the class)
 
     // MARK: - Per-App & Per-Device Smart Volume
 
@@ -1066,26 +1082,17 @@ final class SettingsManager {
     }
 
     func updateAppSettings(_ newSettings: AppSettings) {
-        // Handle launch at login separately via ServiceManagement
-        if newSettings.launchAtLogin != settings.appSettings.launchAtLogin {
-            setLaunchAtLogin(newSettings.launchAtLogin)
-        }
-        if newSettings.languagePreference != settings.appSettings.languagePreference {
-            newSettings.languagePreference.apply()
-        }
-        settings.appSettings = newSettings
-        scheduleSave()
+        appSettings = newSettings
     }
 
     // MARK: - All Devices
     
     var showAllDevices: Bool {
-        settings.appSettings.showAllDevices
+        appSettings.showAllDevices
     }
 
     func setShowAllDevices(_ show: Bool) {
-        settings.appSettings.showAllDevices = show
-        scheduleSave()
+        appSettings.showAllDevices = show
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -1111,6 +1118,7 @@ final class SettingsManager {
 
     /// Resets all per-app settings and app-wide settings to defaults
     func resetAllSettings() {
+        isSettingUp = true
         settings.appVolumes.removeAll()
         settings.appBoosts.removeAll()
         settings.appDeviceRouting.removeAll()
@@ -1128,9 +1136,11 @@ final class SettingsManager {
         settings.ignoredAppInfo.removeAll()
         let oldLanguagePreference = settings.appSettings.languagePreference
         settings.appSettings = AppSettings()
+        appSettings = AppSettings()
         if oldLanguagePreference != .system {
-            settings.appSettings.languagePreference.apply()
+            appSettings.languagePreference.apply()
         }
+        isSettingUp = false
         settings.systemSoundsFollowsDefault = true
         settings.lockedInputDeviceUID = nil
         settings.preferredInputDeviceUID = nil

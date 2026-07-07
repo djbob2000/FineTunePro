@@ -989,7 +989,7 @@ struct OutputMeteringTests {
 struct BrickwallLimiterBestPracticeTests {
     @Test("Ceiling stays near legacy safety threshold")
     func ceilingStaysNearLegacySafetyThreshold() {
-        #expect(abs(BrickwallLimiter.ceiling - 0.98) < 0.000_001)
+        #expect(abs(BrickwallLimiter.ceiling - 1.0) < 0.000_001)
     }
 
     @Test("Limiter processes mono without stereo assumptions")

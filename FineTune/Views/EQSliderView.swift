@@ -114,6 +114,7 @@ struct EQSliderView: View {
                                 Text(formatGainValue(localGain))
                                     .font(.system(size: 8, weight: .regular).monospacedDigit())
                                     .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                    .lineLimit(1)
                                     .frame(width: 24, alignment: .leading)
                                     .position(x: geo.size.width / 2 + 23, y: thumbY)
                             } else {
@@ -122,6 +123,7 @@ struct EQSliderView: View {
                                     Text(formatGain(localGain))
                                         .font(.system(size: 9, weight: .medium).monospacedDigit())
                                         .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                        .lineLimit(1)
                                         .fixedSize()
                                         .position(x: geo.size.width / 2, y: thumbY - thumbSize / 2 - 10)
                                 }

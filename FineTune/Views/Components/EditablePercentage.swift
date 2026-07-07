@@ -69,11 +69,9 @@ struct EditablePercentage: View {
                     .font(DesignTokens.Typography.percentage)
                     .foregroundStyle(textColor)
                     .multilineTextAlignment(.trailing)
-                if !useLogScale {
-                    Text("%")
-                        .font(DesignTokens.Typography.percentage)
-                        .foregroundStyle(textColor)
-                }
+                Text(useLogScale ? "dB" : "%")
+                    .font(DesignTokens.Typography.percentage)
+                    .foregroundStyle(textColor)
             } else if isEditing {
                 TextField("", text: $inputText)
                     .textFieldStyle(.plain)
@@ -85,15 +83,13 @@ struct EditablePercentage: View {
                     .onExitCommand { cancel() }
                     .fixedSize()  // Size to content
 
-                if !useLogScale {
-                    Text("%")
-                        .font(DesignTokens.Typography.percentage)
-                        .foregroundStyle(textColor)
-                }
+                Text(useLogScale ? "dB" : "%")
+                    .font(DesignTokens.Typography.percentage)
+                    .foregroundStyle(textColor)
             } else {
                 // Display mode: tappable percentage
                 if useLogScale {
-                    Text(decibels)
+                    Text("\(decibels)dB")
                         .font(DesignTokens.Typography.percentage)
                         .foregroundStyle(isHovered ? DesignTokens.Colors.textPrimary : textColor)
                 } else {
@@ -106,9 +102,11 @@ struct EditablePercentage: View {
         .padding(.horizontal, isVisuallyEditing ? 6 : 4)
         .padding(.vertical, isVisuallyEditing ? 2 : 1)
         .background {
-            GeometryReader { geo in
-                Color.clear
-                    .preference(key: FramePreferenceKey.self, value: geo.frame(in: .global))
+            if isVisuallyEditing {
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: FramePreferenceKey.self, value: geo.frame(in: .global))
+                }
             }
         }
         .onPreferenceChange(FramePreferenceKey.self) { frame in
@@ -143,7 +141,18 @@ struct EditablePercentage: View {
             }
         }
         .onChange(of: isEditing) { _, editing in
-            if !editing {
+            if editing {
+                // When editing starts, wait for the next runloop / layout pass
+                // where the frame is resolved by the newly rendered GeometryReader.
+                DispatchQueue.main.async {
+                    coordinator.install(
+                        excludingFrame: componentFrame,
+                        onClickOutside: { [self] in
+                            commit()
+                        }
+                    )
+                }
+            } else {
                 coordinator.removeMonitors()
                 // Mouse edit released first responder; ask the popup to refocus the nav anchor.
                 textEntry?.navRestoreNonce += 1
@@ -160,7 +169,7 @@ struct EditablePercentage: View {
         .animation(.easeOut(duration: 0.15), value: isEditing)
         .animation(.easeOut(duration: 0.1), value: isHovered)
     }
-
+ 
     private func startEditing() {
         // A mouse edit supersedes any in-progress keyboard entry on this row.
         textEntry?.buffer = nil
@@ -170,15 +179,7 @@ struct EditablePercentage: View {
             inputText = "\(percentage)"
         }
         isEditing = true
-
-        // Install monitors via coordinator (handles local, global, and app deactivation)
-        coordinator.install(
-            excludingFrame: componentFrame,
-            onClickOutside: { [self] in
-                commit()
-            }
-        )
-
+ 
         // Delay focus to next runloop to ensure TextField is rendered
         Task { @MainActor in
             isFocused = true
@@ -188,6 +189,7 @@ struct EditablePercentage: View {
     private func parseValue(_ input: String) -> Double? {
         let cleaned = input
             .replacing("%", with: "")
+            .replacingOccurrences(of: "dB", with: "", options: .caseInsensitive)
             .trimmingCharacters(in: .whitespaces)
 
         guard let newValue = Float(cleaned) else { return nil }
