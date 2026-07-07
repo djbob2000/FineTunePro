@@ -1262,18 +1262,16 @@ final class AudioEngine {
     private func updateTapSmartVolume(forApp app: AudioApp) {
         guard let tap = taps[app.id] else { return }
         let deviceUID = tap.currentDeviceUID ?? ""
-        let isBuiltIn = deviceMonitor.device(for: deviceUID)?.transportType == .builtIn
-        let isEnabled = isBuiltIn ? false : (settingsManager.getAppSmartVolumeEnabled(for: app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: deviceUID))
+        let isEnabled = settingsManager.getAppSmartVolumeEnabled(for: app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: deviceUID)
         var settings = LoudnessEqualizerSettings()
         settings.enabled = isEnabled
         tap.updateLoudnessEqualization(settings)
     }
 
     private func updateTapsSmartVolume(forDevice deviceUID: String) {
-        let isBuiltIn = deviceMonitor.device(for: deviceUID)?.transportType == .builtIn
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
-            let isEnabled = isBuiltIn ? false : (settingsManager.getAppSmartVolumeEnabled(for: tap.app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: deviceUID))
+            let isEnabled = settingsManager.getAppSmartVolumeEnabled(for: tap.app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: deviceUID)
             var settings = LoudnessEqualizerSettings()
             settings.enabled = isEnabled
             tap.updateLoudnessEqualization(settings)
@@ -1466,10 +1464,10 @@ final class AudioEngine {
     private func tapInitialState(forApp app: AudioApp, primaryDeviceUID: String, deviceVolume: Float) -> TapInitialState {
         // Build initial LoudnessEqualizerSettings (Smart Volume).
         var loudnessEqSettings = LoudnessEqualizerSettings()
-        let isBuiltIn = deviceMonitor.device(for: primaryDeviceUID)?.transportType == .builtIn
-        let isSmartVolumeActive = isBuiltIn ? false : (settingsManager.getAppSmartVolumeEnabled(for: app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: primaryDeviceUID))
+        let isSmartVolumeActive = settingsManager.getAppSmartVolumeEnabled(for: app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: primaryDeviceUID)
         loudnessEqSettings.enabled = isSmartVolumeActive
 
+        let isBuiltIn = deviceMonitor.device(for: primaryDeviceUID)?.transportType == .builtIn
         let loudnessEnabled = isBuiltIn ? false : settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: primaryDeviceUID)

@@ -360,7 +360,7 @@ struct DeviceRow: View {
             if let onSmartVolumeToggle {
                 SmartVolumeButton(
                     isEnabled: isSmartVolumeEnabled,
-                    isDisabled: device.transportType == .builtIn,
+                    isDisabled: false,
                     onTap: { onSmartVolumeToggle(!isSmartVolumeEnabled) }
                 )
             }

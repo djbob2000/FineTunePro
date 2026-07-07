@@ -564,128 +564,35 @@ struct MenuBarPopupView: View {
                 }
             } else if showingInputDevices {
                 ForEach(sortedInputDevices) { device in
-                    InputDeviceRow(
+                    ObservedInputDeviceRow(
                         device: device,
-                        isDefault: device.id == deviceVolumeMonitor.defaultInputDeviceID,
-                        volume: deviceVolumeMonitor.inputVolumes[device.id] ?? 1.0,
-                        isMuted: deviceVolumeMonitor.inputMuteStates[device.id] ?? false,
-                        useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
-                        onSetDefault: {
-                            audioEngine.setLockedInputDevice(device)
-                        },
-                        onVolumeChange: { volume in
-                            deviceVolumeMonitor.setInputVolume(for: device.id, to: volume)
-                        },
-                        onMuteToggle: {
-                            let currentMute = deviceVolumeMonitor.inputMuteStates[device.id] ?? false
-                            deviceVolumeMonitor.setInputMute(for: device.id, to: !currentMute)
-                        },
+                        audioEngine: audioEngine,
+                        deviceVolumeMonitor: deviceVolumeMonitor,
                         isFocused: hasKeyboardEngaged && selectedRow == .device(uid: device.uid)
                     )
                     .id(PopupKeyboardNavModel.RowID.device(uid: device.uid))
                 }
             } else {
                 ForEach(sortedDevices) { device in
-                    let selection = audioEngine.getAutoEQSelection(for: device.uid)
-                    let profileName: String? = {
-                        guard let sel = selection else { return nil }
-                        return audioEngine.autoEQProfileManager.profile(for: sel.profileID)?.name
-                            ?? audioEngine.autoEQProfileManager.catalogEntry(for: sel.profileID)?.name
-                    }()
-
-                    DeviceRow(
+                    ObservedDeviceRow(
                         device: device,
-                        isDefault: device.id == deviceVolumeMonitor.defaultDeviceID,
-                        volume: deviceVolumeMonitor.volumes[device.id] ?? 1.0,
-                        isMuted: deviceVolumeMonitor.muteStates[device.id] ?? false,
-                        volumeBackend: audioEngine.outputVolumeBackend(for: device.id),
-                        useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
-                        onSetDefault: {
-                            audioEngine.setDefaultOutputDevice(device.id)
-                        },
-                        onVolumeChange: { volume in
-                            deviceVolumeMonitor.setVolume(for: device.id, to: volume)
-                        },
-                        onMuteToggle: {
-                            let currentMute = deviceVolumeMonitor.muteStates[device.id] ?? false
-                            deviceVolumeMonitor.setMute(for: device.id, to: !currentMute)
-                        },
-                        autoEQProfileName: profileName,
-                        autoEQEnabled: selection?.isEnabled ?? false,
-                        onAutoEQToggle: { enabled in
-                            audioEngine.setAutoEQEnabled(for: device.uid, enabled: enabled)
-                        },
-                        autoEQProfileManager: audioEngine.autoEQProfileManager,
-                        autoEQSelection: selection,
-                        autoEQFavoriteIDs: audioEngine.settingsManager.favoriteAutoEQProfileIDs,
-                        onAutoEQSelect: { profile in
-                            audioEngine.setAutoEQProfile(for: device.uid, profileID: profile?.id)
-                        },
-                        onAutoEQImport: {
-                            importAutoEQFile(for: device.uid)
-                        },
-                        onAutoEQToggleFavorite: { id in
-                            if audioEngine.settingsManager.isAutoEQFavorite(id: id) {
-                                audioEngine.settingsManager.unfavoriteAutoEQProfile(id: id)
-                            } else {
-                                audioEngine.settingsManager.favoriteAutoEQProfile(id: id)
-                            }
-                        },
-                        autoEQImportError: autoEQImportError,
-                        autoEQPreampEnabled: audioEngine.autoEQPreampEnabled,
-                        onAutoEQPreampToggle: {
-                            audioEngine.setAutoEQPreampEnabled(!audioEngine.autoEQPreampEnabled)
-                        },
-                        isLoudnessEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
-                        isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
-                        onSmartVolumeToggle: { enabled in
-                            audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
-                        },
+                        audioEngine: audioEngine,
+                        deviceVolumeMonitor: deviceVolumeMonitor,
                         isFocused: hasKeyboardEngaged && selectedRow == .device(uid: device.uid),
-                        deviceAUEffectChain: audioEngine.getDeviceAUEffectChain(deviceUID: device.uid),
-                        isDeviceAUChainBypassed: audioEngine.isDeviceAUChainBypassed(deviceUID: device.uid),
-                        auPluginScanner: auPluginScanner,
-                        getFavoriteAUPlugins: { audioEngine.favoriteAUPluginIDs },
-                        getAUCrashHistory: { audioEngine.auCrashHistory },
                         isFXExpanded: expandedDeviceFXUID == device.uid,
                         onFXToggle: {
                             withAnimation(DesignTokens.Animation.hover) {
                                 expandedDeviceFXUID = expandedDeviceFXUID == device.uid ? nil : device.uid
                             }
                         },
-                        onAddDeviceAUEffect: { plugin in
-                            audioEngine.addDeviceAUEffect(deviceUID: device.uid, plugin: plugin)
+                        autoEQImportError: autoEQImportError,
+                        importAutoEQFile: {
+                            importAutoEQFile(for: device.uid)
                         },
-                        onRemoveDeviceAUEffect: { entryID in
-                            audioEngine.removeDeviceAUEffect(deviceUID: device.uid, entryID: entryID)
-                        },
-                        onToggleDeviceAUEffect: { entryID, enabled in
-                            audioEngine.toggleDeviceAUEffect(deviceUID: device.uid, entryID: entryID, enabled: enabled)
-                        },
-                        onDeviceAUBypassToggle: {
-                            let current = audioEngine.isDeviceAUChainBypassed(deviceUID: device.uid)
-                            audioEngine.setDeviceAUChainBypassed(deviceUID: device.uid, bypassed: !current)
-                        },
-                        onToggleAUFavorite: { pluginID in
-                            audioEngine.toggleAUPluginFavorite(pluginID)
-                        },
-                        onOpenDeviceAUUI: { entryID in
-                            audioEngine.openDeviceAUPluginUI(deviceUID: device.uid, entryID: entryID)
-                        },
-                        onOpenDeviceAUGenericUI: { entryID in
-                            audioEngine.openDeviceAUPluginUI(deviceUID: device.uid, entryID: entryID, forceGeneric: true)
-                        },
-                        deviceAUFailedEntryIDs: audioEngine.getDeviceAUFailedEntryIDs(deviceUID: device.uid),
-                        getDeviceAUFactoryPresets: { entryID in
-                            audioEngine.getDeviceAUFactoryPresets(deviceUID: device.uid, entryID: entryID)
-                        },
-                        onSelectDeviceAUFactoryPreset: { entryID, presetIndex in
-                            audioEngine.selectDeviceAUFactoryPreset(deviceUID: device.uid, entryID: entryID, presetIndex: presetIndex)
-                        }
+                        auPluginScanner: auPluginScanner
                     )
                     .id(PopupKeyboardNavModel.RowID.device(uid: device.uid))
                 }
-
             }
         }
     }
@@ -748,10 +655,6 @@ struct MenuBarPopupView: View {
                         onOverrideChange: { newTier in
                             audioEngine.settingsManager.setDeviceVolumeTierOverride(for: device.uid, to: newTier)
                             deviceVolumeMonitor.applyTierOverrideChange(for: device.id)
-                        },
-                        isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
-                        onSmartVolumeToggle: { enabled in
-                            audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
                         },
                         isLoudnessCompensationEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
                         onLoudnessCompensationToggle: { enabled in
@@ -933,188 +836,45 @@ struct MenuBarPopupView: View {
             ForEach(audioEngine.displayableApps) { displayableApp in
                 switch displayableApp {
                 case .active(let app):
-                    activeAppRow(app: app, displayableApp: displayableApp, userPresets: presets, scrollProxy: scrollProxy)
+                    ObservedAppRow(
+                        app: app,
+                        displayableApp: displayableApp,
+                        audioEngine: audioEngine,
+                        deviceVolumeMonitor: deviceVolumeMonitor,
+                        sortedDevices: sortedDevices,
+                        userPresets: presets,
+                        isEQExpanded: expandedRowID == displayableApp.id,
+                        onEQToggle: {
+                            toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
+                        },
+                        isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id),
+                        isPopupVisible: isPopupVisible,
+                        auPluginScanner: auPluginScanner
+                    )
+                    .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
 
                 case .pinnedInactive(let info):
-                    inactiveAppRow(info: info, displayableApp: displayableApp, userPresets: presets, scrollProxy: scrollProxy)
+                    ObservedInactiveAppRow(
+                        info: info,
+                        displayableApp: displayableApp,
+                        audioEngine: audioEngine,
+                        deviceVolumeMonitor: deviceVolumeMonitor,
+                        sortedDevices: sortedDevices,
+                        userPresets: presets,
+                        isEQExpanded: expandedRowID == displayableApp.id,
+                        onEQToggle: {
+                            toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
+                        },
+                        isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id)
+                    )
+                    .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Row for an active app (currently producing audio)
-    @ViewBuilder
-    private func activeAppRow(app: AudioApp, displayableApp: DisplayableApp, userPresets: [UserEQPreset], scrollProxy: ScrollViewProxy) -> some View {
-        if let deviceUID = audioEngine.getDeviceUID(for: app) {
-            AppRowWithLevelPolling(
-                app: app,
-                volume: audioEngine.getVolume(for: app),
-                isMuted: audioEngine.getMute(for: app),
-                useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
-                devices: sortedDevices,
-                selectedDeviceUID: deviceUID,
-                selectedDeviceUIDs: audioEngine.getSelectedDeviceUIDs(for: app),
-                isFollowingDefault: audioEngine.isFollowingDefault(for: app),
-                defaultDeviceUID: deviceVolumeMonitor.defaultDeviceUID,
-                deviceSelectionMode: audioEngine.getDeviceSelectionMode(for: app),
-                isSmartVolumeEnabled: audioEngine.getAppSmartVolumeEnabled(for: app),
-                onSmartVolumeToggle: { enabled in
-                    audioEngine.setAppSmartVolumeEnabled(for: app, enabled: enabled)
-                },
-                getAudioLevel: { audioEngine.getAudioLevel(for: app) },
-                isPopupVisible: isPopupVisible,
-                onVolumeChange: { volume in
-                    audioEngine.setVolume(for: app, to: volume)
-                },
-                onMuteChange: { muted in
-                    audioEngine.setMute(for: app, to: muted)
-                },
-                onDeviceSelected: { newDeviceUID in
-                    audioEngine.setDevice(for: app, deviceUID: newDeviceUID)
-                },
-                onDevicesSelected: { uids in
-                    audioEngine.setSelectedDeviceUIDs(for: app, to: uids)
-                },
-                onDeviceModeChange: { mode in
-                    audioEngine.setDeviceSelectionMode(for: app, to: mode)
-                },
-                onSelectFollowDefault: {
-                    audioEngine.setDevice(for: app, deviceUID: nil)
-                },
-                onAppActivate: {
-                    activateApp(pid: app.id, bundleID: app.bundleID)
-                },
-                eqSettings: audioEngine.getEQSettings(for: app),
-                userPresets: userPresets,
-                onEQChange: { settings in
-                    audioEngine.setEQSettings(settings, for: app)
-                },
-                onUserPresetSelected: { userPreset in
-                    // Apply only bandGains — preserve app's current isEnabled state
-                    var current = audioEngine.getEQSettings(for: app)
-                    current.bandGains = userPreset.settings.bandGains
-                    audioEngine.setEQSettings(current, for: app)
-                },
-                onSavePreset: { name, settings in
-                    audioEngine.settingsManager.createUserPreset(name: name, settings: settings)
-                },
-                onDeleteUserPreset: { id in
-                    audioEngine.settingsManager.deleteUserPreset(id: id)
-                },
-                onRenameUserPreset: { id, newName in
-                    audioEngine.settingsManager.updateUserPreset(id: id, name: newName)
-                },
-                isEQExpanded: expandedRowID == displayableApp.id,
-                onEQToggle: {
-                    toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
-                },
-                isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id),
-                auEffectChain: audioEngine.getAUEffectChain(for: app),
-                isAUChainBypassed: audioEngine.isAUChainBypassed(for: app),
-                auPluginScanner: auPluginScanner,
-                getFavoriteAUPlugins: { audioEngine.favoriteAUPluginIDs },
-                getAUCrashHistory: { audioEngine.auCrashHistory },
-                onAddAUEffect: { plugin in
-                    audioEngine.addAUEffect(for: app, plugin: plugin)
-                },
-                onRemoveAUEffect: { entryID in
-                    audioEngine.removeAUEffect(for: app, entryID: entryID)
-                },
-                onToggleAUEffect: { entryID, enabled in
-                    audioEngine.toggleAUEffect(for: app, entryID: entryID, enabled: enabled)
-                },
-                onAUBypassToggle: {
-                    let current = audioEngine.isAUChainBypassed(for: app)
-                    audioEngine.setAUChainBypassed(for: app, bypassed: !current)
-                },
-                onToggleAUFavorite: { pluginID in
-                    audioEngine.toggleAUPluginFavorite(pluginID)
-                },
-                onOpenAUUI: { entryID in
-                    audioEngine.openAUPluginUI(for: app, entryID: entryID)
-                },
-                onOpenAUGenericUI: { entryID in
-                    audioEngine.openAUPluginUI(for: app, entryID: entryID, forceGeneric: true)
-                },
-                auFailedEntryIDs: audioEngine.getAUFailedEntryIDs(for: app),
-                getAUFactoryPresets: { entryID in
-                    audioEngine.getAUFactoryPresets(for: app, entryID: entryID)
-                },
-                onSelectAUFactoryPreset: { entryID, presetIndex in
-                    audioEngine.selectAUFactoryPreset(for: app, entryID: entryID, presetIndex: presetIndex)
-                }
-            )
-            .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
-        }
-    }
-
-    /// Row for a pinned inactive app (not currently producing audio)
-    @ViewBuilder
-    private func inactiveAppRow(info: PinnedAppInfo, displayableApp: DisplayableApp, userPresets: [UserEQPreset], scrollProxy: ScrollViewProxy) -> some View {
-        let identifier = info.persistenceIdentifier
-        InactiveAppRow(
-            appInfo: info,
-            icon: displayableApp.icon,
-            volume: audioEngine.getVolumeForInactive(identifier: identifier),
-            devices: sortedDevices,
-            selectedDeviceUID: audioEngine.getDeviceRoutingForInactive(identifier: identifier),
-            selectedDeviceUIDs: audioEngine.getSelectedDeviceUIDsForInactive(identifier: identifier),
-            isFollowingDefault: audioEngine.isFollowingDefaultForInactive(identifier: identifier),
-            defaultDeviceUID: deviceVolumeMonitor.defaultDeviceUID,
-            deviceSelectionMode: audioEngine.getDeviceSelectionModeForInactive(identifier: identifier),
-            isMuted: audioEngine.getMuteForInactive(identifier: identifier),
-            isSmartVolumeEnabled: audioEngine.settingsManager.getAppSmartVolumeEnabled(for: identifier),
-            useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
-            onSmartVolumeToggle: { enabled in
-                audioEngine.settingsManager.setAppSmartVolumeEnabled(for: identifier, to: enabled)
-            },
-            onVolumeChange: { volume in
-                audioEngine.setVolumeForInactive(identifier: identifier, to: volume)
-            },
-            onMuteChange: { muted in
-                audioEngine.setMuteForInactive(identifier: identifier, to: muted)
-            },
-            onDeviceSelected: { newDeviceUID in
-                audioEngine.setDeviceRoutingForInactive(identifier: identifier, deviceUID: newDeviceUID)
-            },
-            onDevicesSelected: { uids in
-                audioEngine.setSelectedDeviceUIDsForInactive(identifier: identifier, to: uids)
-            },
-            onDeviceModeChange: { mode in
-                audioEngine.setDeviceSelectionModeForInactive(identifier: identifier, to: mode)
-            },
-            onSelectFollowDefault: {
-                audioEngine.setDeviceRoutingForInactive(identifier: identifier, deviceUID: nil)
-            },
-            eqSettings: audioEngine.getEQSettingsForInactive(identifier: identifier),
-            userPresets: userPresets,
-            onEQChange: { settings in
-                audioEngine.setEQSettingsForInactive(settings, identifier: identifier)
-            },
-            onUserPresetSelected: { userPreset in
-                // Apply only bandGains — preserve app's current isEnabled state
-                var current = audioEngine.getEQSettingsForInactive(identifier: identifier)
-                current.bandGains = userPreset.settings.bandGains
-                audioEngine.setEQSettingsForInactive(current, identifier: identifier)
-            },
-            onSavePreset: { name, settings in
-                audioEngine.settingsManager.createUserPreset(name: name, settings: settings)
-            },
-            onDeleteUserPreset: { id in
-                audioEngine.settingsManager.deleteUserPreset(id: id)
-            },
-            onRenameUserPreset: { id, newName in
-                audioEngine.settingsManager.updateUserPreset(id: id, name: newName)
-            },
-            isEQExpanded: expandedRowID == displayableApp.id,
-            onEQToggle: {
-                toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
-            },
-            isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id)
-        )
-        .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
-    }
+    // (Helper functions removed in favor of ObservedAppRow / ObservedInactiveAppRow views)
 
     /// Toggle EQ panel for an app (shared between active and inactive rows)
     private func toggleEQ(for appID: String, scrollProxy: ScrollViewProxy) {
@@ -1640,3 +1400,331 @@ struct MenuBarPopupView: View {
         }
     }
 }
+
+// MARK: - Observed Row Wrappers
+
+@MainActor
+struct ObservedDeviceRow: View {
+    let device: AudioDevice
+    @Bindable var audioEngine: AudioEngine
+    @Bindable var deviceVolumeMonitor: DeviceVolumeMonitor
+    let isFocused: Bool
+    let isFXExpanded: Bool
+    let onFXToggle: () -> Void
+    let autoEQImportError: String?
+    let importAutoEQFile: () -> Void
+    let auPluginScanner: AUPluginScanner?
+
+    var body: some View {
+        let selection = audioEngine.getAutoEQSelection(for: device.uid)
+        let profileName: String? = {
+            guard let sel = selection else { return nil }
+            return audioEngine.autoEQProfileManager.profile(for: sel.profileID)?.name
+                ?? audioEngine.autoEQProfileManager.catalogEntry(for: sel.profileID)?.name
+        }()
+
+        DeviceRow(
+            device: device,
+            isDefault: device.id == deviceVolumeMonitor.defaultDeviceID,
+            volume: deviceVolumeMonitor.volumes[device.id] ?? 1.0,
+            isMuted: deviceVolumeMonitor.muteStates[device.id] ?? false,
+            volumeBackend: audioEngine.outputVolumeBackend(for: device.id),
+            useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
+            onSetDefault: {
+                audioEngine.setDefaultOutputDevice(device.id)
+            },
+            onVolumeChange: { volume in
+                deviceVolumeMonitor.setVolume(for: device.id, to: volume)
+            },
+            onMuteToggle: {
+                let currentMute = deviceVolumeMonitor.muteStates[device.id] ?? false
+                deviceVolumeMonitor.setMute(for: device.id, to: !currentMute)
+            },
+            autoEQProfileName: profileName,
+            autoEQEnabled: selection?.isEnabled ?? false,
+            onAutoEQToggle: { enabled in
+                audioEngine.setAutoEQEnabled(for: device.uid, enabled: enabled)
+            },
+            autoEQProfileManager: audioEngine.autoEQProfileManager,
+            autoEQSelection: selection,
+            autoEQFavoriteIDs: audioEngine.settingsManager.favoriteAutoEQProfileIDs,
+            onAutoEQSelect: { profile in
+                audioEngine.setAutoEQProfile(for: device.uid, profileID: profile?.id)
+            },
+            onAutoEQImport: importAutoEQFile,
+            onAutoEQToggleFavorite: { id in
+                if audioEngine.settingsManager.isAutoEQFavorite(id: id) {
+                    audioEngine.settingsManager.unfavoriteAutoEQProfile(id: id)
+                } else {
+                    audioEngine.settingsManager.favoriteAutoEQProfile(id: id)
+                }
+            },
+            autoEQImportError: autoEQImportError,
+            autoEQPreampEnabled: audioEngine.autoEQPreampEnabled,
+            onAutoEQPreampToggle: {
+                audioEngine.setAutoEQPreampEnabled(!audioEngine.autoEQPreampEnabled)
+            },
+            isLoudnessEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
+            isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
+            onSmartVolumeToggle: { enabled in
+                audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
+            },
+            isFocused: isFocused,
+            deviceAUEffectChain: audioEngine.getDeviceAUEffectChain(deviceUID: device.uid),
+            isDeviceAUChainBypassed: audioEngine.isDeviceAUChainBypassed(deviceUID: device.uid),
+            auPluginScanner: auPluginScanner,
+            getFavoriteAUPlugins: { audioEngine.favoriteAUPluginIDs },
+            getAUCrashHistory: { audioEngine.auCrashHistory },
+            isFXExpanded: isFXExpanded,
+            onFXToggle: onFXToggle,
+            onAddDeviceAUEffect: { plugin in
+                audioEngine.addDeviceAUEffect(deviceUID: device.uid, plugin: plugin)
+            },
+            onRemoveDeviceAUEffect: { entryID in
+                audioEngine.removeDeviceAUEffect(deviceUID: device.uid, entryID: entryID)
+            },
+            onToggleDeviceAUEffect: { entryID, enabled in
+                audioEngine.toggleDeviceAUEffect(deviceUID: device.uid, entryID: entryID, enabled: enabled)
+            },
+            onDeviceAUBypassToggle: {
+                let current = audioEngine.isDeviceAUChainBypassed(deviceUID: device.uid)
+                audioEngine.setDeviceAUChainBypassed(deviceUID: device.uid, bypassed: !current)
+            },
+            onToggleAUFavorite: { pluginID in
+                audioEngine.toggleAUPluginFavorite(pluginID)
+            },
+            onOpenDeviceAUUI: { entryID in
+                audioEngine.openDeviceAUPluginUI(deviceUID: device.uid, entryID: entryID)
+            },
+            onOpenDeviceAUGenericUI: { entryID in
+                audioEngine.openDeviceAUPluginUI(deviceUID: device.uid, entryID: entryID, forceGeneric: true)
+            },
+            deviceAUFailedEntryIDs: audioEngine.getDeviceAUFailedEntryIDs(deviceUID: device.uid),
+            getDeviceAUFactoryPresets: { entryID in
+                audioEngine.getDeviceAUFactoryPresets(deviceUID: device.uid, entryID: entryID)
+            },
+            onSelectDeviceAUFactoryPreset: { entryID, presetIndex in
+                audioEngine.selectDeviceAUFactoryPreset(deviceUID: device.uid, entryID: entryID, presetIndex: presetIndex)
+            }
+        )
+    }
+}
+
+@MainActor
+struct ObservedInputDeviceRow: View {
+    let device: AudioDevice
+    @Bindable var audioEngine: AudioEngine
+    @Bindable var deviceVolumeMonitor: DeviceVolumeMonitor
+    let isFocused: Bool
+
+    var body: some View {
+        InputDeviceRow(
+            device: device,
+            isDefault: device.id == deviceVolumeMonitor.defaultInputDeviceID,
+            volume: deviceVolumeMonitor.inputVolumes[device.id] ?? 1.0,
+            isMuted: deviceVolumeMonitor.inputMuteStates[device.id] ?? false,
+            useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
+            onSetDefault: {
+                audioEngine.setLockedInputDevice(device)
+            },
+            onVolumeChange: { volume in
+                deviceVolumeMonitor.setInputVolume(for: device.id, to: volume)
+            },
+            onMuteToggle: {
+                let currentMute = deviceVolumeMonitor.inputMuteStates[device.id] ?? false
+                deviceVolumeMonitor.setInputMute(for: device.id, to: !currentMute)
+            },
+            isFocused: isFocused
+        )
+    }
+}
+
+@MainActor
+struct ObservedAppRow: View {
+    let app: AudioApp
+    let displayableApp: DisplayableApp
+    @Bindable var audioEngine: AudioEngine
+    @Bindable var deviceVolumeMonitor: DeviceVolumeMonitor
+    let sortedDevices: [AudioDevice]
+    let userPresets: [UserEQPreset]
+    let isEQExpanded: Bool
+    let onEQToggle: () -> Void
+    let isFocused: Bool
+    let isPopupVisible: Bool
+    let auPluginScanner: AUPluginScanner?
+
+    var body: some View {
+        if let deviceUID = audioEngine.getDeviceUID(for: app) {
+            AppRowWithLevelPolling(
+                app: app,
+                volume: audioEngine.getVolume(for: app),
+                isMuted: audioEngine.getMute(for: app),
+                useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
+                devices: sortedDevices,
+                selectedDeviceUID: deviceUID,
+                selectedDeviceUIDs: audioEngine.getSelectedDeviceUIDs(for: app),
+                isFollowingDefault: audioEngine.isFollowingDefault(for: app),
+                defaultDeviceUID: deviceVolumeMonitor.defaultDeviceUID,
+                deviceSelectionMode: audioEngine.getDeviceSelectionMode(for: app),
+                isSmartVolumeEnabled: audioEngine.getAppSmartVolumeEnabled(for: app),
+                onSmartVolumeToggle: { enabled in
+                    audioEngine.setAppSmartVolumeEnabled(for: app, enabled: enabled)
+                },
+                getAudioLevel: { audioEngine.getAudioLevel(for: app) },
+                isPopupVisible: isPopupVisible,
+                onVolumeChange: { volume in
+                    audioEngine.setVolume(for: app, to: volume)
+                },
+                onMuteChange: { muted in
+                    audioEngine.setMute(for: app, to: muted)
+                },
+                onDeviceSelected: { newDeviceUID in
+                    audioEngine.setDevice(for: app, deviceUID: newDeviceUID)
+                },
+                onDevicesSelected: { uids in
+                    audioEngine.setSelectedDeviceUIDs(for: app, to: uids)
+                },
+                onDeviceModeChange: { mode in
+                    audioEngine.setDeviceSelectionMode(for: app, to: mode)
+                },
+                onSelectFollowDefault: {
+                    audioEngine.setDevice(for: app, deviceUID: nil)
+                },
+                onAppActivate: {
+                    NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == app.id })?.activate(options: .activateIgnoringOtherApps)
+                },
+                eqSettings: audioEngine.getEQSettings(for: app),
+                userPresets: userPresets,
+                onEQChange: { settings in
+                    audioEngine.setEQSettings(settings, for: app)
+                },
+                onUserPresetSelected: { userPreset in
+                    var current = audioEngine.getEQSettings(for: app)
+                    current.bandGains = userPreset.settings.bandGains
+                    audioEngine.setEQSettings(current, for: app)
+                },
+                onSavePreset: { name, settings in
+                    audioEngine.settingsManager.createUserPreset(name: name, settings: settings)
+                },
+                onDeleteUserPreset: { id in
+                    audioEngine.settingsManager.deleteUserPreset(id: id)
+                },
+                onRenameUserPreset: { id, newName in
+                    audioEngine.settingsManager.updateUserPreset(id: id, name: newName)
+                },
+                isEQExpanded: isEQExpanded,
+                onEQToggle: onEQToggle,
+                isFocused: isFocused,
+                auEffectChain: audioEngine.getAUEffectChain(for: app),
+                isAUChainBypassed: audioEngine.isAUChainBypassed(for: app),
+                auPluginScanner: auPluginScanner,
+                getFavoriteAUPlugins: { audioEngine.favoriteAUPluginIDs },
+                getAUCrashHistory: { audioEngine.auCrashHistory },
+                onAddAUEffect: { plugin in
+                    audioEngine.addAUEffect(for: app, plugin: plugin)
+                },
+                onRemoveAUEffect: { entryID in
+                    audioEngine.removeAUEffect(for: app, entryID: entryID)
+                },
+                onToggleAUEffect: { entryID, enabled in
+                    audioEngine.toggleAUEffect(for: app, entryID: entryID, enabled: enabled)
+                },
+                onAUBypassToggle: {
+                    let current = audioEngine.isAUChainBypassed(for: app)
+                    audioEngine.setAUChainBypassed(for: app, bypassed: !current)
+                },
+                onToggleAUFavorite: { pluginID in
+                    audioEngine.toggleAUPluginFavorite(pluginID)
+                },
+                onOpenAUUI: { entryID in
+                    audioEngine.openAUPluginUI(for: app, entryID: entryID)
+                },
+                onOpenAUGenericUI: { entryID in
+                    audioEngine.openAUPluginUI(for: app, entryID: entryID, forceGeneric: true)
+                },
+                auFailedEntryIDs: audioEngine.getAUFailedEntryIDs(for: app),
+                getAUFactoryPresets: { entryID in
+                    audioEngine.getAUFactoryPresets(for: app, entryID: entryID)
+                },
+                onSelectAUFactoryPreset: { entryID, presetIndex in
+                    audioEngine.selectAUFactoryPreset(for: app, entryID: entryID, presetIndex: presetIndex)
+                }
+            )
+        }
+    }
+}
+
+@MainActor
+struct ObservedInactiveAppRow: View {
+    let info: PinnedAppInfo
+    let displayableApp: DisplayableApp
+    @Bindable var audioEngine: AudioEngine
+    @Bindable var deviceVolumeMonitor: DeviceVolumeMonitor
+    let sortedDevices: [AudioDevice]
+    let userPresets: [UserEQPreset]
+    let isEQExpanded: Bool
+    let onEQToggle: () -> Void
+    let isFocused: Bool
+
+    var body: some View {
+        let identifier = info.persistenceIdentifier
+        InactiveAppRow(
+            appInfo: info,
+            icon: displayableApp.icon,
+            volume: audioEngine.getVolumeForInactive(identifier: identifier),
+            devices: sortedDevices,
+            selectedDeviceUID: audioEngine.getDeviceRoutingForInactive(identifier: identifier),
+            selectedDeviceUIDs: audioEngine.getSelectedDeviceUIDsForInactive(identifier: identifier),
+            isFollowingDefault: audioEngine.isFollowingDefaultForInactive(identifier: identifier),
+            defaultDeviceUID: deviceVolumeMonitor.defaultDeviceUID,
+            deviceSelectionMode: audioEngine.getDeviceSelectionModeForInactive(identifier: identifier),
+            isMuted: audioEngine.getMuteForInactive(identifier: identifier),
+            isSmartVolumeEnabled: audioEngine.settingsManager.getAppSmartVolumeEnabled(for: identifier),
+            useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
+            onSmartVolumeToggle: { enabled in
+                audioEngine.settingsManager.setAppSmartVolumeEnabled(for: identifier, to: enabled)
+            },
+            onVolumeChange: { volume in
+                audioEngine.setVolumeForInactive(identifier: identifier, to: volume)
+            },
+            onMuteChange: { muted in
+                audioEngine.setMuteForInactive(identifier: identifier, to: muted)
+            },
+            onDeviceSelected: { newDeviceUID in
+                audioEngine.setDeviceRoutingForInactive(identifier: identifier, deviceUID: newDeviceUID)
+            },
+            onDevicesSelected: { uids in
+                audioEngine.setSelectedDeviceUIDsForInactive(identifier: identifier, to: uids)
+            },
+            onDeviceModeChange: { mode in
+                audioEngine.setDeviceSelectionModeForInactive(identifier: identifier, to: mode)
+            },
+            onSelectFollowDefault: {
+                audioEngine.setDeviceRoutingForInactive(identifier: identifier, deviceUID: nil)
+            },
+            eqSettings: audioEngine.getEQSettingsForInactive(identifier: identifier),
+            userPresets: userPresets,
+            onEQChange: { settings in
+                audioEngine.setEQSettingsForInactive(settings, identifier: identifier)
+            },
+            onUserPresetSelected: { userPreset in
+                var current = audioEngine.getEQSettingsForInactive(identifier: identifier)
+                current.bandGains = userPreset.settings.bandGains
+                audioEngine.setEQSettingsForInactive(current, identifier: identifier)
+            },
+            onSavePreset: { name, settings in
+                audioEngine.settingsManager.createUserPreset(name: name, settings: settings)
+            },
+            onDeleteUserPreset: { id in
+                audioEngine.settingsManager.deleteUserPreset(id: id)
+            },
+            onRenameUserPreset: { id, newName in
+                audioEngine.settingsManager.updateUserPreset(id: id, name: newName)
+            },
+            isEQExpanded: isEQExpanded,
+            onEQToggle: onEQToggle,
+            isFocused: isFocused
+        )
+    }
+}
+
