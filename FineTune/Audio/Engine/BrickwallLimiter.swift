@@ -10,7 +10,7 @@ final class BrickwallLimiter {
     private static let maxChannelCount = 64
 
     /// Legacy safety ceiling for the final output guard.
-    static let ceiling: Float = 0.98
+    static let ceiling: Float = 1.0
 
     private let delayBuffer: UnsafeMutablePointer<Float>
     private let peakBuffer: UnsafeMutablePointer<Float>

@@ -109,6 +109,13 @@ struct MenuBarPopupView: View {
         audioEngine.settingsManager.appSettings.popupSize.dimensions
     }
 
+    private var outputMeterWidth: CGFloat {
+        let p = popupDimensions.contentPadding
+        let leftIconWidth: CGFloat = 60
+        let rightIconWidth: CGFloat = 40 // editPriorityButton (16) + spacing (8) + settingsButton (16)
+        return popupDimensions.width - 4 * p - leftIconWidth - rightIconWidth
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             HStack(alignment: .top) {
@@ -437,16 +444,17 @@ struct MenuBarPopupView: View {
                     OutputLevelMeter(
                         level: snapshot.level,
                         channelLevels: snapshot.channelLevels,
-                        limiterIntensity: snapshot.limiterIntensity
+                        limiterIntensity: snapshot.limiterIntensity,
+                        width: outputMeterWidth
                     )
                 } else {
-                    OutputLevelMeter(level: 0, limiterIntensity: 0)
+                    OutputLevelMeter(level: 0, limiterIntensity: 0, width: outputMeterWidth)
                 }
             }
         }
         .font(.system(size: 11))
         .foregroundStyle(DesignTokens.Colors.textSecondary)
-        .frame(maxWidth: 340)
+        .frame(width: outputMeterWidth)
     }
 
     // MARK: - Device Toggle
