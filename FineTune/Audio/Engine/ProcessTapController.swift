@@ -193,12 +193,24 @@ final class ProcessTapController: ProcessTapControlling {
 
     // MARK: - Public Properties
 
-    var audioLevel: Float { crossfadeState.isActive ? max(_peakLevel, _secondaryPeakLevel) : _peakLevel }
-    var outputAudioLevel: Float { _outputPeakLevel }
-    var outputChannelLevels: [Float] {
-        _outputMeterChannelCount == 2 ? [_outputLeftPeakLevel, _outputRightPeakLevel] : [_outputPeakLevel]
+    var audioLevel: Float {
+        guard hasRecentAudioCallback(within: 0.5) else { return 0.0 }
+        return crossfadeState.isActive ? max(_peakLevel, _secondaryPeakLevel) : _peakLevel
     }
-    var limiterIntensity: Float { _limiterIntensity }
+    var outputAudioLevel: Float {
+        guard hasRecentAudioCallback(within: 0.5) else { return 0.0 }
+        return _outputPeakLevel
+    }
+    var outputChannelLevels: [Float] {
+        guard hasRecentAudioCallback(within: 0.5) else {
+            return _outputMeterChannelCount == 2 ? [0.0, 0.0] : [0.0]
+        }
+        return _outputMeterChannelCount == 2 ? [_outputLeftPeakLevel, _outputRightPeakLevel] : [_outputPeakLevel]
+    }
+    var limiterIntensity: Float {
+        guard hasRecentAudioCallback(within: 0.5) else { return 0.0 }
+        return _limiterIntensity
+    }
 
     private static let hostTimeNanosScale: Double = {
         var info = mach_timebase_info_data_t()
@@ -1059,6 +1071,13 @@ final class ProcessTapController: ProcessTapControlling {
         crossfadeState.complete()
         _primaryCallbackID = 0
         _secondaryCallbackID = 0
+
+        _peakLevel = 0.0
+        _secondaryPeakLevel = 0.0
+        _outputPeakLevel = 0.0
+        _outputLeftPeakLevel = 0.0
+        _outputRightPeakLevel = 0.0
+        _limiterIntensity = 0.0
 
         return true
     }
