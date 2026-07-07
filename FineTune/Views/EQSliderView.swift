@@ -24,7 +24,7 @@ struct EQSliderView: View {
 
     private func formatGain(_ gain: Float) -> String {
         let rounded = Int(gain.rounded())
-        return rounded >= 0 ? "+\(rounded)dB" : "\(rounded)dB"
+        return rounded >= 0 ? "+\(rounded)\u{200A}dB" : "\(rounded)\u{200A}dB"
     }
 
     private func formatGainValue(_ gain: Float) -> String {

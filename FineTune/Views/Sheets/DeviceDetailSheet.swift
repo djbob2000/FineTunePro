@@ -265,7 +265,7 @@ struct DeviceDetailSheet: View {
 
                             Spacer()
 
-                            Text("\(maxPct)% volume (\(Int(maxDBVal)) dB)")
+                            Text("\(maxPct)% volume (\(Int(maxDBVal))\u{200A}dB)")
                                 .font(DesignTokens.Typography.caption)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                         }
@@ -299,7 +299,7 @@ struct DeviceDetailSheet: View {
     // MARK: - Helpers
 
     static func referenceLevelDisplayName(phon: Double, isExpanded: Bool) -> String {
-        return "\(Int(phon)) dB"
+        return "\(Int(phon))\u{200A}dB"
     }
 
     static func tierDisplayName(_ tier: VolumeControlTier) -> String {

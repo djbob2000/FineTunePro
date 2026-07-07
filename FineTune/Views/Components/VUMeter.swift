@@ -296,7 +296,7 @@ struct OutputLevelMeter: View {
 
     private func label(for db: Float) -> String {
         if db == 0 {
-            return "0dB"
+            return "0\u{200A}dB"
         } else {
             return "\(Int(db))"
         }
