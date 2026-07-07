@@ -1292,6 +1292,10 @@ final class AudioEngine {
 
     func setSmartVolumeEnabled(for deviceUID: String, enabled: Bool) {
         settingsManager.setSmartVolumeEnabled(for: deviceUID, to: enabled)
+        if enabled {
+            let defaultUID = deviceVolumeMonitor.defaultDeviceUID ?? ""
+            settingsManager.disableAppSmartVolumeForDevice(deviceUID: deviceUID, defaultDeviceUID: defaultUID)
+        }
         updateTapsSmartVolume(forDevice: deviceUID)
     }
 

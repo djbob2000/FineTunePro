@@ -993,6 +993,17 @@ final class SettingsManager {
         scheduleSave()
     }
 
+    func disableAppSmartVolumeForDevice(deviceUID: String, defaultDeviceUID: String) {
+        for (identifier, enabled) in settings.appSmartVolumeEnabled {
+            guard enabled else { continue }
+            let appDeviceUID = settings.appDeviceRouting[identifier] ?? defaultDeviceUID
+            if appDeviceUID == deviceUID {
+                settings.appSmartVolumeEnabled[identifier] = false
+            }
+        }
+        scheduleSave()
+    }
+
     // MARK: - Per-Device Loudness & Equalization
 
     func getLoudnessCompensationEnabled(for deviceUID: String) -> Bool {
