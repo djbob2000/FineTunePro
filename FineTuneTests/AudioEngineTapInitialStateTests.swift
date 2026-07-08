@@ -536,8 +536,8 @@ struct AudioEngineTapInitialStateTests {
         #expect(!snapshot.isRedActive)
     }
 
-    @Test("Output meter snapshot collapses non-stereo channel counts")
-    func outputMeterSnapshotCollapsesNonStereoChannelCounts() throws {
+    @Test("Output meter snapshot maps non-stereo channel counts to dual channels")
+    func outputMeterSnapshotMapsNonStereoChannelCountsToDualChannels() throws {
         let fix = makeFixture()
 
         fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
@@ -547,7 +547,37 @@ struct AudioEngineTapInitialStateTests {
 
         let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
 
-        #expect(snapshot.channelLevels == [0.72])
+        #expect(snapshot.channelLevels == [0.72, 0.72])
+    }
+
+    @Test("Output meter snapshot aggregates mixed stereo and mono taps as stereo")
+    func outputMeterSnapshotAggregatesMixedStereoAndMonoTapsAsStereo() throws {
+        let fix = makeFixture()
+
+        // Create the primary device and set it for first app (stereo)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tapStereo = try #require(fix.lastTap())
+        tapStereo.outputAudioLevel = 0.50
+        tapStereo.outputChannelLevels = [0.40, 0.50]
+        
+        // Create an additional app and set device routing (mono/silent 1 channel)
+        let secondApp = AudioApp(
+            id: 9999,
+            processObjectIDs: [],
+            name: "MonoApp",
+            icon: NSImage(),
+            bundleID: "com.apple.mono"
+        )
+        fix.engine.setDevice(for: secondApp, deviceUID: fix.device.uid)
+        let tapMono = try #require(fix.lastTap())
+        tapMono.outputAudioLevel = 0.10
+        tapMono.outputChannelLevels = [0.10]
+
+        let snapshot = fix.engine.getOutputMeterSnapshot(for: fix.device.uid)
+
+        // It should be stereo because there is at least one stereo tap
+        #expect(snapshot.channelLevels.count == 2)
+        #expect(snapshot.channelLevels == [0.40, 0.50])
     }
 
     @Test("Output meter snapshot matches secondary device UID in multi-output taps")

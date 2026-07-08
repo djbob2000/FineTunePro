@@ -487,8 +487,8 @@ enum DesignTokens {
         /// VU meter update interval (30fps)
         static let vuMeterUpdateInterval: TimeInterval = 1.0 / 30.0
 
-        /// Output meter update interval (15fps)
-        static let outputMeterUpdateInterval: TimeInterval = 1.0 / 15.0
+        /// Output meter update interval (30fps)
+        static let outputMeterUpdateInterval: TimeInterval = 1.0 / 30.0
 
         /// VU meter peak hold duration
         static let vuMeterPeakHold: TimeInterval = 0.5

@@ -166,6 +166,7 @@ struct MenuBarPopupView: View {
             // notifications below, not by .onAppear — SwiftUI mounts this view
             // before the popup is actually shown, and setting isVisible here
             // would suppress the HUD on the first media key at cold launch.
+            updateInputMonitoringState(isVisible: isPopupVisible, isInputTab: showingInputDevices)
         }
         .onChange(of: audioEngine.outputDevices) { _, _ in
             if isEditingDevicePriority && !wasEditingInputDevices {
@@ -181,12 +182,13 @@ struct MenuBarPopupView: View {
             updateSortedInputDevices()
             syncNavOrder()
         }
-        .onChange(of: showingInputDevices) { _, _ in
+        .onChange(of: showingInputDevices) { _, newValue in
             exitEditModeSaving()
             syncNavOrder()
             if hasKeyboardEngaged {
                 selectedRow = navModel.defaultFocus(defaultOutputUID: currentDefaultDeviceUID())
             }
+            updateInputMonitoringState(isVisible: isPopupVisible, isInputTab: newValue)
         }
         .onChange(of: audioEngine.apps) { _, _ in
             syncNavOrder()
@@ -256,6 +258,17 @@ struct MenuBarPopupView: View {
         .onChange(of: textEntry.navRestoreNonce) { _, _ in
             // A mouse-driven field edit ended; reclaim nav focus so arrows/Return work.
             anchorFocused = true
+        }
+        .onDisappear {
+            audioEngine.stopInputMonitoring()
+        }
+        .onChange(of: isPopupVisible) { _, newValue in
+            updateInputMonitoringState(isVisible: newValue, isInputTab: showingInputDevices)
+        }
+        .onChange(of: deviceVolumeMonitor.defaultInputDeviceID) { _, newID in
+            if isPopupVisible && showingInputDevices {
+                audioEngine.startInputMonitoring(deviceID: newID)
+            }
         }
         .background {
             Button("") { handleEscape() }
@@ -438,23 +451,44 @@ struct MenuBarPopupView: View {
                 }
             }
 
-            TimelineView(.periodic(from: .now, by: DesignTokens.Timing.outputMeterUpdateInterval)) { _ in
-                if let uid = deviceVolumeMonitor.defaultDeviceUID {
-                    let snapshot = audioEngine.getOutputMeterSnapshot(for: uid)
-                    OutputLevelMeter(
-                        level: snapshot.level,
-                        channelLevels: snapshot.channelLevels,
-                        limiterIntensity: snapshot.limiterIntensity,
-                        width: outputMeterWidth
-                    )
+            Group {
+                if isPopupVisible {
+                    TimelineView(.periodic(from: .now, by: DesignTokens.Timing.outputMeterUpdateInterval)) { context in
+                        outputMeterContent(tick: context.date)
+                    }
                 } else {
-                    OutputLevelMeter(level: 0, limiterIntensity: 0, width: outputMeterWidth)
+                    outputMeterContent(tick: .now)
                 }
             }
         }
         .font(.system(size: 11))
         .foregroundStyle(DesignTokens.Colors.textSecondary)
         .frame(width: outputMeterWidth)
+    }
+
+    @ViewBuilder
+    private func outputMeterContent(tick: Date) -> some View {
+        if showingInputDevices {
+            let snapshot = audioEngine.getInputMeterSnapshot()
+            OutputLevelMeter(
+                level: snapshot.level,
+                channelLevels: snapshot.channelLevels,
+                limiterIntensity: 0.0,
+                width: outputMeterWidth,
+                tick: tick
+            )
+        } else if let uid = deviceVolumeMonitor.defaultDeviceUID {
+            let snapshot = audioEngine.getOutputMeterSnapshot(for: uid)
+            OutputLevelMeter(
+                level: snapshot.level,
+                channelLevels: snapshot.channelLevels,
+                limiterIntensity: snapshot.limiterIntensity,
+                width: outputMeterWidth,
+                tick: tick
+            )
+        } else {
+            OutputLevelMeter(level: 0, limiterIntensity: 0, width: outputMeterWidth, tick: tick)
+        }
     }
 
     // MARK: - Device Toggle
@@ -840,46 +874,61 @@ struct MenuBarPopupView: View {
 
     private func appsContent(scrollProxy: ScrollViewProxy) -> some View {
         let presets = audioEngine.settingsManager.getUserPresets()
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(audioEngine.displayableApps) { displayableApp in
-                switch displayableApp {
-                case .active(let app):
-                    ObservedAppRow(
-                        app: app,
-                        displayableApp: displayableApp,
-                        audioEngine: audioEngine,
-                        deviceVolumeMonitor: deviceVolumeMonitor,
-                        sortedDevices: sortedDevices,
-                        userPresets: presets,
-                        isEQExpanded: expandedRowID == displayableApp.id,
-                        onEQToggle: {
-                            toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
-                        },
-                        isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id),
-                        isPopupVisible: isPopupVisible,
-                        auPluginScanner: auPluginScanner
-                    )
-                    .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
+        
+        let content = { (tick: Date) in
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(audioEngine.displayableApps) { displayableApp in
+                    switch displayableApp {
+                    case .active(let app):
+                        ObservedAppRow(
+                            app: app,
+                            displayableApp: displayableApp,
+                            audioEngine: audioEngine,
+                            deviceVolumeMonitor: deviceVolumeMonitor,
+                            sortedDevices: sortedDevices,
+                            userPresets: presets,
+                            isEQExpanded: expandedRowID == displayableApp.id,
+                            onEQToggle: {
+                                toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
+                            },
+                            isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id),
+                            isPopupVisible: isPopupVisible,
+                            auPluginScanner: auPluginScanner,
+                            tick: tick
+                        )
+                        .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
 
-                case .pinnedInactive(let info):
-                    ObservedInactiveAppRow(
-                        info: info,
-                        displayableApp: displayableApp,
-                        audioEngine: audioEngine,
-                        deviceVolumeMonitor: deviceVolumeMonitor,
-                        sortedDevices: sortedDevices,
-                        userPresets: presets,
-                        isEQExpanded: expandedRowID == displayableApp.id,
-                        onEQToggle: {
-                            toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
-                        },
-                        isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id)
-                    )
-                    .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
+                    case .pinnedInactive(let info):
+                        ObservedInactiveAppRow(
+                            info: info,
+                            displayableApp: displayableApp,
+                            audioEngine: audioEngine,
+                            deviceVolumeMonitor: deviceVolumeMonitor,
+                            sortedDevices: sortedDevices,
+                            userPresets: presets,
+                            isEQExpanded: expandedRowID == displayableApp.id,
+                            onEQToggle: {
+                                toggleEQ(for: displayableApp.id, scrollProxy: scrollProxy)
+                            },
+                            isFocused: hasKeyboardEngaged && selectedRow == .app(persistenceID: displayableApp.id),
+                            tick: tick
+                        )
+                        .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+
+        return Group {
+            if isPopupVisible {
+                TimelineView(.periodic(from: .now, by: DesignTokens.Timing.vuMeterUpdateInterval)) { context in
+                    content(context.date)
+                }
+            } else {
+                content(.now)
+            }
+        }
     }
 
     // (Helper functions removed in favor of ObservedAppRow / ObservedInactiveAppRow views)
@@ -1346,6 +1395,15 @@ struct MenuBarPopupView: View {
             script?.executeAndReturnError(nil)
         }
     }
+
+    private func updateInputMonitoringState(isVisible: Bool, isInputTab: Bool) {
+        if isVisible && isInputTab {
+            let inputID = deviceVolumeMonitor.defaultInputDeviceID
+            audioEngine.startInputMonitoring(deviceID: inputID)
+        } else {
+            audioEngine.stopInputMonitoring()
+        }
+    }
 }
 
 // MARK: - Previews
@@ -1560,6 +1618,7 @@ struct ObservedAppRow: View {
     let isFocused: Bool
     let isPopupVisible: Bool
     let auPluginScanner: AUPluginScanner?
+    let tick: Date
 
     var body: some View {
         if let deviceUID = audioEngine.getDeviceUID(for: app) {
@@ -1580,6 +1639,7 @@ struct ObservedAppRow: View {
                 },
                 getAudioLevel: { audioEngine.getAudioLevel(for: app) },
                 isPopupVisible: isPopupVisible,
+                tick: tick,
                 onVolumeChange: { volume in
                     audioEngine.setVolume(for: app, to: volume)
                 },
@@ -1673,6 +1733,7 @@ struct ObservedInactiveAppRow: View {
     let isEQExpanded: Bool
     let onEQToggle: () -> Void
     let isFocused: Bool
+    let tick: Date
 
     var body: some View {
         let identifier = info.persistenceIdentifier

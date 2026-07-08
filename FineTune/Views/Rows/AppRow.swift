@@ -34,6 +34,7 @@ struct AppRow: View {
     let isEQExpanded: Bool
     let onEQToggle: () -> Void
     let isFocused: Bool
+    let tick: Date
 
     // AU effect chain
     let auEffectChain: [AUEffectChainEntry]
@@ -86,6 +87,7 @@ struct AppRow: View {
         isEQExpanded: Bool = false,
         onEQToggle: @escaping () -> Void = {},
         isFocused: Bool = false,
+        tick: Date = .now,
         auEffectChain: [AUEffectChainEntry] = [],
         isAUChainBypassed: Bool = false,
         auPluginScanner: AUPluginScanner? = nil,
@@ -132,6 +134,7 @@ struct AppRow: View {
         self.isEQExpanded = isEQExpanded
         self.onEQToggle = onEQToggle
         self.isFocused = isFocused
+        self.tick = tick
         self.auEffectChain = auEffectChain
         self.isAUChainBypassed = isAUChainBypassed
         self.auPluginScanner = auPluginScanner
@@ -156,7 +159,7 @@ struct AppRow: View {
             // Header: Main row content (always visible)
             HStack(spacing: DesignTokens.Spacing.sm) {
                 // VU Meter
-                VUMeter(level: audioLevel, isMuted: isMutedExternal || volume == 0)
+                VUMeter(level: audioLevel, tick: tick, isMuted: isMutedExternal || volume == 0)
 
                 // App icon - clickable to activate app
                 Button(action: onAppActivate) {
