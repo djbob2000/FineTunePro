@@ -142,6 +142,9 @@ struct OutputLevelMeter: View {
     static let peakDecayRate: Float = 0.03
     static let releaseCoefficient: Float = 0.22
     static let scaleExponent: Float = 1.8
+    
+    static let segmentWidth: CGFloat = 2.0
+    static let segmentGap: CGFloat = 1.0
 
     @State private var displayLevels: [Float] = []
     @State private var displayPeakLevels: [Float] = []
@@ -153,7 +156,7 @@ struct OutputLevelMeter: View {
     static let labelDBs: [Float] = [-30, -20, -15, -10, -6, -3, 0]
 
     var segmentCount: Int {
-        return Int((width + 1) / 3)
+        return Int((width + Self.segmentGap) / (Self.segmentWidth + Self.segmentGap))
     }
 
     var firstRedSegmentIndex: Int {
@@ -161,7 +164,7 @@ struct OutputLevelMeter: View {
     }
 
     var segmentsWidth: CGFloat {
-        CGFloat(segmentCount * 3 - 1)
+        CGFloat(CGFloat(segmentCount) * (Self.segmentWidth + Self.segmentGap) - Self.segmentGap)
     }
 
     private var meterLevels: [Float] {
@@ -219,20 +222,68 @@ struct OutputLevelMeter: View {
         }
     }
 
+    private var meterGradient: LinearGradient {
+        let count = CGFloat(segmentCount)
+        let yellowStart = CGFloat(peakSegmentIndex(forDB: -10) ?? 0)
+        let orangeStart = CGFloat(peakSegmentIndex(forDB: -3) ?? 0)
+        let redStart = CGFloat(firstRedSegmentIndex)
+
+        let stops: [Gradient.Stop] = [
+            .init(color: DesignTokens.Colors.vuGreen, location: 0.0),
+            .init(color: DesignTokens.Colors.vuGreen, location: yellowStart / count),
+            .init(color: DesignTokens.Colors.vuYellow, location: yellowStart / count),
+            .init(color: DesignTokens.Colors.vuYellow, location: orangeStart / count),
+            .init(color: DesignTokens.Colors.vuOrange, location: orangeStart / count),
+            .init(color: DesignTokens.Colors.vuOrange, location: redStart / count),
+            .init(color: DesignTokens.Colors.vuRed, location: redStart / count),
+            .init(color: DesignTokens.Colors.vuRed, location: 1.0)
+        ]
+        return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
+    }
+
+    private func activeWidth(for levelDB: Float) -> CGFloat {
+        guard levelDB >= Self.minDB else { return 0 }
+        let index = segmentIndex(forDB: levelDB)
+        return CGFloat(index + 1) * (Self.segmentWidth + Self.segmentGap) - Self.segmentGap
+    }
+
     private func meterRow(level: Float, peakLevel: Float) -> some View {
         let channelDB = db(for: level)
         let peakDB = db(for: peakLevel)
-        let peakIndex = peakSegmentIndex(forDB: peakDB)
-        return HStack(spacing: 1.0) {
-            ForEach(0..<segmentCount, id: \.self) { index in
-                let isLit = isLit(index, levelDB: channelDB)
-                let isPeak = peakDB > channelDB && index == peakIndex
-                Rectangle()
-                    .fill(color(for: index, isLit: isLit || isPeak))
-                    .frame(width: 2, height: 3)
+        let litWidth = activeWidth(for: channelDB)
+
+        return ZStack(alignment: .leading) {
+            // Unlit background
+            DesignTokens.Colors.vuUnlit
+                .frame(width: segmentsWidth, height: 3)
+
+            // Lit gradient overlay (stays full width, masked to litWidth)
+            meterGradient
+                .frame(width: segmentsWidth, height: 3)
+                .mask(
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .frame(width: litWidth)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: segmentsWidth, alignment: .leading)
+                )
+
+            // Peak segment indicator overlay
+            if let peakIdx = peakSegmentIndex(forDB: peakDB), peakDB > channelDB {
+                let peakX = CGFloat(peakIdx) * (Self.segmentWidth + Self.segmentGap)
+                color(for: peakIdx, isLit: true)
+                    .frame(width: Self.segmentWidth, height: 3)
+                    .offset(x: peakX)
             }
         }
         .frame(width: segmentsWidth)
+        .mask(
+            SegmentedMaskShape(
+                segmentWidth: Self.segmentWidth,
+                segmentGap: Self.segmentGap
+            )
+        )
         .animation(DesignTokens.Animation.vuMeterLevel, value: channelDB)
     }
 
@@ -252,7 +303,7 @@ struct OutputLevelMeter: View {
             return DesignTokens.Colors.vuRed
         } else if db(forSegment: index) >= -3 {
             return DesignTokens.Colors.vuOrange
-        } else if db(forSegment: index) >= -6 {
+        } else if db(forSegment: index) >= -10 {
             return DesignTokens.Colors.vuYellow
         } else {
             return DesignTokens.Colors.vuGreen
@@ -274,7 +325,7 @@ struct OutputLevelMeter: View {
 
     func xPosition(for db: Float) -> CGFloat {
         let index = segmentIndex(forDB: db)
-        return CGFloat(index) * 3.0 + 1.0
+        return CGFloat(index) * (Self.segmentWidth + Self.segmentGap) + (Self.segmentWidth / 2.0)
     }
 
     func peakSegmentIndex(forDB db: Float) -> Int? {
@@ -416,4 +467,21 @@ struct OutputLevelMeter: View {
         }
     }
     return AnimatedPreview()
+}
+
+/// Custom Shape generating a segmented repeating path (width + gap) for masking gradients.
+struct SegmentedMaskShape: Shape {
+    let segmentWidth: CGFloat
+    let segmentGap: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let step = segmentWidth + segmentGap
+        let count = Int((rect.width + segmentGap) / step)
+        for i in 0..<count {
+            let x = CGFloat(i) * step
+            path.addRect(CGRect(x: x, y: 0, width: segmentWidth, height: rect.height))
+        }
+        return path
+    }
 }
