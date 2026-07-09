@@ -230,6 +230,15 @@ struct MenuBarPopupView: View {
             guard let window = notification.object as? NSWindow,
                   String(describing: type(of: window)).contains("FluidMenuBarExtra")
             else { return }
+            
+            // Ignore key resignation if focus is transferred to a child window (dropdown/popover)
+            if let keyWindow = NSApp.keyWindow, window.childWindows?.contains(keyWindow) == true {
+                return
+            }
+            if window.childWindows?.contains(where: { $0.isKeyWindow }) == true {
+                return
+            }
+            
             isPopupVisible = false
             popupVisibility.isVisible = false
             hasKeyboardEngaged = false
@@ -1676,6 +1685,7 @@ struct ObservedAppRow: View {
                 onUserPresetSelected: { userPreset in
                     var current = audioEngine.getEQSettings(for: app)
                     current.bandGains = userPreset.settings.bandGains
+                    current.isEnabled = true
                     audioEngine.setEQSettings(current, for: app)
                 },
                 onSavePreset: { name, settings in
@@ -1787,6 +1797,7 @@ struct ObservedInactiveAppRow: View {
             onUserPresetSelected: { userPreset in
                 var current = audioEngine.getEQSettingsForInactive(identifier: identifier)
                 current.bandGains = userPreset.settings.bandGains
+                current.isEnabled = true
                 audioEngine.setEQSettingsForInactive(current, identifier: identifier)
             },
             onSavePreset: { name, settings in
