@@ -1,21 +1,21 @@
 struct PostAgcCompressorSettings: Codable, Equatable, Sendable {
     /// Threshold in dBFS. Signals above this are compressed.
-    /// Default 0.0 dBFS — catches overshoots above the AGC target of -7.9 dBFS.
-    var thresholdDb: Float = 0.0
+    /// Default -3.0 dBFS — sweet spot for Orban-style post-AGC density compression.
+    var thresholdDb: Float = -3.0
     
-    /// Compression ratio. Default: 7.6 (from Stereo Tool preset).
-    var ratio: Float = 7.6
+    /// Compression ratio. Default: 6.0 (acts as the maximum dynamic feedback ratio).
+    var ratio: Float = 6.0
     
-    /// Attack time in milliseconds (time to drop 86% toward target gain).
-    /// Default: 2.9 ms.
-    var attackMs: Float = 2.9
+    /// Attack time in milliseconds.
+    /// Default: 10.0 ms.
+    var attackMs: Float = 10.0
     
-    /// Release time in milliseconds (time to rise 10 dB).
-    /// Default: 11.6 ms.
-    var releaseMs: Float = 11.6
+    /// Release time in milliseconds.
+    /// Default: 50.0 ms (fast release for transients, ARC will slow this down dynamically).
+    var releaseMs: Float = 50.0
     
-    /// Knee width in dB. 0 = hard knee. Default: 0.1 (very small).
-    var kneeDb: Float = 0.1
+    /// Knee width in dB. Default: 6.0 dB for a progressive soft-knee transition.
+    var kneeDb: Float = 6.0
     
     /// Exponential release factor (0 = linear, closer to 1 = more exponential).
     /// Higher values slow down release as gain reduction approaches 0 dB.
