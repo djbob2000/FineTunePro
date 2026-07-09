@@ -2707,6 +2707,7 @@ final class AudioEngine {
                 }
                 self.appDeviceRouting.removeValue(forKey: pid)
                 self.followsDefault.remove(pid)  // Allow re-initialization if app resumes
+                self.appliedPIDs.remove(pid)
                 self.pendingCleanup.removeValue(forKey: pid)
             }
         }
