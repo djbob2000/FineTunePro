@@ -20,7 +20,7 @@ struct LoudnessEqualizerTests {
         #expect(s.suddenJumpProtectionEnabled == true)
         #expect(s.silenceGateThresholdDb == -16.0)
         #expect(s.silenceGateSlowdownDb == -12.0)
-        #expect(s.agcWindowSizeDb == 4.5)
+        #expect(s.agcWindowSizeDb == 3.0)
         #expect(s.silenceGateIdleGainDb == -24.0)
         #expect(s.enabled == false)
     }

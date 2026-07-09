@@ -1,9 +1,9 @@
-// FineTune/Views/Components/AutoEQPicker.swift
+// FineTune/Views/Components/DeviceEnhancementPicker.swift
 import SwiftUI
 
 /// Icon-only button that opens a popover for selecting AutoEQ headphone correction profiles.
 /// Follows the same pattern as the EQ toggle button in `AppRowControls`.
-struct AutoEQPicker: View {
+struct DeviceEnhancementPicker: View {
     let profileManager: AutoEQProfileManager
     let profileName: String?
     let selection: AutoEQSelection?
@@ -16,6 +16,14 @@ struct AutoEQPicker: View {
     var onCorrectionToggle: ((Bool) -> Void)?
     var preampEnabled: Bool = true
     var onPreampToggle: (() -> Void)?
+
+    // Loudness Compensation Integration
+    var isLoudnessEnabled: Bool = false
+    var onLoudnessToggle: ((Bool) -> Void)? = nil
+    var loudnessMaxDB: Double = -30.0
+    var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
+    var supportsLoudness: Bool = false
+    var supportsAutoEQ: Bool = true
 
     @State private var isExpanded = false
     @State private var isButtonHovered = false
@@ -31,11 +39,11 @@ struct AutoEQPicker: View {
     private var iconColor: Color {
         if isExpanded {
             return DesignTokens.Colors.accentPrimary
+        } else if (isCorrectionEnabled && selection != nil) || isLoudnessEnabled {
+            return DesignTokens.Colors.accentPrimary
         } else if selection != nil || profileName != nil {
-            // Dim when profile assigned but correction disabled
-            return isCorrectionEnabled
-                ? DesignTokens.Colors.accentPrimary
-                : DesignTokens.Colors.interactiveDefault
+            // Dim when profile assigned but correction and loudness disabled
+            return DesignTokens.Colors.interactiveDefault
         } else if isButtonHovered {
             return DesignTokens.Colors.interactiveHover
         }
@@ -85,7 +93,7 @@ struct AutoEQPicker: View {
 
     private var popoverContent: some View {
         VStack(spacing: 0) {
-            AutoEQSearchPanel(
+            DeviceEnhancementPanel(
                 profileManager: profileManager,
                 favoriteIDs: favoriteIDs,
                 selectedProfileID: selection?.profileID,
@@ -109,7 +117,13 @@ struct AutoEQPicker: View {
                 isCorrectionEnabled: isCorrectionEnabled,
                 onCorrectionToggle: onCorrectionToggle,
                 preampEnabled: preampEnabled,
-                onPreampToggle: onPreampToggle
+                onPreampToggle: onPreampToggle,
+                supportsLoudness: supportsLoudness,
+                isLoudnessEnabled: isLoudnessEnabled,
+                onLoudnessToggle: onLoudnessToggle,
+                loudnessMaxDB: loudnessMaxDB,
+                onLoudnessMaxDBChange: onLoudnessMaxDBChange,
+                supportsAutoEQ: supportsAutoEQ
             )
         }
         .frame(width: popoverWidth)

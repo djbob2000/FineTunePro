@@ -1544,6 +1544,13 @@ struct ObservedDeviceRow: View {
                 audioEngine.setAutoEQPreampEnabled(!audioEngine.autoEQPreampEnabled)
             },
             isLoudnessEnabled: audioEngine.settingsManager.getLoudnessCompensationEnabled(for: device.uid),
+            onLoudnessToggle: { enabled in
+                audioEngine.setLoudnessCompensationEnabled(for: device.uid, enabled: enabled)
+            },
+            loudnessMaxDB: audioEngine.settingsManager.getLoudnessMaxDB(for: device.uid),
+            onLoudnessMaxDBChange: { maxDB in
+                audioEngine.setLoudnessMaxDB(for: device.uid, to: maxDB)
+            },
             isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
             onSmartVolumeToggle: { enabled in
                 audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)

@@ -43,15 +43,10 @@ extension View {
     /// dark via DesignTokens; the underlying NSVisualEffectView uses the
     /// `.popover` material so it tracks system appearance natively.
     /// On macOS 26.0+, uses SwiftUI's native Liquid Glass `.glassEffect()`.
-    @ViewBuilder
     func darkGlassBackground() -> some View {
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Dimensions.cornerRadius))
-        } else {
-            self
-                .background(Color.popupBackgroundOverlay)
-                .background(VisualEffectBackground(material: .popover, blendingMode: .behindWindow))
-        }
+        self
+            .background(Color.popupBackgroundOverlay)
+            .background(VisualEffectBackground(material: .popover, blendingMode: .behindWindow))
     }
 
     /// Applies a glass effect style suitable for cards, panels, or HUDs.
