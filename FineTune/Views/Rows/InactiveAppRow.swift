@@ -12,6 +12,7 @@ struct InactiveAppRow: View {
     let icon: NSImage
     let volume: Float  // Linear gain 0-1 (boost applied separately)
     let devices: [AudioDevice]
+    let deviceIconOverrides: [String: String]
     let selectedDeviceUID: String?
     let selectedDeviceUIDs: Set<String>
     let isFollowingDefault: Bool
@@ -45,6 +46,7 @@ struct InactiveAppRow: View {
         icon: NSImage,
         volume: Float,
         devices: [AudioDevice],
+        deviceIconOverrides: [String: String] = [:],
         selectedDeviceUID: String?,
         selectedDeviceUIDs: Set<String> = [],
         isFollowingDefault: Bool = true,
@@ -75,6 +77,7 @@ struct InactiveAppRow: View {
         self.icon = icon
         self.volume = volume
         self.devices = devices
+        self.deviceIconOverrides = deviceIconOverrides
         self.selectedDeviceUID = selectedDeviceUID
         self.selectedDeviceUIDs = selectedDeviceUIDs
         self.isFollowingDefault = isFollowingDefault
@@ -146,6 +149,7 @@ struct InactiveAppRow: View {
                     isMuted: isMuted,
                     useLogScale: useLogScale,
                     devices: devices,
+                    deviceIconOverrides: deviceIconOverrides,
                     selectedDeviceUID: selectedDeviceUID ?? defaultDeviceUID ?? "",
                     selectedDeviceUIDs: selectedDeviceUIDs,
                     isFollowingDefault: isFollowingDefault,

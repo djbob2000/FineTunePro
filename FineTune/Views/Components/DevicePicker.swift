@@ -12,6 +12,7 @@ struct DevicePicker: View {
     }
 
     let devices: [AudioDevice]
+    var deviceIconOverrides: [String: String] = [:]
     let selectedDeviceUID: String  // For single mode
     let selectedDeviceUIDs: Set<String>  // For multi mode
     let isFollowingDefault: Bool
@@ -56,13 +57,6 @@ struct DevicePicker: View {
             switch self {
             case .systemAudio: return L10n.string("System Audio")
             case .device(let device): return device.name
-            }
-        }
-
-        var icon: NSImage? {
-            switch self {
-            case .systemAudio: return nil
-            case .device(let device): return device.icon
             }
         }
     }
@@ -124,9 +118,17 @@ struct DevicePicker: View {
         }
     }
 
+    private func displayIcon(for device: AudioDevice) -> NSImage? {
+        DeviceIconResolver.displayIcon(
+            overrideSymbol: deviceIconOverrides[device.uid],
+            automatic: device.icon,
+            deviceName: device.name
+        )
+    }
+
     @ViewBuilder
     private func deviceIcon(_ device: AudioDevice) -> some View {
-        if let icon = device.icon {
+        if let icon = displayIcon(for: device) {
             Image(nsImage: icon)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -145,7 +147,7 @@ struct DevicePicker: View {
                 .font(.system(size: 15))
                 .symbolRenderingMode(.hierarchical)
         } else if let device = devices.first(where: { $0.uid == selectedDeviceUID }),
-                  let icon = device.icon {
+                  let icon = displayIcon(for: device) {
             Image(nsImage: icon)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -330,6 +332,12 @@ struct DevicePicker: View {
 
         DevicePickerRow(
             item: item,
+            resolvedIcon: {
+                if case .device(let device) = item {
+                    return displayIcon(for: device)
+                }
+                return nil
+            }(),
             isSelected: isSelected,
             isDisabled: isDisabled,
             isMultiMode: currentMode == .multi,
@@ -394,6 +402,7 @@ struct DevicePicker: View {
 
 private struct DevicePickerRow: View {
     let item: DevicePicker.MenuItem
+    let resolvedIcon: NSImage?
     let isSelected: Bool
     let isDisabled: Bool
     let isMultiMode: Bool
@@ -469,8 +478,8 @@ private struct DevicePickerRow: View {
                 .font(.system(size: 13))
                 .frame(width: 16)
                 .foregroundStyle(isDisabled ? DesignTokens.Colors.textQuaternary : DesignTokens.Colors.textSecondary)
-        case .device(let device):
-            if let icon = device.icon {
+        case .device:
+            if let icon = resolvedIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -538,6 +547,7 @@ extension DevicePicker {
     /// Convenience initializer for single-mode only usage (backward compatible)
     init(
         devices: [AudioDevice],
+        deviceIconOverrides: [String: String] = [:],
         selectedDeviceUID: String,
         isFollowingDefault: Bool,
         defaultDeviceUID: String?,
@@ -546,6 +556,7 @@ extension DevicePicker {
         onSelectFollowDefault: @escaping () -> Void
     ) {
         self.devices = devices
+        self.deviceIconOverrides = deviceIconOverrides
         self.selectedDeviceUID = selectedDeviceUID
         self.selectedDeviceUIDs = []
         self.isFollowingDefault = isFollowingDefault

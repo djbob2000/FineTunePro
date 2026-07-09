@@ -8,6 +8,7 @@ struct AppRow: View {
     let volume: Float  // Linear gain 0-1 (boost applied separately)
     let audioLevel: Float
     let devices: [AudioDevice]
+    let deviceIconOverrides: [String: String]
     let selectedDeviceUID: String  // For single mode
     let selectedDeviceUIDs: Set<String>  // For multi mode
     let isFollowingDefault: Bool
@@ -61,6 +62,7 @@ struct AppRow: View {
         volume: Float,
         audioLevel: Float = 0,
         devices: [AudioDevice],
+        deviceIconOverrides: [String: String] = [:],
         selectedDeviceUID: String,
         selectedDeviceUIDs: Set<String> = [],
         isFollowingDefault: Bool = true,
@@ -108,6 +110,7 @@ struct AppRow: View {
         self.volume = volume
         self.audioLevel = audioLevel
         self.devices = devices
+        self.deviceIconOverrides = deviceIconOverrides
         self.selectedDeviceUID = selectedDeviceUID
         self.selectedDeviceUIDs = selectedDeviceUIDs
         self.isFollowingDefault = isFollowingDefault
@@ -210,6 +213,7 @@ struct AppRow: View {
                     isMuted: isMutedExternal,
                     useLogScale: useLogScale,
                     devices: devices,
+                    deviceIconOverrides: deviceIconOverrides,
                     selectedDeviceUID: selectedDeviceUID,
                     selectedDeviceUIDs: selectedDeviceUIDs,
                     isFollowingDefault: isFollowingDefault,
