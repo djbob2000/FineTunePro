@@ -122,7 +122,6 @@ struct EQPanelView: View {
                         onDeleteUserPreset: onDeleteUserPreset,
                         onRenameUserPreset: onRenameUserPreset
                     )
-                    .disabled(!isEQSectionEnabled.wrappedValue)
                 }
             }
             .zIndex(1)  // Ensure dropdown renders above sliders

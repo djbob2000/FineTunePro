@@ -2058,13 +2058,13 @@ final class ProcessTapController: ProcessTapControlling {
         if isPrimary {
             _primaryCurrentVolume = currentVol
             let rawMax = min(outputPeak, 2.0)
-            _outputPeakLevel = rawMax >= _outputPeakLevel ? rawMax : _outputPeakLevel + levelSmoothingFactor * (rawMax - _outputPeakLevel)
+            _outputPeakLevel = rawMax
             
             let rawLeft = min(outputChannelPeaks.0, 2.0)
-            _outputLeftPeakLevel = rawLeft >= _outputLeftPeakLevel ? rawLeft : _outputLeftPeakLevel + levelSmoothingFactor * (rawLeft - _outputLeftPeakLevel)
+            _outputLeftPeakLevel = rawLeft
             
             let rawRight = min(outputChannelPeaks.1, 2.0)
-            _outputRightPeakLevel = rawRight >= _outputRightPeakLevel ? rawRight : _outputRightPeakLevel + levelSmoothingFactor * (rawRight - _outputRightPeakLevel)
+            _outputRightPeakLevel = rawRight
             _outputMeterChannelCount = outputMeterChannelCount
             if limiterTriggered {
                 _limiterIntensity = 1.0

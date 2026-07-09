@@ -92,10 +92,9 @@ extension View {
             self.glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
         } else {
             self
-                .background {
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(Color.primary.opacity(0.06))
-                }
+                .background(Color.primary.opacity(0.06))
+                .background(VisualEffectBackground(material: .popover, blendingMode: .behindWindow))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius)
                         .strokeBorder(borderColor, lineWidth: 0.5)

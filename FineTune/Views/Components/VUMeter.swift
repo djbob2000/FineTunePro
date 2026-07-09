@@ -130,10 +130,10 @@ struct OutputLevelMeter: View {
     let width: CGFloat
     let tick: Date
 
-    static let minDB: Float = -30
+    static let minDB: Float = -40
     static let maxDB: Float = 0
     private static let holdDuration: Duration = .milliseconds(50)
-    static let scaleExponent: Float = 1.8
+    static let scaleExponent: Float = 1.0
     
     static let segmentWidth: CGFloat = 2.0
     static let segmentGap: CGFloat = 1.0
@@ -146,7 +146,7 @@ struct OutputLevelMeter: View {
     @State private var limiterHoldTask: Task<Void, Never>?
     @Environment(\.colorScheme) private var colorScheme
 
-    static let labelDBs: [Float] = [-30, -20, -15, -10, -6, -3, 0]
+    static let labelDBs: [Float] = [-40, -35, -30, -25, -20, -15, -10, -5, 0]
 
     var segmentCount: Int {
         return Int((width + Self.segmentGap) / (Self.segmentWidth + Self.segmentGap))
@@ -353,11 +353,12 @@ struct OutputLevelMeter: View {
             } else if timers[index] > 0 {
                 timers[index] = max(0, timers[index] - timeInterval)
             } else {
-                // Decay ~24dB over 2.8 seconds (BBC PPM standard)
-                // Linear decay rate: 1.0 / 2.8 per second
-                let decayPerSecond: Float = 1.0 / 2.8
-                let decayAmount = decayPerSecond * Float(timeInterval)
-                peaks[index] = max(currentLevel, peaks[index] - decayAmount)
+                // Decay at 12 dB/s
+                let currentDB = db(for: currentLevel)
+                let peakDB = db(for: peaks[index])
+                let decayAmount = 12.0 * Float(timeInterval)
+                let targetDB = max(currentDB, peakDB - decayAmount)
+                peaks[index] = targetDB <= Self.minDB ? 0 : powf(10, targetDB / 20)
             }
         }
 
@@ -373,12 +374,13 @@ struct OutputLevelMeter: View {
             if cur >= prev {
                 return cur
             } else {
-                // Decay ~24dB over 2.8 seconds (BBC PPM standard)
-                // Linear decay rate: 1.0 / 2.8 per second
-                let decayPerSecond: Float = 1.0 / 2.8
-                let decayAmount = decayPerSecond * Float(timeInterval)
-                let smoothed = max(cur, prev - decayAmount)
-                return smoothed < 0.001 ? 0 : smoothed
+                // Decay at 12 dB/s
+                let curDB = db(for: cur)
+                let prevDB = db(for: prev)
+                let decayAmount = 12.0 * Float(timeInterval)
+                let targetDB = max(curDB, prevDB - decayAmount)
+                let smoothed = targetDB <= Self.minDB ? 0 : powf(10, targetDB / 20)
+                return smoothed
             }
         }
     }
