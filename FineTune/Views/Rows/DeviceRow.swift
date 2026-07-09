@@ -43,6 +43,9 @@ struct DeviceRow: View {
     let autoEQPreampEnabled: Bool
     let onAutoEQPreampToggle: (() -> Void)?
     let isLoudnessEnabled: Bool
+    let onLoudnessToggle: ((Bool) -> Void)?
+    let loudnessMaxDB: Double
+    let onLoudnessMaxDBChange: ((Double) -> Void)?
     let isSmartVolumeEnabled: Bool
     let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
@@ -118,6 +121,9 @@ struct DeviceRow: View {
         autoEQPreampEnabled: Bool = true,
         onAutoEQPreampToggle: (() -> Void)? = nil,
         isLoudnessEnabled: Bool = false,
+        onLoudnessToggle: ((Bool) -> Void)? = nil,
+        loudnessMaxDB: Double = -30.0,
+        onLoudnessMaxDBChange: ((Double) -> Void)? = nil,
         isSmartVolumeEnabled: Bool = false,
         onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false,
@@ -162,6 +168,9 @@ struct DeviceRow: View {
         self.autoEQPreampEnabled = autoEQPreampEnabled
         self.onAutoEQPreampToggle = onAutoEQPreampToggle
         self.isLoudnessEnabled = isLoudnessEnabled
+        self.onLoudnessToggle = onLoudnessToggle
+        self.loudnessMaxDB = loudnessMaxDB
+        self.onLoudnessMaxDBChange = onLoudnessMaxDBChange
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
@@ -273,12 +282,12 @@ struct DeviceRow: View {
 
                 Spacer(minLength: 0)
 
-                // AutoEQ picker inside the name area so slider length stays consistent
-                if device.supportsAutoEQ,
+                // AutoEQ & Loudness picker inside the name area so slider length stays consistent
+                if device.supportsAutoEQ || device.id.readTransportType() != .builtIn,
                    let profileManager = autoEQProfileManager,
                    let onSelect = onAutoEQSelect,
                    let onImport = onAutoEQImport {
-                    AutoEQPicker(
+                    DeviceEnhancementPicker(
                         profileManager: profileManager,
                         profileName: autoEQProfileName,
                         selection: autoEQSelection,
@@ -290,7 +299,13 @@ struct DeviceRow: View {
                         isCorrectionEnabled: autoEQEnabled,
                         onCorrectionToggle: onAutoEQToggle,
                         preampEnabled: autoEQPreampEnabled,
-                        onPreampToggle: onAutoEQPreampToggle
+                        onPreampToggle: onAutoEQPreampToggle,
+                        isLoudnessEnabled: isLoudnessEnabled,
+                        onLoudnessToggle: { enabled in onLoudnessToggle?(enabled) },
+                        loudnessMaxDB: loudnessMaxDB,
+                        onLoudnessMaxDBChange: { maxDB in onLoudnessMaxDBChange?(maxDB) },
+                        supportsLoudness: device.id.readTransportType() != .builtIn,
+                        supportsAutoEQ: device.supportsAutoEQ
                     )
                 }
 

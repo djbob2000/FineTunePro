@@ -1,10 +1,10 @@
-// FineTune/Views/Components/AutoEQSearchPanel.swift
+// FineTune/Views/Components/DeviceEnhancementPanel.swift
 import SwiftUI
 
 /// Search panel for selecting AutoEQ headphone correction profiles.
 /// Two-zone layout: Status Zone (profile card or empty state)
 /// above Browse Zone (search + favorites/results + import).
-struct AutoEQSearchPanel: View {
+struct DeviceEnhancementPanel: View {
     let profileManager: AutoEQProfileManager
     let favoriteIDs: Set<String>
     let selectedProfileID: String?
@@ -18,6 +18,14 @@ struct AutoEQSearchPanel: View {
     var preampEnabled: Bool = true
     var onPreampToggle: (() -> Void)?
 
+    // Loudness Integration
+    var supportsLoudness: Bool = false
+    var isLoudnessEnabled: Bool = false
+    var onLoudnessToggle: ((Bool) -> Void)? = nil
+    var loudnessMaxDB: Double = -30.0
+    var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
+    var supportsAutoEQ: Bool = true
+
     @State private var searchText = ""
     @State private var debouncedQuery = ""
     @State private var hoveredID: String?
@@ -28,6 +36,7 @@ struct AutoEQSearchPanel: View {
     @State private var loadingProfileID: String?
     @State private var fetchError: String?
     @FocusState private var isSearchFocused: Bool
+    @State private var isMaxDBExpanded: Bool = false
 
     private let maxVisibleItems = 6
     private let itemHeight: CGFloat = 28
@@ -107,6 +116,13 @@ struct AutoEQSearchPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if supportsLoudness {
+                loudnessSection
+                
+                Divider()
+                    .padding(.horizontal, DesignTokens.Spacing.xs)
+            }
+
             statusZone
 
             Divider()
@@ -162,7 +178,89 @@ struct AutoEQSearchPanel: View {
             highlightedIndex = nil
             cachedSearchResult = profileManager.search(query: newQuery)
         }
-        .onAppear { isSearchFocused = true }
+        .onAppear {
+            isSearchFocused = true
+        }
+    }
+
+    // MARK: - Loudness Section
+
+    @ViewBuilder
+    private var loudnessSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: DesignTokens.Spacing.xs) {
+                Text("Loudness Compensation")
+                    .font(DesignTokens.Typography.pickerText)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+
+                Spacer(minLength: DesignTokens.Spacing.sm)
+
+                Toggle("", isOn: Binding(
+                    get: { isLoudnessEnabled },
+                    set: { onLoudnessToggle?($0) }
+                ))
+                .toggleStyle(.switch)
+                .scaleEffect(0.8)
+                .labelsHidden()
+            }
+            
+            Text("Boost low frequencies at low volumes for this device.")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if isLoudnessEnabled {
+                VStack(alignment: .leading, spacing: 4) {
+                    let maxDBVal = (loudnessMaxDB >= -40.0 && loudnessMaxDB <= -20.0) ? loudnessMaxDB : -30.0
+                    let maxPct = Int((1.0 + maxDBVal / 40.0) * 100)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isMaxDBExpanded.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                .rotationEffect(.degrees(isMaxDBExpanded ? 90 : 0))
+
+                            Text("Low Vol Ref")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                            Spacer()
+
+                            Text("\(maxPct)% volume (\(Int(maxDBVal))\u{200A}dB)")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if isMaxDBExpanded {
+                        Slider(
+                            value: Binding(
+                                get: { loudnessMaxDB },
+                                set: { onLoudnessMaxDBChange?($0) }
+                            ),
+                            in: -40...(-20),
+                            step: 1
+                        )
+                        .controlSize(.mini)
+
+                        Text("Volume level where max compensation is reached.")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.leading, 14)
+                .padding(.top, 2)
+            }
+        }
+        .padding(DesignTokens.Spacing.sm)
     }
 
     // MARK: - Status Zone
@@ -405,12 +503,12 @@ struct AutoEQSearchPanel: View {
                     ScrollView {
                         LazyVStack(spacing: 2) {
                             Text("FAVORITES")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                                .tracking(1.0)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, DesignTokens.Spacing.sm)
-                                .padding(.top, DesignTokens.Spacing.xs)
+                               .font(.system(size: 9, weight: .bold))
+                               .foregroundStyle(DesignTokens.Colors.textTertiary)
+                               .tracking(1.0)
+                               .frame(maxWidth: .infinity, alignment: .leading)
+                               .padding(.horizontal, DesignTokens.Spacing.sm)
+                               .padding(.top, DesignTokens.Spacing.xs)
 
                             ForEach(favorites) { entry in
                                 catalogEntryRow(entry, itemIDPrefix: "fav_")

@@ -28,7 +28,7 @@ import Foundation
 /// - Discord perceptual (github.com/discord/perceptual): 50 dB exponential mapping for
 ///   linear PCM gain — similar purpose to our x² curve for per-app volume.
 enum VolumeMapping {
-    private static let sliderMinDecibels: Double = -30.0
+    private static let sliderMinDecibels: Double = -40.0
     private static let sliderMaxDecibels: Double = 0.0
 
     /// Convert per-app slider position to linear PCM gain using square-law curve or log scale.

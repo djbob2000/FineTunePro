@@ -28,7 +28,7 @@ nonisolated struct LoudnessEqualizerSettings: Codable, Equatable, Sendable {
     var suddenDropSpeedup: Float = 2.5
     /// AGC window / dead zone (dB). A comfort zone around the target level where
     /// the AGC holds its current gain. If |level - target| <= window/2, no adjustment.
-    var agcWindowSizeDb: Float = 4.5
+    var agcWindowSizeDb: Float = 3.0
     /// Silence gate fallback target level in dB (Orban Idle Gain).
     var silenceGateIdleGainDb: Float = -24.0
 
