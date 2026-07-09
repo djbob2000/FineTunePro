@@ -64,7 +64,7 @@ struct AboutTab: View {
             .buttonStyle(.plain)
 
             Text("·")
-            Text("© \(yearText) Volodymyr Peretiatko")
+            Text("Based on FineTune © 2026 Ronit Singh. Modified by Volodymyr Peretiatko.")
         }
         .font(.system(size: 10))
         .foregroundStyle(.tertiary)
