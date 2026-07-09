@@ -274,9 +274,19 @@ final class DDCService: @unchecked Sendable {
         return (current: Int(result.current), max: Int(result.max))
     }
 
-    /// Sets audio volume (clamped to 0-100).
+    /// Sets audio volume (clamped to 0-100, with safety minimum of 1).
     func setAudioVolume(_ volume: Int) throws {
-        try writeVCP(0x62, value: UInt16(max(0, min(100, volume))))
+        let clamped = max(0, min(100, volume))
+        if clamped > 0 {
+            // Try to unmute (VCP 0x8D = 2)
+            try? writeVCP(0x8D, value: 2)
+        } else {
+            // Try to mute (VCP 0x8D = 1)
+            try? writeVCP(0x8D, value: 1)
+        }
+        // Safety minimum of 1 to prevent monitor firmware from freezing/muting internally
+        let safeVolume = clamped == 0 ? 1 : clamped
+        try writeVCP(0x62, value: UInt16(safeVolume))
     }
 
     // MARK: - Packet Helpers

@@ -77,7 +77,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _hpPostR = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFL = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFR = BiquadState()
-    private nonisolated(unsafe) var _sideHPF = BiquadState()
 
 private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
 private nonisolated(unsafe) var _highExciterWet: Float = 0.0
@@ -87,7 +86,6 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
     var outputGainCorrection: Float { _outputGainCorrection }
-    private static let stereoSideBoost: Float = 1.2
 
     // MARK: - Init
 
@@ -348,7 +346,6 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
                 var scale = correction
                 vDSP_vsmul(output, 1, &scale, output, 1, vDSP_Length(frameCount * 2))
             }
-            applyStereoBoost(output: output, frameCount: frameCount)
             return
         }
         
@@ -395,32 +392,12 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
             
-            // Sum Dry + Wet, apply gain correction factor, and inline stereo boost in a single pass
+            // Sum Dry + Wet, apply gain correction factor
             let outL = (xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)) * correction
             let outR = (xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)) * correction
             
-            let mid = (outL + outR) * 0.5
-            let side = (outL - outR) * 0.5
-            let filteredSide = _sideHPF.process(side)
-            let boostedSide = filteredSide * Self.stereoSideBoost
-            output[idxL] = mid + boostedSide
-            output[idxR] = mid - boostedSide
-        }
-    }
-
-    @inline(__always)
-    private func applyStereoBoost(output: UnsafeMutablePointer<Float>, frameCount: Int) {
-        for frame in 0..<frameCount {
-            let idxL = frame * 2
-            let idxR = idxL + 1
-            let left = output[idxL]
-            let right = output[idxR]
-            let mid = (left + right) * 0.5
-            let side = (left - right) * 0.5
-            let filteredSide = _sideHPF.process(side)
-            let boostedSide = filteredSide * Self.stereoSideBoost
-            output[idxL] = mid + boostedSide
-            output[idxR] = mid - boostedSide
+            output[idxL] = outL
+            output[idxR] = outR
         }
     }
 
@@ -428,7 +405,6 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let lpPostCoeffs = BiquadMath.highPassCoefficients(frequency: 25.0, q: 0.707, sampleRate: sampleRate)
-        let sideHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 80.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
@@ -439,7 +415,6 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
         
         _lowPostHPFL.updateCoefficients(b0: lpPostCoeffs[0], b1: lpPostCoeffs[1], b2: lpPostCoeffs[2], a1: lpPostCoeffs[3], a2: lpPostCoeffs[4])
         _lowPostHPFR.updateCoefficients(b0: lpPostCoeffs[0], b1: lpPostCoeffs[1], b2: lpPostCoeffs[2], a1: lpPostCoeffs[3], a2: lpPostCoeffs[4])
-        _sideHPF.updateCoefficients(b0: sideHPFCoeffs[0], b1: sideHPFCoeffs[1], b2: sideHPFCoeffs[2], a1: sideHPFCoeffs[3], a2: sideHPFCoeffs[4])
 
         _lpL.reset()
         _lpR.reset()
@@ -449,7 +424,6 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
         _hpPostR.reset()
         _lowPostHPFL.reset()
         _lowPostHPFR.reset()
-        _sideHPF.reset()
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
