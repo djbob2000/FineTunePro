@@ -501,6 +501,6 @@ enum DesignTokens {
         static let support = URL(string: "https://ko-fi.com/ronitsingh10")!
 
         /// Project license on GitHub
-        static let license = URL(string: "https://github.com/ronitsingh10/FineTune/blob/main/LICENSE")!
+        static let license = URL(string: "https://github.com/djbob2000/FineTunePro/blob/main/LICENSE")!
     }
 }

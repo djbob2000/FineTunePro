@@ -28,7 +28,7 @@ struct AboutTab: View {
                     .interpolation(.high)
                     .frame(width: 96, height: 96)
 
-                Text("FineTune")
+                Text("FineTunePRO")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(DesignTokens.Colors.textPrimary)
 
@@ -39,23 +39,13 @@ struct AboutTab: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
-                AboutLinkChip(
-                    label: "Donate",
-                    icon: "heart.fill",
-                    hoverIcon: "heart.fill",
-                    hoverColor: .pink,
-                    url: DesignTokens.Links.support,
-                    isPrimary: true
-                )
-                AboutLinkChip(
-                    label: "Star on GitHub",
-                    icon: "star",
-                    hoverIcon: "star.fill",
-                    hoverColor: .yellow,
-                    url: URL(string: "https://github.com/ronitsingh10/FineTune")!
-                )
-            }
+            AboutLinkChip(
+                label: "Star on GitHub",
+                icon: "star",
+                hoverIcon: "star.fill",
+                hoverColor: .yellow,
+                url: URL(string: "https://github.com/djbob2000/FineTunePro")!
+            )
 
             footer
                 .padding(.top, 16)
@@ -74,7 +64,7 @@ struct AboutTab: View {
             .buttonStyle(.plain)
 
             Text("·")
-            Text("© \(yearText) Ronit Singh")
+            Text("© \(yearText) Volodymyr Peretiatko")
         }
         .font(.system(size: 10))
         .foregroundStyle(.tertiary)
