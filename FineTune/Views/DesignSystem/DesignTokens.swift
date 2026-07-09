@@ -246,13 +246,13 @@ enum DesignTokens {
         // MARK: VU Meter (Professional audio standard - NOT themed)
 
         /// VU meter green segments (bars 0-3, safe levels)
-        static let vuGreen = Color(red: 0.20, green: 0.78, blue: 0.40)
+        static let vuGreen = Color(red: 0.0, green: 1.0, blue: 0.0)
 
         /// VU meter yellow segments (bars 4-5, caution)
-        static let vuYellow = Color(red: 0.95, green: 0.75, blue: 0.20)
+        static let vuYellow = Color(red: 1.0, green: 1.0, blue: 0.0)
 
         /// VU meter orange segment (bar 6, warning)
-        static let vuOrange = Color(red: 0.95, green: 0.50, blue: 0.20)
+        static let vuOrange = Color(red: 1.0, green: 0.6, blue: 0.0)
 
         /// VU meter red segment (bar 7, peak/clip)
         static let vuRed = Color(red: 1.0, green: 0.0, blue: 0.0)
@@ -487,8 +487,8 @@ enum DesignTokens {
         /// VU meter update interval (30fps)
         static let vuMeterUpdateInterval: TimeInterval = 1.0 / 30.0
 
-        /// Output meter update interval (15fps)
-        static let outputMeterUpdateInterval: TimeInterval = 1.0 / 15.0
+        /// Output meter update interval (30fps)
+        static let outputMeterUpdateInterval: TimeInterval = 1.0 / 30.0
 
         /// VU meter peak hold duration
         static let vuMeterPeakHold: TimeInterval = 0.5

@@ -1,14 +1,16 @@
 // FineTune/Views/Components/VUMeter.swift
 import SwiftUI
 
-/// A vertical VU meter visualization for audio levels
-/// Shows 8 bars that light up based on audio level with peak hold
+/// A vertical peak/level meter visualization for audio levels.
+/// Shows 8 bars that light up based on audio level with peak hold.
 struct VUMeter: View {
     let level: Float
+    var tick: Date = .now
     var isMuted: Bool = false
 
     @State private var peakLevel: Float = 0
-    @State private var decayTask: Task<Void, Never>?
+    @State private var peakHoldTimer: Double = 0
+    @State private var lastTickDate: Date? = nil
 
     private let barCount = DesignTokens.Dimensions.vuMeterBarCount
 
@@ -25,42 +27,35 @@ struct VUMeter: View {
             }
         }
         .frame(width: 10, height: DesignTokens.Dimensions.rowContentHeight - 4)
-        .onChange(of: level) { _, newLevel in
-            if newLevel > peakLevel {
-                peakLevel = newLevel
-                scheduleDecay()
-            } else if peakLevel > newLevel && decayTask == nil {
-                scheduleDecay()
-            }
+        .onAppear {
+            lastTickDate = nil
+            peakLevel = level
+            peakHoldTimer = 0
         }
         .onDisappear {
-            stopDecay()
+            lastTickDate = nil
         }
-    }
+        .onChange(of: tick) { _, newTick in
+            let timeInterval = lastTickDate.map { newTick.timeIntervalSince($0) } ?? DesignTokens.Timing.vuMeterUpdateInterval
+            lastTickDate = newTick
 
-    /// Hold peak briefly, then decay at 30fps until peak reaches current level
-    private func scheduleDecay() {
-        stopDecay()
-        decayTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(DesignTokens.Timing.vuMeterPeakHold))
-            guard !Task.isCancelled else { return }
-
-            // Decay ~24dB over 2.8 seconds (BBC PPM standard)
-            // At 30fps: ~84 frames, decay rate ≈ 0.012 per frame
-            let decayRate: Float = 0.012
-            while !Task.isCancelled, peakLevel > level {
-                try? await Task.sleep(for: .seconds(1.0 / 30.0))
-                guard !Task.isCancelled else { return }
-                withAnimation(DesignTokens.Animation.vuMeterLevel) {
-                    peakLevel = max(level, peakLevel - decayRate)
+            if level > peakLevel {
+                peakLevel = level
+                peakHoldTimer = DesignTokens.Timing.vuMeterPeakHold // 0.5 seconds
+            } else {
+                if peakHoldTimer > 0 {
+                    peakHoldTimer = max(0, peakHoldTimer - timeInterval)
+                } else if peakLevel > level {
+                    // Decay ~24dB over 2.8 seconds (BBC PPM standard)
+                    // Linear decay rate: 1.0 / 2.8 per second
+                    let decayPerSecond: Float = 1.0 / 2.8
+                    let decayAmount = decayPerSecond * Float(timeInterval)
+                    withAnimation(DesignTokens.Animation.vuMeterLevel) {
+                        peakLevel = max(level, peakLevel - decayAmount)
+                    }
                 }
             }
         }
-    }
-
-    private func stopDecay() {
-        decayTask?.cancel()
-        decayTask = nil
     }
 }
 
@@ -133,19 +128,20 @@ struct OutputLevelMeter: View {
     var channelLevels: [Float]? = nil
     let limiterIntensity: Float
     let width: CGFloat
+    let tick: Date
 
     static let minDB: Float = -30
     static let maxDB: Float = 0
-    static let holdSeconds = 0.05
     private static let holdDuration: Duration = .milliseconds(50)
-    static let peakHoldFrames = 30
-    static let peakDecayRate: Float = 0.03
-    static let releaseCoefficient: Float = 0.22
     static let scaleExponent: Float = 1.8
+    
+    static let segmentWidth: CGFloat = 2.0
+    static let segmentGap: CGFloat = 1.0
 
     @State private var displayLevels: [Float] = []
     @State private var displayPeakLevels: [Float] = []
-    @State private var peakHoldTimers: [Int] = []
+    @State private var peakHoldTimers: [Double] = []
+    @State private var lastTickDate: Date? = nil
     @State private var isLimiterHeld = false
     @State private var limiterHoldTask: Task<Void, Never>?
     @Environment(\.colorScheme) private var colorScheme
@@ -153,7 +149,7 @@ struct OutputLevelMeter: View {
     static let labelDBs: [Float] = [-30, -20, -15, -10, -6, -3, 0]
 
     var segmentCount: Int {
-        return Int((width + 1) / 3)
+        return Int((width + Self.segmentGap) / (Self.segmentWidth + Self.segmentGap))
     }
 
     var firstRedSegmentIndex: Int {
@@ -161,7 +157,7 @@ struct OutputLevelMeter: View {
     }
 
     var segmentsWidth: CGFloat {
-        CGFloat(segmentCount * 3 - 1)
+        CGFloat(CGFloat(segmentCount) * (Self.segmentWidth + Self.segmentGap) - Self.segmentGap)
     }
 
     private var meterLevels: [Float] {
@@ -204,35 +200,82 @@ struct OutputLevelMeter: View {
         .onAppear {
             displayLevels = meterLevels
             displayPeakLevels = meterLevels
-            peakHoldTimers = Array(repeating: 0, count: meterLevels.count)
+            peakHoldTimers = Array(repeating: 0.0, count: meterLevels.count)
+            lastTickDate = nil
             updateLimiterHold(previous: 0, current: limiterIntensity)
         }
-        .onChange(of: meterLevels) { _, levels in
-            updateDisplayedLevels(levels)
-            updateLevelHold(levels)
+        .onChange(of: tick) { _, newTick in
+            let timeInterval = lastTickDate.map { newTick.timeIntervalSince($0) } ?? DesignTokens.Timing.outputMeterUpdateInterval
+            lastTickDate = newTick
+
+            updateDisplayedLevels(meterLevels, timeInterval: timeInterval)
+            updateLevelHold(meterLevels, timeInterval: timeInterval)
         }
         .onChange(of: limiterIntensity) { previous, current in
             updateLimiterHold(previous: previous, current: current)
         }
         .onDisappear {
             limiterHoldTask?.cancel()
+            lastTickDate = nil
         }
+    }
+
+    private var meterGradient: LinearGradient {
+        let count = CGFloat(segmentCount)
+        let yellowStart = CGFloat(peakSegmentIndex(forDB: -10) ?? 0)
+        let orangeStart = CGFloat(peakSegmentIndex(forDB: -3) ?? 0)
+        let redStart = CGFloat(firstRedSegmentIndex)
+
+        let stops: [Gradient.Stop] = [
+            .init(color: DesignTokens.Colors.vuGreen, location: 0.0),
+            .init(color: DesignTokens.Colors.vuGreen, location: yellowStart / count),
+            .init(color: DesignTokens.Colors.vuYellow, location: yellowStart / count),
+            .init(color: DesignTokens.Colors.vuYellow, location: orangeStart / count),
+            .init(color: DesignTokens.Colors.vuOrange, location: orangeStart / count),
+            .init(color: DesignTokens.Colors.vuOrange, location: redStart / count),
+            .init(color: DesignTokens.Colors.vuRed, location: redStart / count),
+            .init(color: DesignTokens.Colors.vuRed, location: 1.0)
+        ]
+        return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
+    }
+
+    private func activeWidth(for levelDB: Float) -> CGFloat {
+        guard levelDB > Self.minDB else { return 0 }
+        let index = segmentIndex(forDB: levelDB)
+        return CGFloat(index + 1) * (Self.segmentWidth + Self.segmentGap) - Self.segmentGap
     }
 
     private func meterRow(level: Float, peakLevel: Float) -> some View {
         let channelDB = db(for: level)
         let peakDB = db(for: peakLevel)
-        let peakIndex = peakSegmentIndex(forDB: peakDB)
-        return HStack(spacing: 1.0) {
-            ForEach(0..<segmentCount, id: \.self) { index in
-                let isLit = isLit(index, levelDB: channelDB)
-                let isPeak = peakDB > channelDB && index == peakIndex
-                Rectangle()
-                    .fill(color(for: index, isLit: isLit || isPeak))
-                    .frame(width: 2, height: 3)
+        let litWidth = activeWidth(for: channelDB)
+
+        return ZStack(alignment: .leading) {
+            // Unlit background
+            DesignTokens.Colors.vuUnlit
+                .frame(width: segmentsWidth, height: 3)
+
+            // Lit gradient overlay (stays full width, clipped to litWidth)
+            meterGradient
+                .frame(width: segmentsWidth, height: 3)
+                .frame(width: litWidth, alignment: .leading)
+                .clipped()
+
+            // Peak segment indicator overlay
+            if let peakIdx = peakSegmentIndex(forDB: peakDB), peakDB > channelDB {
+                let peakX = CGFloat(peakIdx) * (Self.segmentWidth + Self.segmentGap)
+                color(for: peakIdx, isLit: true)
+                    .frame(width: Self.segmentWidth, height: 3)
+                    .offset(x: peakX)
             }
         }
         .frame(width: segmentsWidth)
+        .mask(
+            SegmentedMaskShape(
+                segmentWidth: Self.segmentWidth,
+                segmentGap: Self.segmentGap
+            )
+        )
         .animation(DesignTokens.Animation.vuMeterLevel, value: channelDB)
     }
 
@@ -252,7 +295,7 @@ struct OutputLevelMeter: View {
             return DesignTokens.Colors.vuRed
         } else if db(forSegment: index) >= -3 {
             return DesignTokens.Colors.vuOrange
-        } else if db(forSegment: index) >= -6 {
+        } else if db(forSegment: index) >= -10 {
             return DesignTokens.Colors.vuYellow
         } else {
             return DesignTokens.Colors.vuGreen
@@ -274,7 +317,7 @@ struct OutputLevelMeter: View {
 
     func xPosition(for db: Float) -> CGFloat {
         let index = segmentIndex(forDB: db)
-        return CGFloat(index) * 3.0 + 1.0
+        return CGFloat(index) * (Self.segmentWidth + Self.segmentGap) + (Self.segmentWidth / 2.0)
     }
 
     func peakSegmentIndex(forDB db: Float) -> Int? {
@@ -290,10 +333,6 @@ struct OutputLevelMeter: View {
         previous < 0.99 && current >= 0.99
     }
 
-    static func displayedLevel(previous: Float, current: Float) -> Float {
-        current >= previous ? current : previous + (current - previous) * releaseCoefficient
-    }
-
     private func label(for db: Float) -> String {
         if db == 0 {
             return "0\u{200A}dB"
@@ -302,30 +341,45 @@ struct OutputLevelMeter: View {
         }
     }
 
-    private func updateLevelHold(_ levels: [Float]) {
+    private func updateLevelHold(_ levels: [Float], timeInterval: Double) {
         var peaks = normalized(displayPeakLevels, count: levels.count, fallback: 0)
-        var timers = normalized(peakHoldTimers, count: levels.count, fallback: 0)
+        var timers = normalized(peakHoldTimers, count: levels.count, fallback: 0.0)
 
         for index in levels.indices {
             let currentLevel = levels[index]
             if currentLevel > peaks[index] {
                 peaks[index] = currentLevel
-                timers[index] = Self.peakHoldFrames
+                timers[index] = 1.0 // Peak hold 1.0 seconds
             } else if timers[index] > 0 {
-                timers[index] -= 1
+                timers[index] = max(0, timers[index] - timeInterval)
             } else {
-                peaks[index] = max(currentLevel, peaks[index] - Self.peakDecayRate)
+                // Decay ~24dB over 2.8 seconds (BBC PPM standard)
+                // Linear decay rate: 1.0 / 2.8 per second
+                let decayPerSecond: Float = 1.0 / 2.8
+                let decayAmount = decayPerSecond * Float(timeInterval)
+                peaks[index] = max(currentLevel, peaks[index] - decayAmount)
             }
         }
 
         displayPeakLevels = peaks
         peakHoldTimers = timers
-    }
+      }
 
-    private func updateDisplayedLevels(_ levels: [Float]) {
+    private func updateDisplayedLevels(_ levels: [Float], timeInterval: Double) {
         let previous = normalized(displayLevels, count: levels.count, fallback: 0)
         displayLevels = levels.indices.map { index in
-            Self.displayedLevel(previous: previous[index], current: levels[index])
+            let cur = levels[index]
+            let prev = previous[index]
+            if cur >= prev {
+                return cur
+            } else {
+                // Decay ~24dB over 2.8 seconds (BBC PPM standard)
+                // Linear decay rate: 1.0 / 2.8 per second
+                let decayPerSecond: Float = 1.0 / 2.8
+                let decayAmount = decayPerSecond * Float(timeInterval)
+                let smoothed = max(cur, prev - decayAmount)
+                return smoothed < 0.001 ? 0 : smoothed
+            }
         }
     }
 
@@ -388,11 +442,11 @@ struct OutputLevelMeter: View {
 #Preview("Output Level Meter") {
     ComponentPreviewContainer {
         VStack(spacing: DesignTokens.Spacing.md) {
-            OutputLevelMeter(level: 0.05, limiterIntensity: 0, width: 322)
-            OutputLevelMeter(level: 0.45, channelLevels: [0.35, 0.45], limiterIntensity: 0, width: 322)
-            OutputLevelMeter(level: 0.98, limiterIntensity: 0, width: 322)
-            OutputLevelMeter(level: 0.42, limiterIntensity: 1, width: 322)
-            OutputLevelMeter(level: 1.12, limiterIntensity: 0, width: 322)
+            OutputLevelMeter(level: 0.05, limiterIntensity: 0, width: 322, tick: .now)
+            OutputLevelMeter(level: 0.45, channelLevels: [0.35, 0.45], limiterIntensity: 0, width: 322, tick: .now)
+            OutputLevelMeter(level: 0.98, limiterIntensity: 0, width: 322, tick: .now)
+            OutputLevelMeter(level: 0.42, limiterIntensity: 1, width: 322, tick: .now)
+            OutputLevelMeter(level: 1.12, limiterIntensity: 0, width: 322, tick: .now)
         }
         .padding()
     }
@@ -416,4 +470,21 @@ struct OutputLevelMeter: View {
         }
     }
     return AnimatedPreview()
+}
+
+/// Custom Shape generating a segmented repeating path (width + gap) for masking gradients.
+struct SegmentedMaskShape: Shape {
+    let segmentWidth: CGFloat
+    let segmentGap: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let step = segmentWidth + segmentGap
+        let count = Int((rect.width + segmentGap) / step)
+        for i in 0..<count {
+            let x = CGFloat(i) * step
+            path.addRect(CGRect(x: x, y: 0, width: segmentWidth, height: rect.height))
+        }
+        return path
+    }
 }

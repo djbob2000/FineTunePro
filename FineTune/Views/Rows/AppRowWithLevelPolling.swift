@@ -1,7 +1,7 @@
 // FineTune/Views/Rows/AppRowWithLevelPolling.swift
 import SwiftUI
 
-/// App row that polls audio levels at regular intervals
+/// App row that updates audio levels on a shared tick
 struct AppRowWithLevelPolling: View {
     let app: AudioApp
     let volume: Float
@@ -34,6 +34,7 @@ struct AppRowWithLevelPolling: View {
     let isEQExpanded: Bool
     let onEQToggle: () -> Void
     let isFocused: Bool
+    let tick: Date
 
     // AU effect chain passthrough
     let auEffectChain: [AUEffectChainEntry]
@@ -52,9 +53,6 @@ struct AppRowWithLevelPolling: View {
     let getAUFactoryPresets: (UUID) -> [(index: Int, name: String)]
     let onSelectAUFactoryPreset: (UUID, Int) -> Void
 
-    @State private var displayLevel: Float = 0
-    @State private var levelTimer: Timer?
-
     init(
         app: AudioApp,
         volume: Float,
@@ -70,6 +68,7 @@ struct AppRowWithLevelPolling: View {
         onSmartVolumeToggle: @escaping (Bool) -> Void = { _ in },
         getAudioLevel: @escaping () -> Float,
         isPopupVisible: Bool = true,
+        tick: Date,
         onVolumeChange: @escaping (Float) -> Void,
         onMuteChange: @escaping (Bool) -> Void,
         onDeviceSelected: @escaping (String) -> Void,
@@ -134,6 +133,7 @@ struct AppRowWithLevelPolling: View {
         self.isEQExpanded = isEQExpanded
         self.onEQToggle = onEQToggle
         self.isFocused = isFocused
+        self.tick = tick
         self.auEffectChain = auEffectChain
         self.isAUChainBypassed = isAUChainBypassed
         self.auPluginScanner = auPluginScanner
@@ -155,7 +155,7 @@ struct AppRowWithLevelPolling: View {
         AppRow(
             app: app,
             volume: volume,
-            audioLevel: displayLevel,
+            audioLevel: isPopupVisible ? getAudioLevel() : 0,
             devices: devices,
             selectedDeviceUID: selectedDeviceUID,
             selectedDeviceUIDs: selectedDeviceUIDs,
@@ -183,6 +183,7 @@ struct AppRowWithLevelPolling: View {
             isEQExpanded: isEQExpanded,
             onEQToggle: onEQToggle,
             isFocused: isFocused,
+            tick: tick,
             auEffectChain: auEffectChain,
             isAUChainBypassed: isAUChainBypassed,
             auPluginScanner: auPluginScanner,
@@ -199,40 +200,5 @@ struct AppRowWithLevelPolling: View {
             getAUFactoryPresets: getAUFactoryPresets,
             onSelectAUFactoryPreset: onSelectAUFactoryPreset
         )
-        .onAppear {
-            if isPopupVisible {
-                startLevelPolling()
-            }
-        }
-        .onDisappear {
-            stopLevelPolling()
-        }
-        .onChange(of: isPopupVisible) { _, visible in
-            if visible {
-                startLevelPolling()
-            } else {
-                stopLevelPolling()
-                displayLevel = 0  // Reset meter when hidden
-            }
-        }
-    }
-
-    private func startLevelPolling() {
-        // Guard against duplicate timers
-        guard levelTimer == nil else { return }
-
-        levelTimer = Timer.scheduledTimer(
-            withTimeInterval: DesignTokens.Timing.vuMeterUpdateInterval,
-            repeats: true
-        ) { _ in
-            MainActor.assumeIsolated {
-                displayLevel = getAudioLevel()
-            }
-        }
-    }
-
-    private func stopLevelPolling() {
-        levelTimer?.invalidate()
-        levelTimer = nil
     }
 }

@@ -98,7 +98,7 @@ struct DesignTokensDimensionTests {
     @Test("Output level meter red threshold is at 0 dB")
     @MainActor
     func outputLevelMeterRedThresholds() {
-        let meter = OutputLevelMeter(level: 0, limiterIntensity: 0, width: 322)
+        let meter = OutputLevelMeter(level: 0, limiterIntensity: 0, width: 322, tick: .now)
         #expect(meter.segmentCount == 107)
         #expect(OutputLevelMeter.minDB == -30)
         #expect(OutputLevelMeter.maxDB == 0)
@@ -111,14 +111,6 @@ struct DesignTokensDimensionTests {
         #expect(abs(meter.xPosition(for: -10) - 154.0) < 0.001)
         #expect(abs(meter.xPosition(for: -6) - 211.0) < 0.001)
         #expect(abs(meter.xPosition(for: -3) - 262.0) < 0.001)
-        #expect(OutputLevelMeter.peakHoldFrames == 30)
-        #expect(OutputLevelMeter.peakDecayRate == 0.03)
-        #expect(OutputLevelMeter.releaseCoefficient > 0)
-        #expect(OutputLevelMeter.releaseCoefficient < 1)
-        #expect(OutputLevelMeter.displayedLevel(previous: 0.2, current: 0.8) == 0.8)
-        let decayed = OutputLevelMeter.displayedLevel(previous: 0.8, current: 0.2)
-        #expect(decayed < 0.8)
-        #expect(decayed > 0.2)
         #expect(meter.peakSegmentIndex(forDB: -3) == 87)
         #expect(OutputLevelMeter.shouldStartLimiterHold(previous: 0.95, current: 0.90) == false)
         #expect(OutputLevelMeter.shouldStartLimiterHold(previous: 0.95, current: 1.0))
@@ -141,10 +133,10 @@ struct DesignTokensTimingTests {
         #expect(abs(interval - 1.0 / 30.0) < 0.001)
     }
 
-    @Test("Output meter update interval is ~15fps")
+    @Test("Output meter update interval is ~30fps")
     func outputMeterInterval() {
         let interval = DesignTokens.Timing.outputMeterUpdateInterval
-        #expect(abs(interval - 1.0 / 15.0) < 0.001)
+        #expect(abs(interval - 1.0 / 30.0) < 0.001)
     }
 
     @Test("VU meter peak hold is positive")

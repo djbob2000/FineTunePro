@@ -38,6 +38,7 @@ final class AudioEngine {
     #endif
 
     private var taps: [pid_t: any ProcessTapControlling] = [:]
+    private let inputLevelMonitor = InputLevelMonitor()
 
     // MARK: - Observable AU State (authoritative for SwiftUI)
     //
@@ -1444,26 +1445,52 @@ final class AudioEngine {
     func getOutputMeterSnapshot(for deviceUID: String) -> OutputMeterSnapshot {
         var maxLevel: Float = 0.0
         var channelLevels: [Float] = [0.0, 0.0]
-        var isStereo = true
         var maxLimiterIntensity: Float = 0.0
 
-        for tap in taps.values {
-            if tap.currentDeviceUIDs.contains(deviceUID) || tap.currentDeviceUID == nil {
-                maxLevel = max(maxLevel, tap.outputAudioLevel)
-                if tap.outputChannelLevels.count == 2 {
-                    channelLevels[0] = max(channelLevels[0], tap.outputChannelLevels[0])
-                    channelLevels[1] = max(channelLevels[1], tap.outputChannelLevels[1])
-                } else {
-                    isStereo = false
+        let deviceTaps = taps.values.filter {
+            $0.currentDeviceUIDs.contains(deviceUID) || $0.currentDeviceUID == nil
+        }
+
+        let hasStereoTap = deviceTaps.contains { $0.outputChannelLevels.count == 2 }
+        let isStereo = deviceTaps.isEmpty ? true : hasStereoTap
+
+        for tap in deviceTaps {
+            maxLevel = max(maxLevel, tap.outputAudioLevel)
+            let levels = tap.outputChannelLevels
+            
+            if isStereo {
+                if levels.count == 2 {
+                    channelLevels[0] = max(channelLevels[0], levels[0])
+                    channelLevels[1] = max(channelLevels[1], levels[1])
+                } else if levels.count > 0 {
+                    let monoVal = levels[0]
+                    channelLevels[0] = max(channelLevels[0], monoVal)
+                    channelLevels[1] = max(channelLevels[1], monoVal)
                 }
-                maxLimiterIntensity = max(maxLimiterIntensity, tap.limiterIntensity)
             }
+            maxLimiterIntensity = max(maxLimiterIntensity, tap.limiterIntensity)
         }
 
         return OutputMeterSnapshot(
             level: maxLevel,
             limiterIntensity: maxLimiterIntensity,
-            channelLevels: isStereo ? channelLevels : [maxLevel]
+            channelLevels: isStereo ? channelLevels : [maxLevel, maxLevel]
+        )
+    }
+
+    func startInputMonitoring(deviceID: AudioDeviceID) {
+        inputLevelMonitor.start(deviceID: deviceID)
+    }
+
+    func stopInputMonitoring() {
+        inputLevelMonitor.stop()
+    }
+
+    func getInputMeterSnapshot() -> OutputMeterSnapshot {
+        return OutputMeterSnapshot(
+            level: inputLevelMonitor.peakLevel,
+            limiterIntensity: 0.0,
+            channelLevels: inputLevelMonitor.channelLevels
         )
     }
 
@@ -2680,6 +2707,7 @@ final class AudioEngine {
                 }
                 self.appDeviceRouting.removeValue(forKey: pid)
                 self.followsDefault.remove(pid)  // Allow re-initialization if app resumes
+                self.appliedPIDs.remove(pid)
                 self.pendingCleanup.removeValue(forKey: pid)
             }
         }
