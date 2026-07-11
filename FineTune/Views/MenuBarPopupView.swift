@@ -207,6 +207,9 @@ struct MenuBarPopupView: View {
         .onChange(of: deviceVolumeMonitor.defaultDeviceID) { _, _ in
             updateSortedDevices()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openSettingsWindow)) { _ in
+            openSettingsWindow()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
             // Global notification — fires for every window in the process. Filter to
             // FluidMenuBarExtra's popup window so unrelated windows (the HID-tap

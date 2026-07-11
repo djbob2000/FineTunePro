@@ -97,3 +97,47 @@ struct HUDStyleCodableTests {
         #expect(decoded.appSettings.hudStyle == .classic)
     }
 }
+
+@Suite("HUDScreenPosition — Codable + defaults")
+struct HUDScreenPositionCodableTests {
+
+    @Test("All positions round-trip through JSON")
+    func roundTripAllCases() throws {
+        for position in HUDScreenPosition.allCases {
+            let data = try JSONEncoder().encode(position)
+            let decoded = try JSONDecoder().decode(HUDScreenPosition.self, from: data)
+            #expect(decoded == position)
+        }
+    }
+
+    @Test("AppSettings.hudPosition defaults to topTrailing")
+    func appSettingsDefault() {
+        #expect(AppSettings().hudPosition == .topTrailing)
+    }
+
+    @Test("Missing hudPosition key decodes to topTrailing")
+    @MainActor
+    func missingKeyDefault() throws {
+        let json = """
+        {
+          "launchAtLogin": false,
+          "menuBarIconStyle": "Default",
+          "defaultNewAppVolume": 1.0,
+          "lockInputDevice": true,
+          "showDeviceDisconnectAlerts": true
+        }
+        """
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8))
+        #expect(decoded.hudPosition == .topTrailing)
+    }
+
+    @Test("AppSettings preserves hudPosition through JSON")
+    @MainActor
+    func appSettingsRoundTrip() throws {
+        var settings = AppSettings()
+        settings.hudPosition = .bottomCenter
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.hudPosition == .bottomCenter)
+    }
+}

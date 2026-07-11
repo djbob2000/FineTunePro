@@ -7,8 +7,17 @@ struct ShortcutsTab: View {
     @Bindable var settings: SettingsManager
     @Bindable var accessibility: AccessibilityPermissionService
     @Bindable var mediaKeyStatus: MediaKeyStatus
+    @Bindable var bottomEdgeScrollStatus: EventTapStatus
     let mediaKeyMonitor: MediaKeyMonitor
+    let bottomEdgeScrollMonitor: BottomEdgeScrollMonitor
     let shortcutsRegistry: ShortcutsRegistry
+
+    /// Either feature needs Accessibility to install its CGEventTap.
+    private var needsAccessibility: Bool {
+        (settings.appSettings.mediaKeyControlEnabled
+            || settings.appSettings.bottomEdgeScrollEnabled)
+            && !accessibility.isTrustedCached
+    }
 
     var body: some View {
         ScrollView {
@@ -25,6 +34,9 @@ struct ShortcutsTab: View {
         .onChange(of: settings.appSettings.mediaKeyControlEnabled) { _, _ in
             mediaKeyMonitor.reconcile()
         }
+        .onChange(of: settings.appSettings.bottomEdgeScrollEnabled) { _, _ in
+            bottomEdgeScrollMonitor.reconcile()
+        }
     }
 
     // MARK: - Volume
@@ -33,7 +45,7 @@ struct ShortcutsTab: View {
         SettingsSection("Volume") {
             SettingsRow(
                 "Volume Step",
-                description: "How much each keypress changes the volume. Applies to media keys, configured hotkeys, and arrow-key nav in the popup."
+                description: "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
             ) {
                 Picker("", selection: $settings.appSettings.volumeHotkeyStep) {
                     ForEach(VolumeHotkeyStep.allCases) { step in
@@ -43,6 +55,30 @@ struct ShortcutsTab: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .fixedSize()
+            }
+            SettingsRowDivider()
+            SettingsRow(
+                "Scroll at Bottom Edge",
+                description: "Cursor at the bottom of the screen (incl. Dock), then mouse wheel or two-finger trackpad scroll changes volume. Needs Accessibility; grant Input Monitoring if macOS asks (Debug builds must be allowed separately from /Applications)."
+            ) {
+                Toggle("", isOn: $settings.appSettings.bottomEdgeScrollEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+            }
+            if settings.appSettings.bottomEdgeScrollEnabled && !accessibility.isTrustedCached {
+                SettingsRowDivider()
+                AccessibilityPromptStrip(accessibility: accessibility)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
+            if bottomEdgeScrollStatus.isOffline {
+                SettingsRowDivider()
+                BottomEdgeScrollOfflineCard {
+                    bottomEdgeScrollMonitor.reconcile()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
         }
     }
@@ -61,7 +97,8 @@ struct ShortcutsTab: View {
                     .labelsHidden()
             }
 
-            if !accessibility.isTrustedCached {
+            // Single shared banner when either tap feature needs Accessibility.
+            if needsAccessibility {
                 SettingsRowDivider()
                 AccessibilityPromptStrip(accessibility: accessibility)
                     .padding(.horizontal, 16)
@@ -77,13 +114,30 @@ struct ShortcutsTab: View {
                 .padding(.vertical, 12)
             }
 
-            if settings.appSettings.mediaKeyControlEnabled && accessibility.isTrustedCached {
+            // HUD chrome applies to media keys and bottom-edge scroll alike.
+            if (settings.appSettings.mediaKeyControlEnabled
+                || settings.appSettings.bottomEdgeScrollEnabled)
+                && accessibility.isTrustedCached {
                 SettingsRowDivider()
                 SettingsRow(
                     "HUD Style",
-                    description: "How the volume indicator appears"
+                    description: "How the volume indicator looks"
                 ) {
                     HUDStyleSegmentedControl(selection: $settings.appSettings.hudStyle)
+                }
+                SettingsRowDivider()
+                SettingsRow(
+                    "HUD Position",
+                    description: "Where the volume indicator appears on screen (media keys, bottom-edge scroll, and hotkeys)."
+                ) {
+                    Picker("", selection: $settings.appSettings.hudPosition) {
+                        ForEach(HUDScreenPosition.allCases) { position in
+                            Text(position.displayName).tag(position)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
                 }
             }
         }

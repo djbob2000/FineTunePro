@@ -7,6 +7,10 @@ import os
 
 private let logger = Logger(subsystem: "com.finetuneapp.FineTune", category: "App")
 
+extension Notification.Name {
+    static let openSettingsWindow = Notification.Name("OpenSettingsWindowNotification")
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     var audioEngine: AudioEngine?
@@ -34,6 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
+        return true
+    }
 }
 
 @main
@@ -42,9 +51,11 @@ struct FineTuneApp: App {
     @State private var audioEngine: AudioEngine
     @State private var accessibility: AccessibilityPermissionService
     @State private var mediaKeyStatus: MediaKeyStatus
+    @State private var bottomEdgeScrollStatus: EventTapStatus
     @State private var popupVisibility: PopupVisibilityService
     @State private var hudController: HUDWindowController
     @State private var mediaKeyMonitor: MediaKeyMonitor
+    @State private var bottomEdgeScrollMonitor: BottomEdgeScrollMonitor
     @State private var feedbackPlayer: VolumeFeedbackPlayer
     @State private var iconCoordinator: MenuBarIconCoordinator
     @State private var menuBarPopupController: MenuBarPopupController
@@ -69,7 +80,9 @@ struct FineTuneApp: App {
                 deviceVolumeMonitor: audioEngine.deviceVolumeMonitor as! DeviceVolumeMonitor,
                 accessibility: accessibility,
                 mediaKeyStatus: mediaKeyStatus,
+                bottomEdgeScrollStatus: bottomEdgeScrollStatus,
                 mediaKeyMonitor: mediaKeyMonitor,
+                bottomEdgeScrollMonitor: bottomEdgeScrollMonitor,
                 shortcutsRegistry: shortcutsRegistry,
                 updateManager: updateManager
             )
@@ -128,6 +141,7 @@ struct FineTuneApp: App {
         // and HUD panel outlive popup open/close cycles.
         let accessibilityService = AccessibilityPermissionService()
         let statusService = MediaKeyStatus()
+        let bottomEdgeStatusService = EventTapStatus()
         let popupService = PopupVisibilityService()
         let hud = HUDWindowController(settingsManager: settings, mediaKeyStatus: statusService, popupVisibility: popupService)
         let feedbackPlayer = VolumeFeedbackPlayer()
@@ -166,11 +180,24 @@ struct FineTuneApp: App {
             mediaKeyStatus: statusService
         )
         monitor.feedbackPlayer = feedbackPlayer
+
+        let bottomEdgeScrollMonitor = BottomEdgeScrollMonitor(
+            audioEngine: engine,
+            settingsManager: settings,
+            accessibility: accessibilityService,
+            hudController: hud,
+            popupVisibility: popupService,
+            eventTapStatus: bottomEdgeStatusService
+        )
+        bottomEdgeScrollMonitor.feedbackPlayer = feedbackPlayer
+
         _accessibility = State(initialValue: accessibilityService)
         _mediaKeyStatus = State(initialValue: statusService)
+        _bottomEdgeScrollStatus = State(initialValue: bottomEdgeStatusService)
         _popupVisibility = State(initialValue: popupService)
         _hudController = State(initialValue: hud)
         _mediaKeyMonitor = State(initialValue: monitor)
+        _bottomEdgeScrollMonitor = State(initialValue: bottomEdgeScrollMonitor)
         _feedbackPlayer = State(initialValue: feedbackPlayer)
 
         let coordinator = MenuBarIconCoordinator(
@@ -179,6 +206,7 @@ struct FineTuneApp: App {
             settings: settings
         )
         monitor.iconCoordinator = coordinator
+        bottomEdgeScrollMonitor.iconCoordinator = coordinator
         // Defer start() so NSApplication.shared is fully bootstrapped before we walk NSApp.windows.
         DispatchQueue.main.async { [coordinator] in coordinator.start() }
         _iconCoordinator = State(initialValue: coordinator)
@@ -212,17 +240,23 @@ struct FineTuneApp: App {
         // the monitor to reconcile its tap state whenever trust changes — this
         // is the single source of truth for retroactive start/stop (a `.onChange`
         // inside MenuBarPopupView would miss flips when the popup is closed).
-        accessibilityService.onTrustChanged = { [weak monitor] _ in
+        accessibilityService.onTrustChanged = { [weak monitor, weak bottomEdgeScrollMonitor] _ in
             monitor?.reconcile()
+            bottomEdgeScrollMonitor?.reconcile()
         }
         accessibilityService.start()
         monitor.reconcile()
+        bottomEdgeScrollMonitor.reconcile()
 
         // Global hotkeys (KeyboardShortcuts SPM, Carbon-backed; no Accessibility
         // permission required for the hotkey itself). Registry start() is deferred
         // to a SwiftUI `.task` on the popup content so the FluidMenuBarExtra
         // status item has been materialized before any hotkey can fire.
         let popupController = MenuBarPopupController()
+        // Defer until the FluidMenuBarExtra status item exists (same pattern as iconCoordinator).
+        DispatchQueue.main.async { [popupController] in
+            popupController.installMultiDisplayClickFallback()
+        }
         let resolver = TargetAppResolver(
             ownBundleID: Bundle.main.bundleIdentifier ?? "com.finetuneapp.FineTune"
         )
@@ -264,11 +298,13 @@ struct FineTuneApp: App {
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
-        ) { [settings, engine, monitor, accessibilityService, hud, coordinator] _ in
+        ) { [settings, engine, monitor, bottomEdgeScrollMonitor, accessibilityService, hud, coordinator, popupController] _ in
             MainActor.assumeIsolated {
                 engine.saveAllLiveAUState()
                 coordinator.stop()
+                popupController.stop()
                 monitor.stop()
+                bottomEdgeScrollMonitor.stop()
                 accessibilityService.stop()
                 hud.shutdown()
                 settings.flushSync()

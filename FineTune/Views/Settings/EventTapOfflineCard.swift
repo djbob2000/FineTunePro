@@ -1,10 +1,14 @@
-// FineTune/Views/Settings/MediaKeyOfflineCard.swift
+// FineTune/Views/Settings/EventTapOfflineCard.swift
 import SwiftUI
 
-/// Inline card shown when `MediaKeyStatus.isOffline` is `true` (kernel-stall path only;
-/// AX revocation surfaces via the permission card instead).
+/// Inline card shown when an event-tap feature is offline (kernel-stall / double-disable path).
+/// Accessibility revocation surfaces via the permission card instead.
 @MainActor
-struct MediaKeyOfflineCard: View {
+struct EventTapOfflineCard: View {
+    let title: String
+    let message: String
+    let accessibilityLabel: String
+    let accessibilityHint: String
     let onRetry: () -> Void
 
     var body: some View {
@@ -18,13 +22,13 @@ struct MediaKeyOfflineCard: View {
 
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
                 HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.xs) {
-                    Text("Media keys offline")
+                    Text(title)
                         .font(DesignTokens.Typography.rowNameBold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                     Spacer(minLength: DesignTokens.Spacing.xs)
                 }
 
-                Text("The system disabled FineTune's event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it.")
+                Text(message)
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -41,7 +45,7 @@ struct MediaKeyOfflineCard: View {
                 .buttonStyle(.plain)
                 .glassButtonStyle()
                 .padding(.top, 2)
-                .accessibilityHint(L10n.string("Reinstalls the media-key event tap."))
+                .accessibilityHint(L10n.string(accessibilityHint))
             }
         }
         .padding(.horizontal, DesignTokens.Spacing.sm)
@@ -56,15 +60,55 @@ struct MediaKeyOfflineCard: View {
                 .allowsHitTesting(false)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(L10n.string("Media keys offline. Retry to reinstall the event tap."))
+        .accessibilityLabel(L10n.string(accessibilityLabel))
+    }
+}
+
+/// Media-keys specialization of `EventTapOfflineCard`.
+@MainActor
+struct MediaKeyOfflineCard: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        EventTapOfflineCard(
+            title: "Media keys offline",
+            message: "The system disabled FineTune's event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it.",
+            accessibilityLabel: "Media keys offline. Retry to reinstall the event tap.",
+            accessibilityHint: "Reinstalls the media-key event tap.",
+            onRetry: onRetry
+        )
+    }
+}
+
+/// Bottom-edge scroll specialization of `EventTapOfflineCard`.
+@MainActor
+struct BottomEdgeScrollOfflineCard: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        EventTapOfflineCard(
+            title: "Bottom-edge scroll offline",
+            message: "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it.",
+            accessibilityLabel: "Bottom-edge scroll offline. Retry to reinstall the event tap.",
+            accessibilityHint: "Reinstalls the bottom-edge scroll event tap.",
+            onRetry: onRetry
+        )
     }
 }
 
 // MARK: - Previews
 
-#Preview("Offline Card") {
+#Preview("Media Keys Offline Card") {
     PreviewContainer {
         MediaKeyOfflineCard(onRetry: {})
+            .frame(width: 420)
+            .padding()
+    }
+}
+
+#Preview("Bottom-Edge Offline Card") {
+    PreviewContainer {
+        BottomEdgeScrollOfflineCard(onRetry: {})
             .frame(width: 420)
             .padding()
     }

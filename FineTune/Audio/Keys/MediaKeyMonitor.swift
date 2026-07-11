@@ -32,25 +32,19 @@ final class MediaKeyMonitor {
     private let popupVisibility: PopupVisibilityService
     private let mediaKeyStatus: MediaKeyStatus
     private let logger = Logger(subsystem: "com.finetuneapp.FineTune", category: "MediaKeyMonitor")
+    private let lifecycle: CGEventTapLifecycle
 
     // MARK: - Tap state
-
-    private var tap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-
-    /// Second `.tapDisabledBy*` inside the watchdog window marks the feature offline.
-    private var disableWatchdogTask: Task<Void, Never>?
-    private(set) var watchdogOpen: Bool = false
 
     /// 80 ms floor between DDC-tier repeats — DDC write queues saturate at key-repeat rate.
     var lastDDCRepeatTime: DispatchTime?
 
-    private var ghostTapProbeTask: Task<Void, Never>?
+    var onRunLoopSourceRemoved: (() -> Void)? {
+        get { lifecycle.onRunLoopSourceRemoved }
+        set { lifecycle.onRunLoopSourceRemoved = newValue }
+    }
 
-    /// CGEventTaps are per-session; wake leaves them enabled-but-inert.
-    private var workspaceObservers: [NSObjectProtocol] = []
-
-    var onRunLoopSourceRemoved: (() -> Void)?
+    var watchdogOpen: Bool { lifecycle.watchdogOpen }
 
     /// Optional coordinator notified on every volume/mute key event so the menu bar icon
     /// can flash the current device's transport symbol. Wired by FineTuneApp after init.
@@ -90,20 +84,22 @@ final class MediaKeyMonitor {
         self.hudController = hudController
         self.popupVisibility = popupVisibility
         self.mediaKeyStatus = mediaKeyStatus
-        subscribeToWorkspaceLifecycle()
+        self.lifecycle = CGEventTapLifecycle(logger: logger)
         updateCachedSettings()
+
+        lifecycle.onGhostTapDisabled = { [weak self] in
+            self?.mediaKeyStatus.isOffline = true
+        }
+        lifecycle.onDoubleDisable = { [weak self] in
+            self?.mediaKeyStatus.isOffline = true
+        }
+        lifecycle.onWakeNeedsReconcile = { [weak self] in
+            self?.reconcile()
+        }
     }
 
     isolated deinit {
-        // C callback holds an unretained pointer to self; runloop source must not outlive us.
-        if let tap = tap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
-        }
-        let nc = NSWorkspace.shared.notificationCenter
-        for observer in workspaceObservers { nc.removeObserver(observer) }
+        lifecycle.teardown()
     }
 
     // MARK: - Lifecycle
@@ -111,7 +107,7 @@ final class MediaKeyMonitor {
     /// Idempotent. No-op unless media keys are enabled and Accessibility is trusted.
     func start() {
         updateCachedSettings()
-        guard tap == nil else { return }
+        guard !lifecycle.isInstalled else { return }
         guard cachedMediaKeyControlEnabled else {
             logger.debug("Media key control disabled in settings; tap not installed")
             return
@@ -125,116 +121,45 @@ final class MediaKeyMonitor {
         let mask = CGEventMask(1 << 14)
         let userInfo = Unmanaged.passUnretained(self).toOpaque()
 
-        guard let newTap = CGEvent.tapCreate(
-            tap: .cghidEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
+        let ok = lifecycle.install(
             eventsOfInterest: mask,
             callback: mediaKeyTapCallback,
             userInfo: userInfo
-        ) else {
-            logger.error("CGEvent.tapCreate returned nil — media keys will not be intercepted")
+        )
+        if ok {
+            mediaKeyStatus.isOffline = false
+            logger.info("Media key tap installed")
+        } else {
             mediaKeyStatus.isOffline = true
-            return
+            logger.error("CGEvent.tapCreate returned nil — media keys will not be intercepted")
         }
-
-        let source = CFMachPortCreateRunLoopSource(nil, newTap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: newTap, enable: true)
-
-        self.tap = newTap
-        self.runLoopSource = source
-        self.mediaKeyStatus.isOffline = false
-        logger.info("Media key tap installed")
     }
 
     /// Reconciles tap state against settings + Accessibility trust. Idempotent.
+    /// When offline, tears down and reinstalls so Retry actually recovers.
     func reconcile() {
         updateCachedSettings()
         if cachedMediaKeyControlEnabled && accessibility.isTrusted {
-            // Post-regrant taps can come up inert; arm a probe to surface that to the user.
-            let wasOffline = (tap == nil)
+            if mediaKeyStatus.isOffline {
+                lifecycle.stop()
+                mediaKeyStatus.isOffline = false
+            }
+            let wasOffline = !lifecycle.isInstalled
             start()
-            if wasOffline && tap != nil {
-                armGhostTapProbe()
+            if wasOffline && lifecycle.isInstalled {
+                lifecycle.armGhostTapProbe()
             }
         } else {
-            cancelGhostTapProbe()
-            stop()
+            lifecycle.cancelGhostTapProbe()
+            lifecycle.stop()
+            // Intentional off / no trust is not the kernel-stall card.
+            mediaKeyStatus.isOffline = false
         }
-    }
-
-    // MARK: - Workspace lifecycle (sleep/wake, session)
-
-    /// Re-enable on wake/session-activate; disable on sleep/deactivate.
-    private func subscribeToWorkspaceLifecycle() {
-        let nc = NSWorkspace.shared.notificationCenter
-        func add(_ name: Notification.Name, _ handler: @escaping @MainActor () -> Void) {
-            let token = nc.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { handler() }
-            }
-            workspaceObservers.append(token)
-        }
-        add(NSWorkspace.didWakeNotification) { [weak self] in self?.handleWake() }
-        add(NSWorkspace.sessionDidBecomeActiveNotification) { [weak self] in self?.handleWake() }
-        add(NSWorkspace.willSleepNotification) { [weak self] in self?.handleSuspend() }
-        add(NSWorkspace.sessionDidResignActiveNotification) { [weak self] in self?.handleSuspend() }
-    }
-
-    private func handleWake() {
-        guard let tap else {
-            reconcile()
-            return
-        }
-        CGEvent.tapEnable(tap: tap, enable: true)
-        logger.info("Media key tap re-enabled after wake / session activation")
-        armGhostTapProbe()
-    }
-
-    private func handleSuspend() {
-        guard let tap else { return }
-        CGEvent.tapEnable(tap: tap, enable: false)
-        logger.info("Media key tap disabled for sleep / session resign")
-    }
-
-    // MARK: - Ghost-tap probe
-
-    /// Checks `tapIsEnabled` ~1.5s after install; marks offline if the kernel dropped it.
-    private func armGhostTapProbe() {
-        cancelGhostTapProbe()
-        ghostTapProbeTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(1500))
-            guard !Task.isCancelled, let self, let tap = self.tap else { return }
-            if !CGEvent.tapIsEnabled(tap: tap) {
-                self.logger.error("Ghost-tap probe: tap reports disabled after regrant/wake — marking offline")
-                self.mediaKeyStatus.isOffline = true
-            }
-            self.ghostTapProbeTask = nil
-        }
-    }
-
-    private func cancelGhostTapProbe() {
-        ghostTapProbeTask?.cancel()
-        ghostTapProbeTask = nil
     }
 
     /// Tears down the tap + runloop source. Must be called before dealloc.
     func stop() {
-        disableWatchdogTask?.cancel()
-        disableWatchdogTask = nil
-        watchdogOpen = false
-        cancelGhostTapProbe()
-
-        if let tap = tap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
-            onRunLoopSourceRemoved?()
-        }
-        tap = nil
-        runLoopSource = nil
-        logger.info("Media key tap removed")
+        lifecycle.stop()
     }
 
     // MARK: - Event handling
@@ -353,39 +278,8 @@ final class MediaKeyMonitor {
     func handleTapDisabled() {
         // Runtime Accessibility revocation — tear down and let the permission card surface.
         // `isOffline` stays false here; it's reserved for kernel-stall ("Retry") scenarios.
-        if !accessibility.isTrusted {
-            logger.warning("Tap disabled and Accessibility no longer trusted — stopping tap")
-            disableWatchdogTask?.cancel()
-            disableWatchdogTask = nil
-            watchdogOpen = false
-            stop()
-            accessibility.refresh()
-            return
-        }
-
-        logger.info("Tap disabled by kernel — attempting re-enable")
-
-        if watchdogOpen {
-            // Second disable inside the 5s window — feature is offline.
-            logger.error("Second tap-disable inside watchdog window; marking media keys offline")
-            mediaKeyStatus.isOffline = true
-            disableWatchdogTask?.cancel()
-            disableWatchdogTask = nil
-            watchdogOpen = false
-            return
-        }
-
-        watchdogOpen = true
-        disableWatchdogTask?.cancel()
-        disableWatchdogTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            self?.watchdogOpen = false
-            self?.disableWatchdogTask = nil
-        }
-
-        if let tap = tap {
-            CGEvent.tapEnable(tap: tap, enable: true)
+        lifecycle.handleTapDisabled(isAccessibilityTrusted: accessibility.isTrusted) { [weak self] in
+            self?.accessibility.refresh()
         }
     }
 

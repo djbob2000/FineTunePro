@@ -85424,6 +85424,2134 @@
           }
         }
       }
+    },
+    "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "How much the volume changes per step. Applies to media keys, configured hotkeys, arrow-key nav in the popup, and bottom-edge scroll."
+          }
+        }
+      }
+    },
+    "Scroll at Bottom Edge": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll at Bottom Edge"
+          }
+        }
+      }
+    },
+    "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Scroll the mouse wheel or trackpad in the bottom few pixels of any screen to change volume. Does not scroll windows under the cursor."
+          }
+        }
+      }
+    },
+    "Bottom-edge scroll offline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline"
+          }
+        }
+      }
+    },
+    "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The system disabled FineTune's scroll event tap — usually after a sleep/wake cycle or a main-thread stall. Retry to reinstall it."
+          }
+        }
+      }
+    },
+    "Bottom-edge scroll offline. Retry to reinstall the event tap.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Bottom-edge scroll offline. Retry to reinstall the event tap."
+          }
+        }
+      }
+    },
+    "Reinstalls the bottom-edge scroll event tap.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Reinstalls the bottom-edge scroll event tap."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -344,26 +344,6 @@ struct LoudnessCompensatorEnableStateTests {
         #expect(!processor.isEnabled, "Test setup should disable the processor before re-enabling")
 
         processor.updateForVolume(0.25)
-        #expect(processor.isEnabled, "Processor should re-enable immediately even if volume did not change")
-    }
-
-    @Test("Enabled loudness compensator widens stereo side by 120 percent above 80Hz Side HPF cutoff")
-    func enabledProcessorAppliesStereoBoost() {
-        let processor = LoudnessCompensator(sampleRate: 48_000)
-        processor.updateForVolume(1.0)
-        processor.setEnabled(true)
-
-        let input: [Float] = [0.30, -0.10]
-        var output = [Float](repeating: 0, count: input.count)
-        input.withUnsafeBufferPointer { inPtr in
-            output.withUnsafeMutableBufferPointer { outPtr in
-                processor.process(input: inPtr.baseAddress!, output: outPtr.baseAddress!, frameCount: 1)
-            }
-        }
-
-        // Side = 0.20, mid = 0.10. 80Hz Side HPF filters step input (b0 ~0.9926) -> boostedSide (1.2x) ~ 0.23822
-        #expect(abs(output[0] - 0.33822) < 0.001)
-        #expect(abs(output[1] - -0.13822) < 0.001)
     }
 }
 

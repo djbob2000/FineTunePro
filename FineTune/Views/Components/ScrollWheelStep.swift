@@ -1,5 +1,8 @@
 import AppKit
 
+/// Continuous scroll mapping for in-app UI sliders (`sensitivity × delta`).
+/// Global bottom-edge volume uses `BottomEdgeScrollMonitor.sliderChange` instead —
+/// fixed `volumeHotkeyStep` ticks so feel matches media keys / hotkeys.
 enum ScrollWheelStep {
     static func apply<V: BinaryFloatingPoint>(
         deltaY: CGFloat,

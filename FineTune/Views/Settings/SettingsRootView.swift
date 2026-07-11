@@ -8,7 +8,9 @@ struct SettingsRootView: View {
     @Bindable var deviceVolumeMonitor: DeviceVolumeMonitor
     @Bindable var accessibility: AccessibilityPermissionService
     @Bindable var mediaKeyStatus: MediaKeyStatus
+    @Bindable var bottomEdgeScrollStatus: EventTapStatus
     let mediaKeyMonitor: MediaKeyMonitor
+    let bottomEdgeScrollMonitor: BottomEdgeScrollMonitor
     let shortcutsRegistry: ShortcutsRegistry
     @ObservedObject var updateManager: UpdateManager
 
@@ -26,6 +28,9 @@ struct SettingsRootView: View {
                 onResetAll: {
                     audioEngine.handleSettingsReset()
                     deviceVolumeMonitor.setSystemFollowDefault()
+                    // Reset clears appSettings toggles; re-sync CGEventTaps.
+                    mediaKeyMonitor.reconcile()
+                    bottomEdgeScrollMonitor.reconcile()
                 }
             )
             .tabItem { Label("General", systemImage: "gearshape") }
@@ -43,7 +48,9 @@ struct SettingsRootView: View {
                 settings: settings,
                 accessibility: accessibility,
                 mediaKeyStatus: mediaKeyStatus,
+                bottomEdgeScrollStatus: bottomEdgeScrollStatus,
                 mediaKeyMonitor: mediaKeyMonitor,
+                bottomEdgeScrollMonitor: bottomEdgeScrollMonitor,
                 shortcutsRegistry: shortcutsRegistry
             )
             .tabItem { Label("Shortcuts", systemImage: "command") }

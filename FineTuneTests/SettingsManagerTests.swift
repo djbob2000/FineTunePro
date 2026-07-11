@@ -301,6 +301,30 @@ struct AppSettingsDefaultTests {
         #expect(decoded.volumeHotkeyStep == .normal)
     }
 
+    @Test("AppSettings bottomEdgeScrollEnabled defaults to false and persists")
+    @MainActor
+    func appSettingsBottomEdgeScrollDefaults() {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let settings = SettingsManager(directory: tempDir)
+
+        #expect(settings.appSettings.bottomEdgeScrollEnabled == false)
+
+        var appSettings = settings.appSettings
+        appSettings.bottomEdgeScrollEnabled = true
+        settings.updateAppSettings(appSettings)
+        settings.flushSync()
+
+        let settingsReloaded = SettingsManager(directory: tempDir)
+        #expect(settingsReloaded.appSettings.bottomEdgeScrollEnabled == true)
+    }
+
+    @Test("Missing bottomEdgeScrollEnabled key decodes to false")
+    func bottomEdgeScrollMissingKeyDefault() throws {
+        let json = "{}".data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: json)
+        #expect(decoded.bottomEdgeScrollEnabled == false)
+    }
+
 }
 
 // MARK: - Hidden Devices

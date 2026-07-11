@@ -1,7 +1,9 @@
 // FineTune/Views/HUD/TahoeStyleHUD.swift
 import SwiftUI
 
-/// 300×72 interactive volume pill with device name, slider, and percentage.
+/// 300×72 interactive volume pill:
+/// row 1 — device name (leading) + large percent (trailing);
+/// row 2 — speaker glyph + slider.
 struct TahoeStyleHUD: View {
     let sliderFraction: Float
     let mute: Bool
@@ -12,11 +14,13 @@ struct TahoeStyleHUD: View {
     // MARK: - Constants
 
     static let nameFont: Font = DesignTokens.Typography.rowNameBold
+    static let percentFont: Font = .system(size: 13, weight: .semibold).monospacedDigit()
 
     private static let frameWidth: CGFloat = 300
     private static let frameHeight: CGFloat = 72
     private static let cornerRadius: CGFloat = 22
-    private static let percentageWidth: CGFloat = 36
+    /// Wide enough for "100%" with monospaced digits.
+    private static let percentageWidth: CGFloat = 40
 
     // MARK: - State
 
@@ -76,12 +80,23 @@ struct TahoeStyleHUD: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(deviceName.isEmpty ? " " : deviceName)
-                .font(Self.nameFont)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Device name (left) + live percent (right) — percent is the glance value.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(deviceName.isEmpty ? " " : deviceName)
+                    .font(Self.nameFont)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(percentageText)
+                    .font(Self.percentFont)
+                    .foregroundStyle(displayMute
+                                     ? DesignTokens.Colors.mutedIndicator
+                                     : DesignTokens.Colors.textPrimary)
+                    .frame(minWidth: Self.percentageWidth, alignment: .trailing)
+                    .accessibilityHidden(true)
+            }
 
             HStack(spacing: 8) {
                 // Hard-swap — symbolEffect(.replace.*) cross-fades the whole wave glyph on every bin change.
@@ -99,11 +114,6 @@ struct TahoeStyleHUD: View {
                 )
                 .opacity(displayMute ? 0.5 : 1.0)
                 .scrollWheelStep(sliderBinding, in: 0.0...1.0)
-
-                Text(percentageText)
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .frame(width: Self.percentageWidth, alignment: .trailing)
             }
         }
         .padding(.horizontal, 14)
