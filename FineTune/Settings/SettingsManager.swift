@@ -57,6 +57,7 @@ nonisolated struct AppSettings: Codable, Equatable {
 
     // Media Keys & HUD
     var hudStyle: HUDStyle = .tahoe                // Visual style of the volume HUD
+    var hudPosition: HUDScreenPosition = .topTrailing  // Corner / edge where the volume HUD appears
     var mediaKeyControlEnabled: Bool = true        // Intercept F10/F11/F12 to drive the default output device
     var volumeHotkeyStep: VolumeHotkeyStep = .normal  // Slider-domain step per keypress; user-configurable
 
@@ -72,6 +73,9 @@ nonisolated struct AppSettings: Codable, Equatable {
     // Popup
     var popupSize: MenuBarPopupSize = .comfortable  // Overall menu bar popup size and density
 
+    // Bottom Edge Scroll — uses volumeHotkeyStep for step size (same as media keys / hotkeys)
+    var bottomEdgeScrollEnabled: Bool = false
+
     init() {}
 
     init(from decoder: Decoder) throws {
@@ -85,12 +89,15 @@ nonisolated struct AppSettings: Codable, Equatable {
         loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false
         ddcVolumeControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .ddcVolumeControlEnabled) ?? true
         hudStyle = try c.decodeIfPresent(HUDStyle.self, forKey: .hudStyle) ?? .tahoe
+        hudPosition = try c.decodeIfPresent(HUDScreenPosition.self, forKey: .hudPosition) ?? .topTrailing
         mediaKeyControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaKeyControlEnabled) ?? true
         volumeHotkeyStep = try c.decodeIfPresent(VolumeHotkeyStep.self, forKey: .volumeHotkeyStep) ?? .normal
         customShortcuts = try c.decodeIfPresent([String: ShortcutCodable].self, forKey: .customShortcuts) ?? [:]
         appearance = try c.decodeIfPresent(AppearancePreference.self, forKey: .appearance) ?? .system
         languagePreference = try c.decodeIfPresent(AppLanguagePreference.self, forKey: .languagePreference) ?? .system
         popupSize = try c.decodeIfPresent(MenuBarPopupSize.self, forKey: .popupSize) ?? .comfortable
+        bottomEdgeScrollEnabled = try c.decodeIfPresent(Bool.self, forKey: .bottomEdgeScrollEnabled) ?? false
+        // Legacy bottomEdgeScrollStep (Float) is intentionally ignored; step is volumeHotkeyStep.
 
         // Migrate legacy unified loudness
         if let legacyUnified = try c.decodeIfPresent(Bool.self, forKey: .unifiedLoudnessEnabled) {

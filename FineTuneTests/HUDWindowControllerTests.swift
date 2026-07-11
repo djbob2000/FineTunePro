@@ -118,6 +118,51 @@ struct HUDWindowControllerPositionTests {
         #expect(pt.x == screen.maxX - 8)
         #expect(pt.y == screen.maxY - 8)
     }
+
+    // MARK: - HUDScreenPosition
+
+    @Test("bottomCenter positions above Dock, horizontally centered")
+    func bottomCenterPlacement() {
+        let size = NSSize(width: 300, height: 72)
+        let pt = HUDWindowController.computePosition(
+            size: size,
+            visibleFrame: screen,
+            screenPosition: .bottomCenter
+        )
+        #expect(pt.x == screen.midX - size.width / 2)
+        #expect(pt.y == screen.minY + 20)
+    }
+
+    @Test("topCenter is horizontally centered under the menu bar")
+    func topCenterPlacement() {
+        let size = NSSize(width: 300, height: 72)
+        let pt = HUDWindowController.computePosition(
+            size: size,
+            visibleFrame: screen,
+            screenPosition: .topCenter
+        )
+        #expect(pt.x == screen.midX - size.width / 2)
+        #expect(pt.y == screen.maxY - size.height - 8)
+    }
+
+    @Test("bottomLeading and bottomTrailing use left/right edges")
+    func bottomCorners() {
+        let size = NSSize(width: 300, height: 72)
+        let left = HUDWindowController.computePosition(
+            size: size,
+            visibleFrame: screen,
+            screenPosition: .bottomLeading
+        )
+        let right = HUDWindowController.computePosition(
+            size: size,
+            visibleFrame: screen,
+            screenPosition: .bottomTrailing
+        )
+        #expect(left.x == screen.minX + 8)
+        #expect(right.x == screen.maxX - size.width - 8)
+        #expect(left.y == screen.minY + 20)
+        #expect(right.y == screen.minY + 20)
+    }
 }
 
 // MARK: - Hide timer + style-specific delay

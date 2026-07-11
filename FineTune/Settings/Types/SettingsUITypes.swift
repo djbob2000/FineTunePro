@@ -187,6 +187,39 @@ enum HUDStyle: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - HUD Screen Position
+
+/// Where the volume HUD appears on the display under the cursor (media keys,
+/// bottom-edge scroll, and hotkeys share this preference).
+enum HUDScreenPosition: String, Codable, CaseIterable, Identifiable {
+    case topLeading
+    case topCenter
+    case topTrailing
+    case bottomLeading
+    case bottomCenter
+    case bottomTrailing
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .topLeading: return L10n.string("Top Left")
+        case .topCenter: return L10n.string("Top Center")
+        case .topTrailing: return L10n.string("Top Right")
+        case .bottomLeading: return L10n.string("Bottom Left")
+        case .bottomCenter: return L10n.string("Bottom Center")
+        case .bottomTrailing: return L10n.string("Bottom Right")
+        }
+    }
+
+    var isBottom: Bool {
+        switch self {
+        case .bottomLeading, .bottomCenter, .bottomTrailing: return true
+        case .topLeading, .topCenter, .topTrailing: return false
+        }
+    }
+}
+
 // MARK: - Appearance Preference
 
 /// User preference for app appearance. `.system` follows macOS appearance live;

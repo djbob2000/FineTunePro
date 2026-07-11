@@ -65,18 +65,21 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
     // MARK: - Style-indexed hide delay
 
-    func hideDelay(for style: HUDStyle) -> Duration {
+    func hideDelay(for style: HUDStyle, position: HUDScreenPosition = .topTrailing) -> Duration {
         if let override = hideDelayOverride { return override }
+        // Bottom anchors stay up a bit longer (easier to read while looking down).
+        if position.isBottom { return .milliseconds(1600) }
         return .milliseconds(1100)
     }
 
     // MARK: - Public API
 
-    /// Displays the HUD. Skipped when the foreground app is fullscreen or the popup is visible.
+    /// Displays the HUD. Skipped when the popup is visible.
+    /// Screen corner / edge comes from `AppSettings.hudPosition` (shared by media keys,
+    /// bottom-edge scroll, and hotkeys).
     func show(sliderFraction: Double, mute: Bool, deviceName: String) {
         showCallCount += 1
         showDidUpdatePanel = false
-
 
         guard !popupVisibility.isVisible else {
             logger.debug("Skipping HUD show: popup is visible")
@@ -84,15 +87,19 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         }
 
         let style = settingsManager.appSettings.hudStyle
+        let screenPosition = settingsManager.appSettings.hudPosition
         let appearance = settingsManager.appSettings.appearance
         styleAtLastShow = style
+        lastScreenPosition = screenPosition
         let panel = ensurePanel()
         // Refresh on every show so a preference change between invocations
         // takes effect immediately.
         panel.appearance = appearance.nsAppearance
 
-        // Classic is click-through; Tahoe takes mouse events for drag + hover.
-        panel.ignoresMouseEvents = (style == .classic)
+        // Classic is click-through. Tahoe stays interactive for drag + hover
+        // except when anchored at the bottom (near Dock / gesture) to avoid
+        // stealing clicks from the menu bar or windows.
+        panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom
 
         let scheme = appearance.swiftUIColorScheme
         let displayFraction = Float(max(0, min(1, sliderFraction)))
@@ -134,7 +141,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         showDidUpdatePanel = true
 
         panel.setContentSize(size)
-        panel.setFrameOrigin(position(for: style, size: size))
+        panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
 
         if panel.isVisible {
             panel.orderFrontRegardless()
@@ -149,7 +156,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             }
         }
 
-        scheduleHide(for: style)
+        scheduleHide(for: style, position: screenPosition)
         postAccessibilityAnnouncement(panel: panel, sliderFraction: sliderFraction, mute: mute, deviceName: deviceName)
     }
 
@@ -214,7 +221,9 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         showDidUpdatePanel = true
 
         panel.setContentSize(size)
-        panel.setFrameOrigin(position(for: .tahoe, size: size))
+        let screenPosition = settingsManager.appSettings.hudPosition
+        lastScreenPosition = screenPosition
+        panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
 
         if panel.isVisible {
             panel.orderFrontRegardless()
@@ -229,7 +238,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             }
         }
 
-        scheduleHide(for: .tahoe)
+        scheduleHide(for: .tahoe, position: screenPosition)
         postPerAppAccessibilityAnnouncement(panel: panel, title: title, content: content)
     }
 
@@ -254,40 +263,90 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
     // MARK: - Position Math
 
-    /// Tahoe: top-right. Classic: bottom-center. Under suppression-degraded,
-    /// Tahoe shifts left so it doesn't overlap the native top-right HUD.
+    private static let edgeInset: CGFloat = 8
+    private static let bottomInset: CGFloat = 20
+
+    /// Places the HUD inside `visibleFrame` according to `screenPosition`.
+    /// When `suppressionDegraded` and the preferred corner is top-trailing, shift
+    /// left so we don't sit under the native macOS volume HUD.
+    static func computePosition(
+        size: NSSize,
+        visibleFrame: NSRect,
+        screenPosition: HUDScreenPosition,
+        suppressionDegraded: Bool = false
+    ) -> NSPoint {
+        var position = screenPosition
+        if suppressionDegraded && position == .topTrailing {
+            // Historic degraded layout: upper-left quarter (avoids native top-right OSD).
+            let x = visibleFrame.minX + visibleFrame.width * 0.25 - size.width / 2
+            let y = visibleFrame.maxY - size.height - edgeInset
+            return NSPoint(x: x, y: y)
+        }
+
+        let x: CGFloat
+        let y: CGFloat
+        switch position {
+        case .topLeading:
+            x = visibleFrame.minX + edgeInset
+            y = visibleFrame.maxY - size.height - edgeInset
+        case .topCenter:
+            x = visibleFrame.midX - size.width / 2
+            y = visibleFrame.maxY - size.height - edgeInset
+        case .topTrailing:
+            x = visibleFrame.maxX - size.width - edgeInset
+            y = visibleFrame.maxY - size.height - edgeInset
+        case .bottomLeading:
+            x = visibleFrame.minX + edgeInset
+            y = visibleFrame.minY + bottomInset
+        case .bottomCenter:
+            x = visibleFrame.midX - size.width / 2
+            y = visibleFrame.minY + bottomInset
+        case .bottomTrailing:
+            x = visibleFrame.maxX - size.width - edgeInset
+            y = visibleFrame.minY + bottomInset
+        }
+        return NSPoint(x: x, y: y)
+    }
+
+    /// Backward-compatible overload used by older tests (Tahoe top-right / Classic bottom+140).
     static func computePosition(
         style: HUDStyle,
         size: NSSize,
         visibleFrame: NSRect,
         suppressionDegraded: Bool
     ) -> NSPoint {
-        switch style {
-        case .tahoe:
-            if suppressionDegraded {
-                let x = visibleFrame.minX + visibleFrame.width * 0.25 - size.width / 2
-                let y = visibleFrame.maxY - size.height - 8
-                return NSPoint(x: x, y: y)
-            } else {
-                let x = visibleFrame.maxX - size.width - 8
-                let y = visibleFrame.maxY - size.height - 8
-                return NSPoint(x: x, y: y)
-            }
-        case .classic:
+        // Classic historically ignored suppression-degraded and sat higher above the Dock.
+        if style == .classic {
             let x = visibleFrame.midX - size.width / 2
             let y = visibleFrame.minY + 140
             return NSPoint(x: x, y: y)
         }
+        return computePosition(
+            size: size,
+            visibleFrame: visibleFrame,
+            screenPosition: .topTrailing,
+            suppressionDegraded: suppressionDegraded
+        )
     }
 
-    private func position(for style: HUDStyle, size: NSSize) -> NSPoint {
-        let frame = frameProvider() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+    private func position(for size: NSSize, screenPosition: HUDScreenPosition) -> NSPoint {
+        let frame = visibleFrameForHUD() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         return Self.computePosition(
-            style: style,
             size: size,
             visibleFrame: frame,
+            screenPosition: screenPosition,
             suppressionDegraded: mediaKeyStatus.suppressionDegraded
         )
+    }
+
+    /// Prefer the screen under the mouse so multi-monitor volume gestures
+    /// show the OSD on the same display as the cursor.
+    private func visibleFrameForHUD() -> NSRect? {
+        let mouse = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) {
+            return screen.visibleFrame
+        }
+        return frameProvider()
     }
 
     // MARK: - Panel construction
@@ -320,9 +379,12 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         return p
     }
 
-    private func scheduleHide(for style: HUDStyle) {
+    private var lastScreenPosition: HUDScreenPosition = .topTrailing
+
+    private func scheduleHide(for style: HUDStyle, position: HUDScreenPosition) {
+        lastScreenPosition = position
         hideTask?.cancel()
-        let delay = hideDelay(for: style)
+        let delay = hideDelay(for: style, position: position)
         hideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
@@ -335,7 +397,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             hideTask?.cancel()
             hideTask = nil
         } else {
-            scheduleHide(for: styleAtLastShow)
+            scheduleHide(for: styleAtLastShow, position: lastScreenPosition)
         }
     }
 
