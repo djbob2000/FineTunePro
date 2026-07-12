@@ -31,11 +31,17 @@ struct ShortcutsTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.never)
-        .onChange(of: settings.appSettings.mediaKeyControlEnabled) { _, _ in
+        .onChange(of: settings.appSettings.mediaKeyControlEnabled) { oldValue, newValue in
             mediaKeyMonitor.reconcile()
+            if newValue && !accessibility.isTrusted {
+                accessibility.requestAccess()
+            }
         }
-        .onChange(of: settings.appSettings.bottomEdgeScrollEnabled) { _, _ in
+        .onChange(of: settings.appSettings.bottomEdgeScrollEnabled) { oldValue, newValue in
             bottomEdgeScrollMonitor.reconcile()
+            if newValue && !accessibility.isTrusted {
+                accessibility.requestAccess()
+            }
         }
     }
 

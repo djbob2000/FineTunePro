@@ -150,7 +150,7 @@ final class MenuBarPopupController: MenuBarPopupControlling {
         }
     }
 
-    private static func mouseNearAnyOfOurStatusWindows(_ mouse: NSPoint) -> Bool {
+    static func mouseNearAnyOfOurStatusWindows(_ mouse: NSPoint) -> Bool {
         // Fallback when frames are garbage: still require menu-bar strip (caller)
         // and that *some* status bar window exists in this process near the mouse X
         // on the same screen (compare midX loosely).
@@ -170,12 +170,14 @@ final class MenuBarPopupController: MenuBarPopupControlling {
                 }
             } else {
                 // Nonsense frame (common on macOS 26 multi-display): treat strip click
-                // as ours — we only host one status item.
-                _ = screen
-                return true
+                // as ours only if it is on the right side of the screen containing the mouse.
+                // Status items are on the right side; File/Edit menus are on the left.
+                if mouse.x > screen.frame.maxX - 450 {
+                    return true
+                }
             }
         }
-        return !statusWindows.isEmpty
+        return false
     }
 
     private func handleClick(mouse: NSPoint, source: String) {

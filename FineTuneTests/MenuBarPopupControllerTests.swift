@@ -3,6 +3,8 @@ import Testing
 import AppKit
 @testable import FineTune
 
+class MockStatusBarWindow: NSWindow {}
+
 @Suite("MenuBarPopupController", .serialized)
 @MainActor
 struct MenuBarPopupControllerTests {
@@ -65,4 +67,30 @@ struct MenuBarPopupControllerTests {
         let controller = MenuBarPopupController(accessibilityTitle: title)
         controller.toggle()  // must not crash
     }
+
+    @Test("mouseNearAnyOfOurStatusWindows handles nonsense frames and screen boundaries correctly")
+    func mouseNearAnyOfOurStatusWindowsTests() {
+        let screen = NSScreen.screens[0]
+        let rightSideMouse = NSPoint(x: screen.frame.maxX - 100, y: screen.frame.maxY - 10)
+        let leftSideMouse = NSPoint(x: screen.frame.minX + 100, y: screen.frame.maxY - 10)
+
+        let nonsenseWindow = MockStatusBarWindow(
+            contentRect: NSRect(x: -10000, y: -10000, width: 0, height: 0),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        nonsenseWindow.isReleasedWhenClosed = false
+        nonsenseWindow.orderFrontRegardless()
+        defer { nonsenseWindow.close() }
+
+        #expect(NSApp.windows.contains(nonsenseWindow))
+
+        let isNearRight = MenuBarPopupController.mouseNearAnyOfOurStatusWindows(rightSideMouse)
+        let isNearLeft = MenuBarPopupController.mouseNearAnyOfOurStatusWindows(leftSideMouse)
+
+        #expect(isNearRight == true)
+        #expect(isNearLeft == false)
+    }
 }
+

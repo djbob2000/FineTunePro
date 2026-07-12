@@ -68,8 +68,7 @@ final class BottomEdgeScrollMonitor {
             .appendingPathComponent("FineTune/bottom-edge-runtime.log", isDirectory: false)
     }
 
-    /// Avoid spamming the Accessibility prompt on every reconcile while still untrusted.
-    private var didRequestAccessibilityPrompt = false
+
 
     var watchdogOpen: Bool { lifecycle.watchdogOpen }
     var isTapInstalled: Bool { lifecycle.isInstalled }
@@ -139,18 +138,11 @@ final class BottomEdgeScrollMonitor {
             return
         }
         guard accessibility.isTrusted else {
-            logger.info("Accessibility not trusted; bottom-edge scroll not started — requesting access")
+            logger.info("Accessibility not trusted; bottom-edge scroll not started")
             writeDiagnostics(event: "start_blocked_no_ax", extra: [
                 "ax": "false",
                 "listen": "\(CGPreflightListenEventAccess())"
             ])
-            // Register in the Accessibility list + open Settings if still denied.
-            // Without this, the toggle can be on forever while the monitor is a no-op.
-            if !didRequestAccessibilityPrompt,
-               let service = accessibility as? AccessibilityPermissionService {
-                didRequestAccessibilityPrompt = true
-                service.requestAccess()
-            }
             return
         }
 
@@ -195,8 +187,7 @@ final class BottomEdgeScrollMonitor {
             }
         } else if cachedBottomEdgeScrollEnabled && !accessibility.isTrusted {
             // Feature on, but macOS has not granted Accessibility to *this* binary.
-            // stop listeners and surface the system prompt once (Debug builds are a
-            // separate TCC identity from /Applications).
+            // stop listeners (Debug builds are a separate TCC identity from /Applications).
             stop()
             eventTapStatus.isOffline = false
             writeDiagnostics(event: "reconcile_blocked_no_ax", extra: [
@@ -204,12 +195,6 @@ final class BottomEdgeScrollMonitor {
                 "ax": "false",
                 "listen": "\(CGPreflightListenEventAccess())"
             ])
-            if !didRequestAccessibilityPrompt,
-               let service = accessibility as? AccessibilityPermissionService {
-                didRequestAccessibilityPrompt = true
-                logger.info("Bottom-edge enabled without Accessibility — requesting access")
-                service.requestAccess()
-            }
         } else {
             stop()
             eventTapStatus.isOffline = false
