@@ -3,8 +3,6 @@ import Testing
 import AppKit
 @testable import FineTune
 
-class MockStatusBarWindow: NSWindow {}
-
 @Suite("MenuBarPopupController", .serialized)
 @MainActor
 struct MenuBarPopupControllerTests {
@@ -68,29 +66,31 @@ struct MenuBarPopupControllerTests {
         controller.toggle()  // must not crash
     }
 
-    @Test("mouseNearAnyOfOurStatusWindows handles nonsense frames and screen boundaries correctly")
-    func mouseNearAnyOfOurStatusWindowsTests() {
-        let screen = NSScreen.screens[0]
-        let rightSideMouse = NSPoint(x: screen.frame.maxX - 100, y: screen.frame.maxY - 10)
-        let leftSideMouse = NSPoint(x: screen.frame.minX + 100, y: screen.frame.maxY - 10)
+    @Test("toggle delegates hidden popup presentation to FluidMenuBarExtra")
+    func toggleDelegatesPopupPresentation() throws {
+        let title = "FineTuneTest-Delegation-\(UUID().uuidString)"
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.setAccessibilityTitle(title)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        _ = statusItem.button?.window?.windowNumber
 
-        let nonsenseWindow = MockStatusBarWindow(
-            contentRect: NSRect(x: -10000, y: -10000, width: 0, height: 0),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
+        let popup = try #require(NSApp.windows.first {
+            String(describing: type(of: $0)).contains("FluidMenuBarExtra")
+        })
+        popup.orderOut(nil)
+        defer { popup.orderOut(nil) }
+
+        var postedEvent: NSEvent?
+        let controller = MenuBarPopupController(
+            accessibilityTitle: title,
+            postEvent: { postedEvent = $0 }
         )
-        nonsenseWindow.isReleasedWhenClosed = false
-        nonsenseWindow.orderFrontRegardless()
-        defer { nonsenseWindow.close() }
+        controller.toggle()
 
-        #expect(NSApp.windows.contains(nonsenseWindow))
-
-        let isNearRight = MenuBarPopupController.mouseNearAnyOfOurStatusWindows(rightSideMouse)
-        let isNearLeft = MenuBarPopupController.mouseNearAnyOfOurStatusWindows(leftSideMouse)
-
-        #expect(isNearRight == true)
-        #expect(isNearLeft == false)
+        let event = try #require(postedEvent)
+        #expect(event.type == .leftMouseDown)
+        #expect(event.windowNumber == statusItem.button?.window?.windowNumber)
+        #expect(!popup.isVisible)
     }
-}
 
+}
