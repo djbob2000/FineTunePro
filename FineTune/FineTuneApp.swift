@@ -253,10 +253,6 @@ struct FineTuneApp: App {
         // to a SwiftUI `.task` on the popup content so the FluidMenuBarExtra
         // status item has been materialized before any hotkey can fire.
         let popupController = MenuBarPopupController()
-        // Defer until the FluidMenuBarExtra status item exists (same pattern as iconCoordinator).
-        DispatchQueue.main.async { [popupController] in
-            popupController.installMultiDisplayClickFallback()
-        }
         let resolver = TargetAppResolver(
             ownBundleID: Bundle.main.bundleIdentifier ?? "com.finetuneapp.FineTune"
         )
@@ -298,11 +294,10 @@ struct FineTuneApp: App {
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
-        ) { [settings, engine, monitor, bottomEdgeScrollMonitor, accessibilityService, hud, coordinator, popupController] _ in
+        ) { [settings, engine, monitor, bottomEdgeScrollMonitor, accessibilityService, hud, coordinator] _ in
             MainActor.assumeIsolated {
                 engine.saveAllLiveAUState()
                 coordinator.stop()
-                popupController.stop()
                 monitor.stop()
                 bottomEdgeScrollMonitor.stop()
                 accessibilityService.stop()
