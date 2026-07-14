@@ -272,6 +272,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
     static func computePosition(
         size: NSSize,
         visibleFrame: NSRect,
+        screenFrame: NSRect? = nil,
         screenPosition: HUDScreenPosition,
         suppressionDegraded: Bool = false
     ) -> NSPoint {
@@ -290,7 +291,8 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             x = visibleFrame.minX + edgeInset
             y = visibleFrame.maxY - size.height - edgeInset
         case .topCenter:
-            x = visibleFrame.midX - size.width / 2
+            let midX = screenFrame?.midX ?? visibleFrame.midX
+            x = midX - size.width / 2
             y = visibleFrame.maxY - size.height - edgeInset
         case .topTrailing:
             x = visibleFrame.maxX - size.width - edgeInset
@@ -299,7 +301,8 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             x = visibleFrame.minX + edgeInset
             y = visibleFrame.minY + bottomInset
         case .bottomCenter:
-            x = visibleFrame.midX - size.width / 2
+            let midX = screenFrame?.midX ?? visibleFrame.midX
+            x = midX - size.width / 2
             y = visibleFrame.minY + bottomInset
         case .bottomTrailing:
             x = visibleFrame.maxX - size.width - edgeInset
@@ -313,40 +316,39 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         style: HUDStyle,
         size: NSSize,
         visibleFrame: NSRect,
+        screenFrame: NSRect? = nil,
         suppressionDegraded: Bool
     ) -> NSPoint {
         // Classic historically ignored suppression-degraded and sat higher above the Dock.
         if style == .classic {
-            let x = visibleFrame.midX - size.width / 2
+            let midX = screenFrame?.midX ?? visibleFrame.midX
+            let x = midX - size.width / 2
             let y = visibleFrame.minY + 140
             return NSPoint(x: x, y: y)
         }
         return computePosition(
             size: size,
             visibleFrame: visibleFrame,
+            screenFrame: screenFrame,
             screenPosition: .topTrailing,
             suppressionDegraded: suppressionDegraded
         )
     }
 
     private func position(for size: NSSize, screenPosition: HUDScreenPosition) -> NSPoint {
-        let frame = visibleFrameForHUD() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let frame = screen?.visibleFrame ?? frameProvider() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let screenFrame = screen?.frame
         return Self.computePosition(
             size: size,
             visibleFrame: frame,
+            screenFrame: screenFrame,
             screenPosition: screenPosition,
             suppressionDegraded: mediaKeyStatus.suppressionDegraded
         )
-    }
-
-    /// Prefer the screen under the mouse so multi-monitor volume gestures
-    /// show the OSD on the same display as the cursor.
-    private func visibleFrameForHUD() -> NSRect? {
-        let mouse = NSEvent.mouseLocation
-        if let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) {
-            return screen.visibleFrame
-        }
-        return frameProvider()
     }
 
     // MARK: - Panel construction
