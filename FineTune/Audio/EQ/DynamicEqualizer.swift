@@ -1,5 +1,6 @@
 import Foundation
 import Accelerate
+import os
 
 struct DynamicEqualizerBiquadState {
     var x1: Float = 0
@@ -55,7 +56,15 @@ final class DynamicEqualizer: @unchecked Sendable {
     static let frequencies: [Double] = [68.0, 350.0, 1410.0, 4520.0, 9540.0]
     
     // Live debug gains shared with the UI
-    nonisolated(unsafe) static var debugGains: [Float] = [0, 0, 0, 0, 0]
+    private static let debugGainsLock = OSAllocatedUnfairLock(initialState: [Float](repeating: 0, count: 5))
+    static var debugGains: [Float] {
+        get {
+            debugGainsLock.withLock { $0 }
+        }
+        set {
+            debugGainsLock.withLock { $0 = newValue }
+        }
+    }
     
     // Relative targets (Harman In-Ear 2019)
     static let targets: [Float] = [8.5, 1.0, 3.5, 2.5, -2.0]
