@@ -105,6 +105,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         // Refresh on every show so a preference change between invocations
         // takes effect immediately.
         panel.appearance = appearance.nsAppearance
+        panel.level = (activeStyle == .notch) ? .statusBar : .floating
 
         // Classic is click-through. Tahoe stays interactive for drag + hover
         // except when anchored at the bottom (near Dock / gesture) to avoid
@@ -153,7 +154,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
                     )
                     .preferredColorScheme(scheme)
                 )
-                size = NSSize(width: screen.frame.width, height: menuBarHeight + 14)
+                size = NSSize(width: notchWidth + 180, height: menuBarHeight + 14)
             } else {
                 root = AnyView(
                     TahoeStyleHUD(
@@ -169,6 +170,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
         if let existing = hostingView {
             existing.rootView = root
+            existing.frame = NSRect(origin: .zero, size: size)
         } else {
             let hv = NSHostingView(rootView: root)
             hv.frame = NSRect(origin: .zero, size: size)
@@ -179,7 +181,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
         panel.setContentSize(size)
         if activeStyle == .notch, let screen = screen {
-            let origin = NSPoint(x: screen.frame.minX, y: screen.frame.maxY - size.height)
+            let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height)
             panel.setFrameOrigin(origin)
         } else {
             panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
