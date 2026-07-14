@@ -176,6 +176,7 @@ enum MenuBarIconStyle: String, Codable, CaseIterable, Identifiable {
 enum HUDStyle: String, Codable, CaseIterable, Identifiable {
     case tahoe
     case classic
+    case notch
 
     var id: String { rawValue }
 
@@ -183,6 +184,11 @@ enum HUDStyle: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .tahoe: return L10n.string("Tahoe")
         case .classic: return L10n.string("Classic")
+        case .notch:
+            if Locale.current.language.languageCode?.identifier == "ru" {
+                return "Вырез (Notch)"
+            }
+            return "Notch"
         }
     }
 }

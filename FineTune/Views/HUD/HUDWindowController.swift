@@ -128,6 +128,16 @@ final class HUDWindowController: MediaKeyHUDPresenting {
                     .preferredColorScheme(scheme)
             )
             size = NSSize(width: 200, height: 200)
+        case .notch:
+            root = AnyView(
+                TahoeStyleHUD(
+                    sliderFraction: displayFraction,
+                    mute: mute,
+                    deviceName: deviceName
+                )
+                .preferredColorScheme(scheme)
+            )
+            size = NSSize(width: 300, height: 72)
         }
 
         if let existing = hostingView {

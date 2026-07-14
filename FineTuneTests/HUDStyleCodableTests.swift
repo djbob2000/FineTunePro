@@ -31,9 +31,16 @@ struct HUDStyleCodableTests {
         #expect(s == "\"classic\"")
     }
 
-    @Test("HUDStyle.allCases has exactly 2 entries")
+    @Test("notch encodes as \"notch\"")
+    func notchRawEncoding() throws {
+        let data = try JSONEncoder().encode(HUDStyle.notch)
+        let s = String(data: data, encoding: .utf8)
+        #expect(s == "\"notch\"")
+    }
+
+    @Test("HUDStyle.allCases has exactly 3 entries")
     func allCasesCount() {
-        #expect(HUDStyle.allCases.count == 2)
+        #expect(HUDStyle.allCases.count == 3)
     }
 
     @Test("id property matches rawValue")
@@ -95,6 +102,16 @@ struct HUDStyleCodableTests {
         let data = try JSONEncoder().encode(settings)
         let decoded = try JSONDecoder().decode(SettingsManager.Settings.self, from: data)
         #expect(decoded.appSettings.hudStyle == .classic)
+    }
+
+    @Test("AppSettings with hudStyle=notch round-trips through JSON")
+    @MainActor
+    func appSettingsHUDStyleNotchRoundTrip() throws {
+        var settings = AppSettings()
+        settings.hudStyle = .notch
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.hudStyle == .notch)
     }
 }
 
