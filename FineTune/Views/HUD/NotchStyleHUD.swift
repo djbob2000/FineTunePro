@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct NotchStyleHUD: View {
     let sliderFraction: Float
@@ -7,7 +10,6 @@ struct NotchStyleHUD: View {
     let notchWidth: CGFloat
     let menuBarHeight: CGFloat
 
-    private static let percentageWidth: CGFloat = 40
     private static let bottomOverhang: CGFloat = 14
     private static let barHeight: CGFloat = 3
 
@@ -32,13 +34,27 @@ struct NotchStyleHUD: View {
         }
     }
 
+    private var sideWidth: CGFloat {
+        #if os(macOS)
+        let font = NSFont.systemFont(ofSize: 12, weight: .bold)
+        let attributes = [NSAttributedString.Key.font: font]
+        let nameWidth = (deviceName as NSString).size(withAttributes: attributes).width
+        return max(100, nameWidth + 48)
+        #else
+        return 120
+        #endif
+    }
+
+    private var pillWidth: CGFloat {
+        notchWidth + 2 * sideWidth
+    }
+
     var body: some View {
-        let pillWidth = notchWidth + 180
         let pillHeight = menuBarHeight + Self.bottomOverhang
 
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                // Left Canvas (90pt wide)
+                // Left Canvas
                 HStack(spacing: 6) {
                     Image(systemName: mute ? "speaker.slash.fill" : waveIconName)
                         .font(.system(size: 12, weight: .medium))
@@ -51,27 +67,26 @@ struct NotchStyleHUD: View {
                         .font(DesignTokens.Typography.rowNameBold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
-                        .truncationMode(.tail)
                 }
-                .frame(width: 90, alignment: .leading)
+                .padding(.leading, 16)
+                .frame(width: sideWidth, alignment: .leading)
                 
                 // Center Gap (notchWidth)
                 Spacer()
                     .frame(width: notchWidth)
                 
-                // Right Canvas (90pt wide)
+                // Right Canvas
                 HStack(spacing: 0) {
                     Text(percentageText)
                         .font(.system(size: 12, weight: .semibold).monospacedDigit())
                         .foregroundStyle(mute
                                          ? DesignTokens.Colors.mutedIndicator
                                          : DesignTokens.Colors.textPrimary)
-                        .frame(width: Self.percentageWidth, alignment: .trailing)
                 }
-                .frame(width: 90, alignment: .trailing)
+                .padding(.trailing, 16)
+                .frame(width: sideWidth, alignment: .trailing)
             }
             .frame(height: menuBarHeight)
-            .padding(.horizontal, 16)
             
             Spacer(minLength: 0)
             
@@ -96,5 +111,12 @@ struct NotchStyleHUD: View {
             bottomLeadingRadius: 12,
             bottomTrailingRadius: 12
         ))
+        .overlay(
+            UnevenRoundedRectangle(
+                bottomLeadingRadius: 12,
+                bottomTrailingRadius: 12
+            )
+            .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+        )
     }
 }

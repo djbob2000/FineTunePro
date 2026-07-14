@@ -154,7 +154,11 @@ final class HUDWindowController: MediaKeyHUDPresenting {
                     )
                     .preferredColorScheme(scheme)
                 )
-                size = NSSize(width: notchWidth + 180, height: menuBarHeight + 14)
+                let font = NSFont.systemFont(ofSize: 12, weight: .bold)
+                let nameWidth = (deviceName as NSString).size(withAttributes: [.font: font]).width
+                let sideWidth = max(100, nameWidth + 48)
+                let pillWidth = notchWidth + 2 * sideWidth
+                size = NSSize(width: pillWidth, height: menuBarHeight + 14)
             } else {
                 root = AnyView(
                     TahoeStyleHUD(
