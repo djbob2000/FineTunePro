@@ -91,6 +91,16 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         let appearance = settingsManager.appSettings.appearance
         styleAtLastShow = style
         lastScreenPosition = screenPosition
+
+        let screen = screenForHUD()
+        let hasNotch = screen?.hasNotch ?? false
+        let activeStyle: HUDStyle
+        if style == .notch {
+            activeStyle = hasNotch ? .notch : .tahoe
+        } else {
+            activeStyle = style
+        }
+
         let panel = ensurePanel()
         // Refresh on every show so a preference change between invocations
         // takes effect immediately.
@@ -99,13 +109,14 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         // Classic is click-through. Tahoe stays interactive for drag + hover
         // except when anchored at the bottom (near Dock / gesture) to avoid
         // stealing clicks from the menu bar or windows.
-        panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom
+        // Notch HUD is also fully click-through to allow menu bar interaction.
+        panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom || (activeStyle == .notch)
 
         let scheme = appearance.swiftUIColorScheme
         let displayFraction = Float(max(0, min(1, sliderFraction)))
         let root: AnyView
         let size: NSSize
-        switch style {
+        switch activeStyle {
         case .tahoe:
             root = AnyView(
                 TahoeStyleHUD(
@@ -129,15 +140,31 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             )
             size = NSSize(width: 200, height: 200)
         case .notch:
-            root = AnyView(
-                TahoeStyleHUD(
-                    sliderFraction: displayFraction,
-                    mute: mute,
-                    deviceName: deviceName
+            if let screen = screen, let notchRect = screen.notchRect {
+                let notchWidth = notchRect.width
+                let menuBarHeight = screen.safeAreaInsets.top
+                root = AnyView(
+                    NotchStyleHUD(
+                        sliderFraction: displayFraction,
+                        mute: mute,
+                        deviceName: deviceName,
+                        notchWidth: notchWidth,
+                        menuBarHeight: menuBarHeight
+                    )
+                    .preferredColorScheme(scheme)
                 )
-                .preferredColorScheme(scheme)
-            )
-            size = NSSize(width: 300, height: 72)
+                size = NSSize(width: screen.frame.width, height: menuBarHeight + 14)
+            } else {
+                root = AnyView(
+                    TahoeStyleHUD(
+                        sliderFraction: displayFraction,
+                        mute: mute,
+                        deviceName: deviceName
+                    )
+                    .preferredColorScheme(scheme)
+                )
+                size = NSSize(width: 300, height: 72)
+            }
         }
 
         if let existing = hostingView {
@@ -151,7 +178,12 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         showDidUpdatePanel = true
 
         panel.setContentSize(size)
-        panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
+        if activeStyle == .notch, let screen = screen {
+            let origin = NSPoint(x: screen.frame.minX, y: screen.frame.maxY - size.height)
+            panel.setFrameOrigin(origin)
+        } else {
+            panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
+        }
 
         if panel.isVisible {
             panel.orderFrontRegardless()
@@ -346,10 +378,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
     }
 
     private func position(for size: NSSize, screenPosition: HUDScreenPosition) -> NSPoint {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
+        let screen = screenForHUD()
         let frame = screen?.visibleFrame ?? frameProvider() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let screenFrame = screen?.frame
         return Self.computePosition(
@@ -359,6 +388,13 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             screenPosition: screenPosition,
             suppressionDegraded: mediaKeyStatus.suppressionDegraded
         )
+    }
+
+    private func screenForHUD() -> NSScreen? {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
     }
 
     // MARK: - Panel construction
