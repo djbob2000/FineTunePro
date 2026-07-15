@@ -432,6 +432,45 @@ struct MediaKeyMonitorHandlerTests {
         #expect(writtenMute == false)
     }
 
+    @Test("muteToggle from unmuted shows HUD with pre-mute volume and new mute state")
+    func muteToggleOnHUD() {
+        let (monitor, hud, _, _) = makeMonitor(popupVisible: false)
+        let deviceID: AudioDeviceID = 1
+        monitor.handleCore(
+            event: .muteToggle,
+            deviceID: deviceID,
+            tier: .software,
+            deviceName: "Test Device",
+            currentVolume: 0.25,
+            currentMute: false,
+            setVolume: { _, _ in },
+            setMute: { _, _ in }
+        )
+        #expect(hud.showCallCount == 1)
+        #expect(hud.lastShownMute == true)
+        #expect(abs((hud.lastShownSliderFraction ?? 0.0) - 0.5) < 1e-6)
+    }
+
+    @Test("muteToggle from muted shows HUD with post-toggle volume and new mute state")
+    func muteToggleOffHUD() {
+        let (monitor, hud, _, _) = makeMonitor(popupVisible: false)
+        let deviceID: AudioDeviceID = 1
+        monitor.handleCore(
+            event: .muteToggle,
+            deviceID: deviceID,
+            tier: .software,
+            deviceName: "Test Device",
+            currentVolume: 0.0,
+            currentMute: true,
+            setVolume: { _, _ in },
+            setMute: { _, _ in },
+            getVolume: { _ in 0.25 }
+        )
+        #expect(hud.showCallCount == 1)
+        #expect(hud.lastShownMute == false)
+        #expect(abs((hud.lastShownSliderFraction ?? 0.0) - 0.5) < 1e-6)
+    }
+
     // MARK: - HUD show count
 
     @Test("handleCore calls HUD show once when popup is not visible")
