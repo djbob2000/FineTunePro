@@ -163,6 +163,47 @@ struct HUDWindowControllerPositionTests {
         #expect(left.y == screen.minY + 20)
         #expect(right.y == screen.minY + 20)
     }
+
+    @Test("topCenter and bottomCenter center relative to screenFrame when provided, ignoring Dock-induced visibleFrame shifts")
+    func centerWithScreenFrameAndDock() {
+        let size = NSSize(width: 300, height: 72)
+        let physicalScreen = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        // Dock on the left (80pt width)
+        let visibleFrameWithLeftDock = NSRect(x: 80, y: 0, width: 1360, height: 900)
+        
+        let ptTop = HUDWindowController.computePosition(
+            size: size,
+            visibleFrame: visibleFrameWithLeftDock,
+            screenFrame: physicalScreen,
+            screenPosition: .topCenter
+        )
+        
+        let ptBottom = HUDWindowController.computePosition(
+            size: size,
+            visibleFrame: visibleFrameWithLeftDock,
+            screenFrame: physicalScreen,
+            screenPosition: .bottomCenter
+        )
+        
+        // Horizontal centering should align to physical screen center
+        let expectedX = physicalScreen.midX - size.width / 2 // 720 - 150 = 570
+        #expect(ptTop.x == expectedX)
+        #expect(ptBottom.x == expectedX)
+        
+        // Vertical coordinates should still respect visibleFrame
+        #expect(ptTop.y == visibleFrameWithLeftDock.maxY - size.height - 8)
+        #expect(ptBottom.y == visibleFrameWithLeftDock.minY + 20)
+    }
+
+    @Test("computeNotchOrigin centers panel at top of screen")
+    func notchOriginCentering() {
+        let screenFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = NSSize(width: 400, height: 38)
+        let origin = HUDWindowController.computeNotchOrigin(screenFrame: screenFrame, size: size)
+        print("DEBUG origin: \(origin)")
+        #expect(origin.x == 520.0)
+        #expect(origin.y == 862.0)
+    }
 }
 
 // MARK: - Hide timer + style-specific delay
@@ -247,5 +288,26 @@ struct HUDWindowControllerTimerTests {
         hud.show(sliderFraction: 0.5, mute: false, deviceName: "Test Device")
         #expect(hud.showCallCount == 1)
         #expect(hud.showDidUpdatePanel == true)
+    }
+
+    @Test("Notch style falls back to Tahoe size and interactivity on non-notched display")
+    func notchFallbackOnNonNotchedDisplay() {
+        let hud = makeController()
+        hud.screenProvider = { nil }
+        hud.settingsManager.appSettings.hudStyle = .notch
+        hud.settingsManager.appSettings.hudPosition = .topTrailing
+        
+        hud.show(sliderFraction: 0.5, mute: false, deviceName: "Test Device")
+        
+        let panel = hud.panel!
+        
+        // Size should match Tahoe (300 x 72)
+        #expect(panel.frame.size == NSSize(width: 300, height: 72))
+        
+        // Since active style fell back to Tahoe, ignoresMouseEvents should be false (interactive)
+        #expect(panel.ignoresMouseEvents == false)
+        
+        // Level should be .floating
+        #expect(panel.level == NSWindow.Level.floating)
     }
 }

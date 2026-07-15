@@ -48,7 +48,7 @@ struct MenuBarPopupView: View {
     @State private var isEQAnimating = false
 
     /// Track popup visibility to pause VU meter polling when hidden
-    @State private var isPopupVisible = true
+    @State private var isPopupVisible = false
 
     /// Error message shown when AutoEQ profile import fails
     @State private var autoEQImportError: String?

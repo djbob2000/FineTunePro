@@ -6,12 +6,12 @@ import os
 /// Owns the on-screen volume HUD panel and its auto-hide timing.
 @MainActor
 final class HUDWindowController: MediaKeyHUDPresenting {
-    private let settingsManager: SettingsManager
+    let settingsManager: SettingsManager
     private let mediaKeyStatus: MediaKeyStatus
     private let popupVisibility: PopupVisibilityService
     private let logger = Logger(subsystem: "com.finetuneapp.FineTune", category: "HUDWindowController")
 
-    private var panel: NSPanel?
+    var panel: NSPanel?
     private var hostingView: NSHostingView<AnyView>?
     private var hideTask: Task<Void, Never>?
     private var styleAtLastShow: HUDStyle = .tahoe
@@ -29,6 +29,12 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
     var hideDelayOverride: Duration?
     var frameProvider: () -> NSRect? = { NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame }
+    var screenProvider: () -> NSScreen? = {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+    }
     private(set) var showCallCount: Int = 0
     private(set) var showDidUpdatePanel: Bool = false
     private(set) var lastShownSliderFraction: Double?
@@ -95,21 +101,33 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         let appearance = settingsManager.appSettings.appearance
         styleAtLastShow = style
         lastScreenPosition = screenPosition
+
+        let screen = screenProvider()
+        let hasNotch = screen?.hasNotch ?? false
+        let activeStyle: HUDStyle
+        if style == .notch {
+            activeStyle = hasNotch ? .notch : .tahoe
+        } else {
+            activeStyle = style
+        }
+
         let panel = ensurePanel()
         // Refresh on every show so a preference change between invocations
         // takes effect immediately.
         panel.appearance = appearance.nsAppearance
+        panel.level = (activeStyle == .notch) ? .statusBar : .floating
 
         // Classic is click-through. Tahoe stays interactive for drag + hover
         // except when anchored at the bottom (near Dock / gesture) to avoid
         // stealing clicks from the menu bar or windows.
-        panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom
+        // Notch HUD is also fully click-through to allow menu bar interaction.
+        panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom || (activeStyle == .notch)
 
         let scheme = appearance.swiftUIColorScheme
         let displayFraction = Float(max(0, min(1, sliderFraction)))
         let root: AnyView
         let size: NSSize
-        switch style {
+        switch activeStyle {
         case .tahoe:
             root = AnyView(
                 TahoeStyleHUD(
@@ -132,10 +150,54 @@ final class HUDWindowController: MediaKeyHUDPresenting {
                     .preferredColorScheme(scheme)
             )
             size = NSSize(width: 200, height: 200)
+        case .notch:
+            if let screen = screen, let notchRect = screen.notchRect {
+                let notchWidth = notchRect.width
+                let menuBarHeight = screen.safeAreaInsets.top
+                let screenWidth = screen.frame.width
+                let (sideWidth, pillWidth, pillHeight) = NotchGeometry.hudGeometry(
+                    deviceName: deviceName,
+                    notchWidth: notchWidth,
+                    menuBarHeight: menuBarHeight,
+                    screenWidth: screenWidth
+                )
+                root = AnyView(
+                    NotchStyleHUD(
+                        sliderFraction: displayFraction,
+                        mute: mute,
+                        deviceName: deviceName,
+                        notchWidth: notchWidth,
+                        menuBarHeight: menuBarHeight,
+                        sideWidth: sideWidth,
+                        pillWidth: pillWidth
+                    )
+                    .preferredColorScheme(.dark)
+                )
+                size = NSSize(width: pillWidth, height: pillHeight)
+            } else {
+                panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom
+                panel.level = .floating
+                root = AnyView(
+                    TahoeStyleHUD(
+                        sliderFraction: displayFraction,
+                        mute: mute,
+                        deviceName: deviceName,
+                        onSliderChange: { [weak self] newFraction in
+                            self?.volumeWriter?(Double(newFraction))
+                        },
+                        onHoverChange: { [weak self] hovering in
+                            self?.handleHoverChange(hovering)
+                        }
+                    )
+                    .preferredColorScheme(scheme)
+                )
+                size = NSSize(width: 300, height: 72)
+            }
         }
 
         if let existing = hostingView {
             existing.rootView = root
+            existing.frame = NSRect(origin: .zero, size: size)
         } else {
             let hv = NSHostingView(rootView: root)
             hv.frame = NSRect(origin: .zero, size: size)
@@ -145,7 +207,12 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         showDidUpdatePanel = true
 
         panel.setContentSize(size)
-        panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
+        if activeStyle == .notch, let screen = screen {
+            let origin = Self.computeNotchOrigin(screenFrame: screen.frame, size: size)
+            panel.setFrameOrigin(origin)
+        } else {
+            panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
+        }
 
         if panel.isVisible {
             panel.orderFrontRegardless()
@@ -206,6 +273,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         let panel = ensurePanel()
         panel.appearance = appearance.nsAppearance
         panel.ignoresMouseEvents = true
+        panel.level = .floating
 
         let scheme = appearance.swiftUIColorScheme
         let root = AnyView(
@@ -276,6 +344,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
     static func computePosition(
         size: NSSize,
         visibleFrame: NSRect,
+        screenFrame: NSRect? = nil,
         screenPosition: HUDScreenPosition,
         suppressionDegraded: Bool = false
     ) -> NSPoint {
@@ -294,7 +363,8 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             x = visibleFrame.minX + edgeInset
             y = visibleFrame.maxY - size.height - edgeInset
         case .topCenter:
-            x = visibleFrame.midX - size.width / 2
+            let midX = screenFrame?.midX ?? visibleFrame.midX
+            x = midX - size.width / 2
             y = visibleFrame.maxY - size.height - edgeInset
         case .topTrailing:
             x = visibleFrame.maxX - size.width - edgeInset
@@ -303,7 +373,8 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             x = visibleFrame.minX + edgeInset
             y = visibleFrame.minY + bottomInset
         case .bottomCenter:
-            x = visibleFrame.midX - size.width / 2
+            let midX = screenFrame?.midX ?? visibleFrame.midX
+            x = midX - size.width / 2
             y = visibleFrame.minY + bottomInset
         case .bottomTrailing:
             x = visibleFrame.maxX - size.width - edgeInset
@@ -317,40 +388,40 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         style: HUDStyle,
         size: NSSize,
         visibleFrame: NSRect,
+        screenFrame: NSRect? = nil,
         suppressionDegraded: Bool
     ) -> NSPoint {
         // Classic historically ignored suppression-degraded and sat higher above the Dock.
         if style == .classic {
-            let x = visibleFrame.midX - size.width / 2
+            let midX = screenFrame?.midX ?? visibleFrame.midX
+            let x = midX - size.width / 2
             let y = visibleFrame.minY + 140
             return NSPoint(x: x, y: y)
         }
         return computePosition(
             size: size,
             visibleFrame: visibleFrame,
+            screenFrame: screenFrame,
             screenPosition: .topTrailing,
             suppressionDegraded: suppressionDegraded
         )
     }
 
+    static func computeNotchOrigin(screenFrame: NSRect, size: NSSize) -> NSPoint {
+        return NSPoint(x: screenFrame.midX - size.width / 2, y: screenFrame.maxY - size.height)
+    }
+
     private func position(for size: NSSize, screenPosition: HUDScreenPosition) -> NSPoint {
-        let frame = visibleFrameForHUD() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let screen = screenProvider()
+        let frame = screen?.visibleFrame ?? frameProvider() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let screenFrame = screen?.frame
         return Self.computePosition(
             size: size,
             visibleFrame: frame,
+            screenFrame: screenFrame,
             screenPosition: screenPosition,
             suppressionDegraded: mediaKeyStatus.suppressionDegraded
         )
-    }
-
-    /// Prefer the screen under the mouse so multi-monitor volume gestures
-    /// show the OSD on the same display as the cursor.
-    private func visibleFrameForHUD() -> NSRect? {
-        let mouse = NSEvent.mouseLocation
-        if let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) {
-            return screen.visibleFrame
-        }
-        return frameProvider()
     }
 
     // MARK: - Panel construction

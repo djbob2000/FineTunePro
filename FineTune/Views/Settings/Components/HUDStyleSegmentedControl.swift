@@ -52,6 +52,39 @@ private struct HUDStyleOption: View {
         switch style {
         case .tahoe: tahoeThumbnail
         case .classic: classicThumbnail
+        case .notch: notchThumbnail
+        }
+    }
+
+    private var notchThumbnail: some View {
+        let tint = isSelected ? DesignTokens.Colors.accentPrimary : DesignTokens.Colors.textSecondary
+        return ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(0.08))
+            
+            // Mini notch representation at the top center
+            VStack(spacing: 0) {
+                UnevenRoundedRectangle(
+                    bottomLeadingRadius: 2,
+                    bottomTrailingRadius: 2
+                )
+                .fill(tint.opacity(0.8))
+                .frame(width: 14, height: 4)
+                Spacer()
+            }
+            
+            // Mini indicator dots representing left and right info text
+            HStack {
+                Circle()
+                    .fill(tint.opacity(0.5))
+                    .frame(width: 2, height: 2)
+                Spacer()
+                Circle()
+                    .fill(tint.opacity(0.5))
+                    .frame(width: 2, height: 2)
+            }
+            .padding(.horizontal, 6)
+            .padding(.top, 1)
         }
     }
 

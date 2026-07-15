@@ -1383,14 +1383,14 @@ final class ProcessTapController: ProcessTapControlling {
         // 0.5s is conservative — audio callbacks run at ~5ms intervals.
         if oldEQ != nil || oldAutoEQ != nil || oldDynEQ != nil || oldLoudness != nil || oldLoudnessEqualizer != nil || oldPostAgcCompressor != nil || oldAUChain != nil || oldDeviceAUChain != nil {
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                _ = oldEQ
-                _ = oldAutoEQ
-                _ = oldDynEQ
-                _ = oldLoudness
-                _ = oldLoudnessEqualizer
-                _ = oldPostAgcCompressor
-                _ = oldAUChain
-                _ = oldDeviceAUChain
+                withExtendedLifetime(oldEQ) {}
+                withExtendedLifetime(oldAutoEQ) {}
+                withExtendedLifetime(oldDynEQ) {}
+                withExtendedLifetime(oldLoudness) {}
+                withExtendedLifetime(oldLoudnessEqualizer) {}
+                withExtendedLifetime(oldPostAgcCompressor) {}
+                withExtendedLifetime(oldAUChain) {}
+                withExtendedLifetime(oldDeviceAUChain) {}
             }
         }
 

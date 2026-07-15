@@ -1,5 +1,6 @@
 import Foundation
 import Accelerate
+import os
 
 struct DynamicEqualizerBiquadState {
     var x1: Float = 0
@@ -55,7 +56,15 @@ final class DynamicEqualizer: @unchecked Sendable {
     static let frequencies: [Double] = [68.0, 350.0, 1410.0, 4520.0, 9540.0]
     
     // Live debug gains shared with the UI
-    nonisolated(unsafe) static var debugGains: [Float] = [0, 0, 0, 0, 0]
+    private static let debugGainsStorage = RealTimeSafeDebugGains()
+    static var debugGains: [Float] {
+        get {
+            debugGainsStorage.read()
+        }
+        set {
+            debugGainsStorage.write(newValue)
+        }
+    }
     
     // Relative targets (Harman In-Ear 2019)
     static let targets: [Float] = [8.5, 1.0, 3.5, 2.5, -2.0]
@@ -329,5 +338,23 @@ final class DynamicEqualizer: @unchecked Sendable {
         peakingFilters[2] = pk2
         peakingFilters[3] = pk3
         peakingFilters[4] = pk4
+    }
+}
+
+fileprivate final class RealTimeSafeDebugGains: @unchecked Sendable {
+    private var lock = os_unfair_lock()
+    private var gains = [Float](repeating: 0, count: 5)
+    
+    func read() -> [Float] {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return gains
+    }
+    
+    func write(_ newGains: [Float]) {
+        if os_unfair_lock_trylock(&lock) {
+            gains = newGains
+            os_unfair_lock_unlock(&lock)
+        }
     }
 }
