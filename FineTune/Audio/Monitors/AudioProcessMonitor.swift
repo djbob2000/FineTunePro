@@ -55,6 +55,7 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
         "speechrecognitiond",
         "dictationd",
         "corespeech",
+        "historicalaudiod",
     ]
 
     /// Returns true if the bundle ID or process name indicates a system daemon that should be filtered

@@ -31,6 +31,8 @@ final class HUDWindowController: MediaKeyHUDPresenting {
     var frameProvider: () -> NSRect? = { NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame }
     private(set) var showCallCount: Int = 0
     private(set) var showDidUpdatePanel: Bool = false
+    private(set) var lastShownSliderFraction: Double?
+    private(set) var lastShownMute: Bool?
 
     init(
         settingsManager: SettingsManager,
@@ -80,6 +82,8 @@ final class HUDWindowController: MediaKeyHUDPresenting {
     func show(sliderFraction: Double, mute: Bool, deviceName: String) {
         showCallCount += 1
         showDidUpdatePanel = false
+        lastShownSliderFraction = sliderFraction
+        lastShownMute = mute
 
         guard !popupVisibility.isVisible else {
             logger.debug("Skipping HUD show: popup is visible")

@@ -964,11 +964,13 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
     /// Extracted from `readAllStates()` so a tier override change can refresh
     /// one device without enumerating the whole device list.
     private func readOneState(for deviceID: AudioDeviceID, device: AudioDevice) {
-        // Skip devices that HAL reports as dead (mid-disconnect)
-        guard deviceID.isDeviceAlive() else { return }
-
         let backend = outputVolumeBackend(for: deviceID)
 
+        // Software tier reads only persisted UID-keyed settings — no HAL access —
+        // so seed it even while HAL still reports the device as not-alive. Display
+        // audio (DP/USB-C) routinely enumerates present-but-not-alive on reconnect;
+        // skipping here left the new AudioDeviceID unseeded, and every consumer
+        // defaults a missing entry to full volume.
         if backend == .software {
             let muted = settingsManager.getSoftwareDeviceMuteState(for: device.uid)
             let defaultVolume: Float = muted ? 0 : 1.0
@@ -977,17 +979,22 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
             muteStates[deviceID] = muted
 
             // Force physical device volume to 1.0 (unity) and mute to false (unmuted)
-            // to prevent hardware-level attenuation or mute lockups.
-            if deviceID.readMuteState() {
-                logger.info("On read, forcing physical mute to false for software device \(deviceID)")
-                _ = deviceID.setMuteState(false)
-            }
-            if deviceID.readOutputVolumeScalar() != 1.0 {
-                logger.info("On read, forcing physical volume to 1.0 for software device \(deviceID)")
-                _ = deviceID.setOutputVolumeScalar(1.0)
+            // to prevent hardware-level attenuation or mute lockups. Only if the device is alive.
+            if deviceID.isDeviceAlive() {
+                if deviceID.readMuteState() {
+                    logger.info("On read, forcing physical mute to false for software device \(deviceID)")
+                    _ = deviceID.setMuteState(false)
+                }
+                if deviceID.readOutputVolumeScalar() != 1.0 {
+                    logger.info("On read, forcing physical volume to 1.0 for software device \(deviceID)")
+                    _ = deviceID.setOutputVolumeScalar(1.0)
+                }
             }
             return
         }
+
+        // Skip devices that HAL reports as dead (mid-disconnect)
+        guard deviceID.isDeviceAlive() else { return }
 
         #if !APP_STORE
         // For DDC-backed devices, use cached DDC volume instead of CoreAudio
