@@ -9,6 +9,8 @@ struct NotchStyleHUD: View {
     let deviceName: String
     let notchWidth: CGFloat
     let menuBarHeight: CGFloat
+    let sideWidth: CGFloat
+    let pillWidth: CGFloat
 
     private static let bottomOverhang: CGFloat = 14
     private static let barHeight: CGFloat = 3
@@ -34,20 +36,6 @@ struct NotchStyleHUD: View {
         }
     }
 
-    private var sideWidth: CGFloat {
-        #if os(macOS)
-        let font = NSFont.systemFont(ofSize: 12, weight: .bold)
-        let attributes = [NSAttributedString.Key.font: font]
-        let nameWidth = (deviceName as NSString).size(withAttributes: attributes).width
-        return max(100, nameWidth + 48)
-        #else
-        return 120
-        #endif
-    }
-
-    private var pillWidth: CGFloat {
-        notchWidth + 2 * sideWidth
-    }
 
     var body: some View {
         let pillHeight = menuBarHeight + Self.bottomOverhang
@@ -67,6 +55,7 @@ struct NotchStyleHUD: View {
                         .font(DesignTokens.Typography.rowNameBold)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 .padding(.leading, 16)
                 .frame(width: sideWidth, alignment: .leading)

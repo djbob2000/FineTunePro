@@ -17,6 +17,27 @@ enum NotchGeometry {
         let height = frame.maxY - topLeft.minY
         return NSRect(x: x, y: y, width: width, height: height)
     }
+
+    static func hudGeometry(
+        deviceName: String,
+        notchWidth: CGFloat,
+        menuBarHeight: CGFloat,
+        screenWidth: CGFloat
+    ) -> (sideWidth: CGFloat, pillWidth: CGFloat, pillHeight: CGFloat) {
+        let font = NSFont.systemFont(ofSize: 12, weight: .bold)
+        let attributes = [NSAttributedString.Key.font: font]
+        let nameWidth = (deviceName as NSString).size(withAttributes: attributes).width
+        
+        let rawSideWidth = max(100, nameWidth + 48)
+        let maxPillWidth = screenWidth - 32
+        let maxSideWidth = max(100, (maxPillWidth - notchWidth) / 2)
+        
+        let sideWidth = min(rawSideWidth, maxSideWidth)
+        let pillWidth = notchWidth + 2 * sideWidth
+        let pillHeight = menuBarHeight + 14
+        
+        return (sideWidth, pillWidth, pillHeight)
+    }
 }
 
 extension NSScreen {

@@ -6,12 +6,12 @@ import os
 /// Owns the on-screen volume HUD panel and its auto-hide timing.
 @MainActor
 final class HUDWindowController: MediaKeyHUDPresenting {
-    private let settingsManager: SettingsManager
+    let settingsManager: SettingsManager
     private let mediaKeyStatus: MediaKeyStatus
     private let popupVisibility: PopupVisibilityService
     private let logger = Logger(subsystem: "com.finetuneapp.FineTune", category: "HUDWindowController")
 
-    private var panel: NSPanel?
+    var panel: NSPanel?
     private var hostingView: NSHostingView<AnyView>?
     private var hideTask: Task<Void, Never>?
     private var styleAtLastShow: HUDStyle = .tahoe
@@ -29,6 +29,12 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
     var hideDelayOverride: Duration?
     var frameProvider: () -> NSRect? = { NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame }
+    var screenProvider: () -> NSScreen? = {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+    }
     private(set) var showCallCount: Int = 0
     private(set) var showDidUpdatePanel: Bool = false
 
@@ -92,7 +98,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         styleAtLastShow = style
         lastScreenPosition = screenPosition
 
-        let screen = screenForHUD()
+        let screen = screenProvider()
         let hasNotch = screen?.hasNotch ?? false
         let activeStyle: HUDStyle
         if style == .notch {
@@ -144,27 +150,40 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             if let screen = screen, let notchRect = screen.notchRect {
                 let notchWidth = notchRect.width
                 let menuBarHeight = screen.safeAreaInsets.top
+                let screenWidth = screen.frame.width
+                let (sideWidth, pillWidth, pillHeight) = NotchGeometry.hudGeometry(
+                    deviceName: deviceName,
+                    notchWidth: notchWidth,
+                    menuBarHeight: menuBarHeight,
+                    screenWidth: screenWidth
+                )
                 root = AnyView(
                     NotchStyleHUD(
                         sliderFraction: displayFraction,
                         mute: mute,
                         deviceName: deviceName,
                         notchWidth: notchWidth,
-                        menuBarHeight: menuBarHeight
+                        menuBarHeight: menuBarHeight,
+                        sideWidth: sideWidth,
+                        pillWidth: pillWidth
                     )
-                    .preferredColorScheme(scheme)
+                    .preferredColorScheme(.dark)
                 )
-                let font = NSFont.systemFont(ofSize: 12, weight: .bold)
-                let nameWidth = (deviceName as NSString).size(withAttributes: [.font: font]).width
-                let sideWidth = max(100, nameWidth + 48)
-                let pillWidth = notchWidth + 2 * sideWidth
-                size = NSSize(width: pillWidth, height: menuBarHeight + 14)
+                size = NSSize(width: pillWidth, height: pillHeight)
             } else {
+                panel.ignoresMouseEvents = (style == .classic) || screenPosition.isBottom
+                panel.level = .floating
                 root = AnyView(
                     TahoeStyleHUD(
                         sliderFraction: displayFraction,
                         mute: mute,
-                        deviceName: deviceName
+                        deviceName: deviceName,
+                        onSliderChange: { [weak self] newFraction in
+                            self?.volumeWriter?(Double(newFraction))
+                        },
+                        onHoverChange: { [weak self] hovering in
+                            self?.handleHoverChange(hovering)
+                        }
                     )
                     .preferredColorScheme(scheme)
                 )
@@ -185,7 +204,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
 
         panel.setContentSize(size)
         if activeStyle == .notch, let screen = screen {
-            let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height)
+            let origin = Self.computeNotchOrigin(screenFrame: screen.frame, size: size)
             panel.setFrameOrigin(origin)
         } else {
             panel.setFrameOrigin(position(for: size, screenPosition: screenPosition))
@@ -250,6 +269,7 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         let panel = ensurePanel()
         panel.appearance = appearance.nsAppearance
         panel.ignoresMouseEvents = true
+        panel.level = .floating
 
         let scheme = appearance.swiftUIColorScheme
         let root = AnyView(
@@ -383,8 +403,12 @@ final class HUDWindowController: MediaKeyHUDPresenting {
         )
     }
 
+    static func computeNotchOrigin(screenFrame: NSRect, size: NSSize) -> NSPoint {
+        return NSPoint(x: screenFrame.midX - size.width / 2, y: screenFrame.maxY - size.height)
+    }
+
     private func position(for size: NSSize, screenPosition: HUDScreenPosition) -> NSPoint {
-        let screen = screenForHUD()
+        let screen = screenProvider()
         let frame = screen?.visibleFrame ?? frameProvider() ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let screenFrame = screen?.frame
         return Self.computePosition(
@@ -394,13 +418,6 @@ final class HUDWindowController: MediaKeyHUDPresenting {
             screenPosition: screenPosition,
             suppressionDegraded: mediaKeyStatus.suppressionDegraded
         )
-    }
-
-    private func screenForHUD() -> NSScreen? {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
     }
 
     // MARK: - Panel construction

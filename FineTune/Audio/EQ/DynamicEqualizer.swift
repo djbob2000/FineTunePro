@@ -56,13 +56,13 @@ final class DynamicEqualizer: @unchecked Sendable {
     static let frequencies: [Double] = [68.0, 350.0, 1410.0, 4520.0, 9540.0]
     
     // Live debug gains shared with the UI
-    private static let debugGainsLock = OSAllocatedUnfairLock(initialState: [Float](repeating: 0, count: 5))
+    private static let debugGainsStorage = RealTimeSafeDebugGains()
     static var debugGains: [Float] {
         get {
-            debugGainsLock.withLock { $0 }
+            debugGainsStorage.read()
         }
         set {
-            debugGainsLock.withLock { $0 = newValue }
+            debugGainsStorage.write(newValue)
         }
     }
     
@@ -338,5 +338,23 @@ final class DynamicEqualizer: @unchecked Sendable {
         peakingFilters[2] = pk2
         peakingFilters[3] = pk3
         peakingFilters[4] = pk4
+    }
+}
+
+fileprivate final class RealTimeSafeDebugGains: @unchecked Sendable {
+    private var lock = os_unfair_lock()
+    private var gains = [Float](repeating: 0, count: 5)
+    
+    func read() -> [Float] {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return gains
+    }
+    
+    func write(_ newGains: [Float]) {
+        if os_unfair_lock_trylock(&lock) {
+            gains = newGains
+            os_unfair_lock_unlock(&lock)
+        }
     }
 }

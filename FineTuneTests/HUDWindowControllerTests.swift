@@ -194,6 +194,16 @@ struct HUDWindowControllerPositionTests {
         #expect(ptTop.y == visibleFrameWithLeftDock.maxY - size.height - 8)
         #expect(ptBottom.y == visibleFrameWithLeftDock.minY + 20)
     }
+
+    @Test("computeNotchOrigin centers panel at top of screen")
+    func notchOriginCentering() {
+        let screenFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = NSSize(width: 400, height: 38)
+        let origin = HUDWindowController.computeNotchOrigin(screenFrame: screenFrame, size: size)
+        print("DEBUG origin: \(origin)")
+        #expect(origin.x == 520.0)
+        #expect(origin.y == 862.0)
+    }
 }
 
 // MARK: - Hide timer + style-specific delay
@@ -278,5 +288,26 @@ struct HUDWindowControllerTimerTests {
         hud.show(sliderFraction: 0.5, mute: false, deviceName: "Test Device")
         #expect(hud.showCallCount == 1)
         #expect(hud.showDidUpdatePanel == true)
+    }
+
+    @Test("Notch style falls back to Tahoe size and interactivity on non-notched display")
+    func notchFallbackOnNonNotchedDisplay() {
+        let hud = makeController()
+        hud.screenProvider = { nil }
+        hud.settingsManager.appSettings.hudStyle = .notch
+        hud.settingsManager.appSettings.hudPosition = .topTrailing
+        
+        hud.show(sliderFraction: 0.5, mute: false, deviceName: "Test Device")
+        
+        let panel = hud.panel!
+        
+        // Size should match Tahoe (300 x 72)
+        #expect(panel.frame.size == NSSize(width: 300, height: 72))
+        
+        // Since active style fell back to Tahoe, ignoresMouseEvents should be false (interactive)
+        #expect(panel.ignoresMouseEvents == false)
+        
+        // Level should be .floating
+        #expect(panel.level == NSWindow.Level.floating)
     }
 }
