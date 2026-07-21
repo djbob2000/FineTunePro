@@ -25,7 +25,6 @@ struct DeviceDetailSheet: View {
 
     @State private var viewModel: DeviceInspectorViewModel
     @State private var showAdvanced: Bool = false
-    @State private var isMaxDBExpanded: Bool = false
 
     let onBufferFrameSizePreferenceChange: (BufferFrameSizePreference) -> Void
 
@@ -112,9 +111,6 @@ struct DeviceDetailSheet: View {
                 softwareToggle
                 calloutText
             }
-
-            separator
-            loudnessCompensationToggle
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -224,87 +220,6 @@ struct DeviceDetailSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-
-    // MARK: - Loudness Compensation Toggle
-
-    @ViewBuilder
-    private var loudnessCompensationToggle: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                Text("Loudness Compensation")
-                    .font(DesignTokens.Typography.pickerText)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-
-                Spacer(minLength: DesignTokens.Spacing.sm)
-
-                Toggle("", isOn: Binding(
-                    get: { transportType == .builtIn ? false : isLoudnessCompensationEnabled },
-                    set: { onLoudnessCompensationToggle($0) }
-                ))
-                .toggleStyle(.switch)
-                .scaleEffect(0.8)
-                .labelsHidden()
-                .disabled(transportType == .builtIn)
-            }
-            Text(transportType == .builtIn
-                 ? "Loudness compensation is unavailable for built-in speakers as macOS already applies custom DSP tuning to them."
-                 : "Boost low frequencies at low volumes for this device.")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if isLoudnessCompensationEnabled && transportType != .builtIn {
-                VStack(alignment: .leading, spacing: 4) {
-                    let maxDBVal = (loudnessMaxDB >= -40.0 && loudnessMaxDB <= -20.0) ? loudnessMaxDB : -30.0
-                    let maxPct = Int((1.0 + maxDBVal / 40.0) * 100)
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isMaxDBExpanded.toggle()
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                .rotationEffect(.degrees(isMaxDBExpanded ? 90 : 0))
-
-                            Text("Low Vol Ref")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                            Spacer()
-
-                            Text("\(maxPct)% volume (\(Int(maxDBVal))\u{200A}dB)")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-
-                    if isMaxDBExpanded {
-                        Slider(
-                            value: Binding(
-                                get: { loudnessMaxDB },
-                                set: { onLoudnessMaxDBChange($0) }
-                            ),
-                            in: -40...(-20),
-                            step: 1
-                        )
-                        .controlSize(.mini)
-
-                        Text("Volume level where max compensation is reached.")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(.leading, 14)
-                .padding(.top, 2)
-            }
-        }
-    }
 
     // MARK: - Helpers
 
