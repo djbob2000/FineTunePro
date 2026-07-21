@@ -27,6 +27,8 @@ struct DeviceDetailSheet: View {
     @State private var showAdvanced: Bool = false
     @State private var isMaxDBExpanded: Bool = false
 
+    let onBufferFrameSizePreferenceChange: (BufferFrameSizePreference) -> Void
+
     private static let logger = Logger(subsystem: "com.finetuneapp.FineTune", category: "DeviceDetailSheet")
 
     init(
@@ -47,6 +49,8 @@ struct DeviceDetailSheet: View {
         onLoudnessTrebleGainScaleChange: @escaping (Double) -> Void = { _ in },
         loudnessBassLinearWet: Double = 1.0,
         onLoudnessBassLinearWetChange: @escaping (Double) -> Void = { _ in },
+        onBufferFrameSizePreferenceChange: @escaping (BufferFrameSizePreference) -> Void = { _ in },
+        settingsManager: SettingsManager? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.device = device
@@ -66,12 +70,15 @@ struct DeviceDetailSheet: View {
         self.onLoudnessTrebleGainScaleChange = onLoudnessTrebleGainScaleChange
         self.loudnessBassLinearWet = loudnessBassLinearWet
         self.onLoudnessBassLinearWetChange = onLoudnessBassLinearWetChange
+        self.onBufferFrameSizePreferenceChange = onBufferFrameSizePreferenceChange
         self.onDismiss = onDismiss
         self._viewModel = State(
             initialValue: DeviceInspectorViewModel(
                 deviceID: device.id,
                 uid: device.uid,
-                transportType: transportType
+                transportType: transportType,
+                settingsManager: settingsManager,
+                onBufferFrameSizePreferenceChange: onBufferFrameSizePreferenceChange
             )
         )
     }
@@ -82,6 +89,9 @@ struct DeviceDetailSheet: View {
                 info: viewModel.info,
                 onSampleRateSelected: { rate in
                     viewModel.selectSampleRate(rate)
+                },
+                onBufferFrameSizePreferenceSelected: { pref in
+                    viewModel.selectBufferFrameSizePreference(pref)
                 }
             )
 

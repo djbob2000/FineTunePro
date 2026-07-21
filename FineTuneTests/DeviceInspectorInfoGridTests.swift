@@ -99,6 +99,8 @@ struct InfoGridLayoutTests {
         availableSampleRates: [Double] = [48_000],
         sampleRateSettable: Bool = false,
         formatLabel: String? = nil,
+        bufferFrameSize: UInt32 = 0,
+        bufferFrameSizePreference: BufferFrameSizePreference = .auto,
         hogModeOwner: pid_t = -1,
         uid: String = "uid-test"
     ) -> DeviceInspectorInfo {
@@ -108,6 +110,8 @@ struct InfoGridLayoutTests {
             availableSampleRates: availableSampleRates,
             sampleRateSettable: sampleRateSettable,
             formatLabel: formatLabel,
+            bufferFrameSize: bufferFrameSize,
+            bufferFrameSizePreference: bufferFrameSizePreference,
             hogModeOwner: hogModeOwner,
             uid: uid
         )

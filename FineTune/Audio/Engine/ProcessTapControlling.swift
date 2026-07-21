@@ -31,6 +31,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func updateDevices(to newDeviceUIDs: [String], preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws
     func hasRecentAudioCallback(within seconds: Double) -> Bool
     func isHealthCheckEligible(minActiveSeconds: Double) -> Bool
+    func updateAggregateBufferFrameSize(targetUIDs: [String]?)
 
     var tapSourceDeviceUID: String? { get }
     func refreshTapSource(_ preferredDeviceUID: String?) async throws
@@ -48,6 +49,10 @@ protocol ProcessTapControlling: AnyObject, Sendable {
 }
 
 extension ProcessTapControlling {
+    func updateAggregateBufferFrameSize() {
+        updateAggregateBufferFrameSize(targetUIDs: nil)
+    }
+
     /// Convenience activation with default state. Production callers must pass an
     /// `initial:` populated from persisted settings — defaults leave the first audio
     /// callbacks running with no EQ/AutoEQ/Loudness and unity volume ramp.

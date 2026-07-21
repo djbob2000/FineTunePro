@@ -35,6 +35,7 @@ final class ProcessTapController: ProcessTapControlling {
     /// Optional device UID to use for stream-specific tap capture.
     /// When nil, tap creation always uses stereo mixdown capture.
     private var preferredTapSourceDeviceUID: String?
+    private let settingsManager: SettingsManager?
 
     /// Exposes the current tap source device UID for diagnostics and tap source refresh logic.
     /// Non-nil means stream-specific tap; nil means stereo mixdown.
@@ -265,13 +266,15 @@ final class ProcessTapController: ProcessTapControlling {
         app: AudioApp,
         targetDeviceUIDs: [String],
         deviceMonitor: AudioDeviceMonitor? = nil,
-        preferredTapSourceDeviceUID: String? = nil
+        preferredTapSourceDeviceUID: String? = nil,
+        settingsManager: SettingsManager? = nil
     ) {
         precondition(!targetDeviceUIDs.isEmpty, "Must have at least one target device")
         self.app = app
         self.targetDeviceUIDs = targetDeviceUIDs
         self.deviceMonitor = deviceMonitor
         self.preferredTapSourceDeviceUID = preferredTapSourceDeviceUID
+        self.settingsManager = settingsManager
         self.logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "ProcessTapController(\(app.name))")
     }
 
@@ -280,13 +283,15 @@ final class ProcessTapController: ProcessTapControlling {
         app: AudioApp,
         targetDeviceUID: String,
         deviceMonitor: AudioDeviceMonitor? = nil,
-        preferredTapSourceDeviceUID: String? = nil
+        preferredTapSourceDeviceUID: String? = nil,
+        settingsManager: SettingsManager? = nil
     ) {
         self.init(
             app: app,
             targetDeviceUIDs: [targetDeviceUID],
             deviceMonitor: deviceMonitor,
-            preferredTapSourceDeviceUID: preferredTapSourceDeviceUID
+            preferredTapSourceDeviceUID: preferredTapSourceDeviceUID,
+            settingsManager: settingsManager
         )
     }
 
@@ -819,19 +824,8 @@ final class ProcessTapController: ProcessTapControlling {
         logger.debug("Created aggregate device #\(self.primaryResources.aggregateDeviceID)")
 
         // Configure aggregate device buffer frame size for low latency (Issue #379).
-        // Default unconfigured aggregate devices use 1024 or 2048 frames in CoreAudio,
-        // adding noticeable latency to Bluetooth headphones (AirPods Pro, etc.).
-        if let targetUID = targetDeviceUIDs.first,
-           let targetID = audioDeviceID(for: targetUID),
-           let targetBufferFrameSize = targetID.readBufferFrameSize() {
-            let targetTransport = targetID.readTransportType()
-            let isBT = (targetTransport == .bluetooth || targetTransport == .bluetoothLE)
-            let desiredBufferFrameSize = isBT ? Swift.min(targetBufferFrameSize, 512) : targetBufferFrameSize
-            try? aggID.writeBufferFrameSize(desiredBufferFrameSize)
-            logger.info("Set aggregate device buffer frame size to \(desiredBufferFrameSize) frames (BT: \(isBT))")
-        } else {
-            try? aggID.writeBufferFrameSize(512)
-        }
+        // Checks user preference (Auto, 256, 512, 768, 1024, 2048) or defaults to low latency.
+        updateAggregateBufferFrameSize(targetUIDs: targetDeviceUIDs)
 
         // Compute ramp coefficient from actual device sample rate.
         // Formula: coeff = 1 - exp(-1 / (sampleRate * rampTime))
@@ -2094,6 +2088,34 @@ final class ProcessTapController: ProcessTapControlling {
             }
         } else {
             _secondaryCurrentVolume = currentVol
+        }
+    }
+
+    /// Dynamically updates the aggregate device's buffer frame size when user settings change.
+    func updateAggregateBufferFrameSize(targetUIDs: [String]? = nil) {
+        guard primaryResources.aggregateDeviceID.isValid else { return }
+        let aggID = primaryResources.aggregateDeviceID
+        let uids = targetUIDs ?? currentDeviceUIDs
+
+        if let targetUID = uids.first,
+           let targetID = audioDeviceID(for: targetUID) {
+            let userPref = settingsManager?.getDeviceBufferFrameSizePreference(for: targetUID) ?? .auto
+            let desiredBufferFrameSize: UInt32
+
+            if userPref != BufferFrameSizePreference.auto {
+                desiredBufferFrameSize = UInt32(userPref.rawValue)
+            } else if let targetBufferFrameSize = targetID.readBufferFrameSize() {
+                let targetTransport = targetID.readTransportType()
+                let isBT = (targetTransport == .bluetooth || targetTransport == .bluetoothLE)
+                desiredBufferFrameSize = isBT ? Swift.min(targetBufferFrameSize, 512) : targetBufferFrameSize
+            } else {
+                desiredBufferFrameSize = 512
+            }
+
+            try? aggID.writeBufferFrameSize(desiredBufferFrameSize)
+            logger.info("Set aggregate device buffer frame size to \(desiredBufferFrameSize) frames (Pref: \(userPref.rawValue))")
+        } else {
+            try? aggID.writeBufferFrameSize(512)
         }
     }
 }

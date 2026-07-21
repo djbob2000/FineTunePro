@@ -310,14 +310,16 @@ final class AudioEngine {
                         app: app,
                         targetDeviceUID: deviceUIDs[0],
                         deviceMonitor: realDeviceMonitor,
-                        preferredTapSourceDeviceUID: preferredSource
+                        preferredTapSourceDeviceUID: preferredSource,
+                        settingsManager: manager
                     )
                 } else {
                     return ProcessTapController(
                         app: app,
                         targetDeviceUIDs: deviceUIDs,
                         deviceMonitor: realDeviceMonitor,
-                        preferredTapSourceDeviceUID: preferredSource
+                        preferredTapSourceDeviceUID: preferredSource,
+                        settingsManager: manager
                     )
                 }
             }
@@ -708,6 +710,15 @@ final class AudioEngine {
         stop()
         deviceVolumeMonitor.stop()
         logger.info("AudioEngine shutdown complete")
+    }
+
+    // MARK: - Buffer Frame Size Preference
+
+    func setDeviceBufferFrameSizePreference(for deviceUID: String, to preference: BufferFrameSizePreference) {
+        settingsManager.setDeviceBufferFrameSizePreference(for: deviceUID, to: preference)
+        for tap in taps.values {
+            tap.updateAggregateBufferFrameSize()
+        }
     }
 
     // MARK: - Settings Reset

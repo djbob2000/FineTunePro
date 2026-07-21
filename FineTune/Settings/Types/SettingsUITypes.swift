@@ -336,3 +336,27 @@ enum VolumeHotkeyStep: String, Codable, CaseIterable, Identifiable, CustomString
         }
     }
 }
+
+// MARK: - Buffer Frame Size Preference
+
+public enum BufferFrameSizePreference: Int, Codable, CaseIterable, Identifiable, Sendable {
+    case auto = 0
+    case b256 = 256
+    case b512 = 512
+    case b768 = 768
+    case b1024 = 1024
+    case b2048 = 2048
+
+    public var id: Int { rawValue }
+
+    public var displayLabel: String {
+        switch self {
+        case .auto:  return L10n.string("Auto")
+        case .b256:  return "256"
+        case .b512:  return "512"
+        case .b768:  return "768"
+        case .b1024: return "1024"
+        case .b2048: return "2048"
+        }
+    }
+}

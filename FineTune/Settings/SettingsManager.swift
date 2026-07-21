@@ -199,6 +199,9 @@ final class SettingsManager {
         var deviceLoudnessTrebleCrossover: [String: Double] = [:] // deviceUID -> treble crossover frequency
         var deviceLoudnessTrebleGainScale: [String: Double] = [:] // deviceUID -> treble gain scale (amount)
 
+        // Per-device buffer frame size preference (Auto, 256, 512, 768, 1024, 2048)
+        var deviceBufferFrameSizePreference: [String: Int] = [:]
+
         // User-created EQ presets (named EQ curves)
         var userEQPresets: [UserEQPreset] = []
 
@@ -264,6 +267,7 @@ final class SettingsManager {
             deviceLoudnessBassLinearWet = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassLinearWet) ?? [:]
             deviceLoudnessTrebleCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessTrebleCrossover) ?? [:]
             deviceLoudnessTrebleGainScale = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessTrebleGainScale) ?? [:]
+            deviceBufferFrameSizePreference = try c.decodeIfPresent([String: Int].self, forKey: .deviceBufferFrameSizePreference) ?? [:]
             userEQPresets = try c.decodeIfPresent([UserEQPreset].self, forKey: .userEQPresets) ?? []
         }
     }
@@ -708,6 +712,25 @@ final class SettingsManager {
     func ensureInputDeviceInPriority(_ uid: String) {
         guard !settings.inputDevicePriority.contains(uid) else { return }
         settings.inputDevicePriority.append(uid)
+        scheduleSave()
+    }
+
+    // MARK: - Per-Device Buffer Frame Size Preference
+
+    func getDeviceBufferFrameSizePreference(for deviceUID: String) -> BufferFrameSizePreference {
+        guard let raw = settings.deviceBufferFrameSizePreference[deviceUID],
+              let pref = BufferFrameSizePreference(rawValue: raw) else {
+            return .auto
+        }
+        return pref
+    }
+
+    func setDeviceBufferFrameSizePreference(for deviceUID: String, to preference: BufferFrameSizePreference) {
+        if preference == .auto {
+            settings.deviceBufferFrameSizePreference.removeValue(forKey: deviceUID)
+        } else {
+            settings.deviceBufferFrameSizePreference[deviceUID] = preference.rawValue
+        }
         scheduleSave()
     }
 
