@@ -720,6 +720,10 @@ struct MenuBarPopupView: View {
                         onLoudnessBassLinearWetChange: { amount in
                             audioEngine.setLoudnessBassLinearWet(for: device.uid, to: amount)
                         },
+                        onBufferFrameSizePreferenceChange: { pref in
+                            audioEngine.setDeviceBufferFrameSizePreference(for: device.uid, to: pref)
+                        },
+                        settingsManager: audioEngine.settingsManager,
                         onDismiss: {}
                     )
                 }

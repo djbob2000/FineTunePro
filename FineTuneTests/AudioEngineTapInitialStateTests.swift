@@ -125,6 +125,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
 
     func hasRecentAudioCallback(within seconds: Double) -> Bool { false }
     func isHealthCheckEligible(minActiveSeconds: Double) -> Bool { false }
+    func updateAggregateBufferFrameSize(targetUIDs: [String]?) {}
 
     func refreshTapSource(_ preferredDeviceUID: String?) async throws {}
     func recreateForOutputRateChange() async throws {}

@@ -31,7 +31,7 @@ final class DDCController {
     var onProbeCompleted: (() -> Void)?
 
     /// EDID identifiers read directly from a monitor over I2C.
-    private struct DisplayEDID: Sendable {
+    struct DisplayEDID: Sendable {
         let vendorID: UInt32
         let productID: UInt32
         let serialNumber: UInt32
@@ -209,10 +209,10 @@ final class DDCController {
             var volumes: [AudioDeviceID: Int] = [:]
             var matchedDDCIndices = Set<Int>()
 
-            // 4a. First pass: match by display name (fuzzy: case-insensitive, trimmed, substring)
+            // 4a. First pass: match by exact I2C EDID (vendor + product + serial number) in CoreAudio UID
             for caDevice in coreAudioDevices {
                 for (i, ddcDisplay) in audioCapable.enumerated() where !matchedDDCIndices.contains(i) {
-                    if Self.namesMatch(caDevice.name, ddcDisplay.displayName) {
+                    if let edid = ddcDisplay.edid, Self.edidMatchesUIDWithSerial(edid, uid: caDevice.uid) {
                         matched[caDevice.id] = ddcDisplay.service
                         matchedUIDs[caDevice.id] = caDevice.uid
                         matchedDDCIndices.insert(i)
@@ -221,7 +221,7 @@ final class DDCController {
                             volumes[caDevice.id] = vol.current
                         }
 
-                        logger.info("Matched CoreAudio '\(caDevice.name)' → DDC '\(ddcDisplay.displayName)' (by name)")
+                        logger.info("Matched CoreAudio '\(caDevice.name)' → DDC '\(ddcDisplay.displayName)' (by EDID vendor+product+serial)")
                         break
                     }
                 }
@@ -246,6 +246,29 @@ final class DDCController {
                         }
 
                         logger.info("Matched CoreAudio '\(caDevice.name)' → DDC '\(ddcDisplay.displayName)' (by I2C EDID uid prefix v\(edid.vendorID) p\(edid.productID))")
+                        break
+                    }
+                }
+            }
+
+            // 4c. Third pass: match by display name (fuzzy), BUT ONLY if the display name is unique
+            //     among remaining candidates. If multiple displays share the exact same display name,
+            //     fuzzy name matching is ambiguous and can swap identical monitors.
+            for caDevice in coreAudioDevices where !matched.keys.contains(caDevice.id) {
+                let matchingCADevicesCount = coreAudioDevices.filter { !matched.keys.contains($0.id) && Self.namesMatch($0.name, caDevice.name) }.count
+                for (i, ddcDisplay) in audioCapable.enumerated() where !matchedDDCIndices.contains(i) {
+                    let matchingDDCDisplaysCount = audioCapable.enumerated().filter { !matchedDDCIndices.contains($0.offset) && Self.namesMatch(caDevice.name, $0.element.displayName) }.count
+
+                    if matchingCADevicesCount == 1 && matchingDDCDisplaysCount == 1 && Self.namesMatch(caDevice.name, ddcDisplay.displayName) {
+                        matched[caDevice.id] = ddcDisplay.service
+                        matchedUIDs[caDevice.id] = caDevice.uid
+                        matchedDDCIndices.insert(i)
+
+                        if let vol = try? ddcDisplay.service.getAudioVolume() {
+                            volumes[caDevice.id] = vol.current
+                        }
+
+                        logger.info("Matched CoreAudio '\(caDevice.name)' → DDC '\(ddcDisplay.displayName)' (by unique name)")
                         break
                     }
                 }
@@ -352,16 +375,28 @@ final class DDCController {
     /// The vendor (bytes 8-9) is big-endian in EDID and matches directly.
     /// The product (bytes 10-11) is little-endian in EDID but the UID encodes the raw bytes
     /// big-endian ({byte10:02x}{byte11:02x}), so we swap before comparing.
-    private nonisolated static func edidMatchesUID(_ edid: DisplayEDID, uid: String) -> Bool {
+    nonisolated static func edidMatchesUID(_ edid: DisplayEDID, uid: String) -> Bool {
         let productSwapped = ((edid.productID & 0xFF) << 8) | ((edid.productID >> 8) & 0xFF)
         let prefix = String(format: "%04x%04x", edid.vendorID, productSwapped)
         return uid.lowercased().hasPrefix(prefix)
     }
 
+    /// Returns true if the EDID vendor, product, and serial number match the CoreAudio UID.
+    nonisolated static func edidMatchesUIDWithSerial(_ edid: DisplayEDID, uid: String) -> Bool {
+        guard edidMatchesUID(edid, uid: uid) else { return false }
+        guard edid.serialNumber != 0 && edid.serialNumber != 0xFFFFFFFF else { return false }
+
+        let uidLower = uid.lowercased()
+        let serialHex32 = String(format: "%08x", edid.serialNumber)
+        let serialHex16 = String(format: "%04x", edid.serialNumber & 0xFFFF)
+
+        return uidLower.contains(serialHex32) || uidLower.contains(serialHex16)
+    }
+
     /// Fuzzy name matching: case-insensitive, trimmed, with substring fallback.
     /// CoreAudio device names and IOKit display names both come from EDID but may
     /// differ in casing, whitespace, or truncation.
-    private nonisolated static func namesMatch(_ a: String, _ b: String) -> Bool {
+    nonisolated static func namesMatch(_ a: String, _ b: String) -> Bool {
         let normA = a.trimmingCharacters(in: .whitespaces).lowercased()
         let normB = b.trimmingCharacters(in: .whitespaces).lowercased()
         if normA == normB { return true }

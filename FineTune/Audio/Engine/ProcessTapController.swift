@@ -35,6 +35,7 @@ final class ProcessTapController: ProcessTapControlling {
     /// Optional device UID to use for stream-specific tap capture.
     /// When nil, tap creation always uses stereo mixdown capture.
     private var preferredTapSourceDeviceUID: String?
+    private let settingsManager: SettingsManager?
 
     /// Exposes the current tap source device UID for diagnostics and tap source refresh logic.
     /// Non-nil means stream-specific tap; nil means stereo mixdown.
@@ -265,13 +266,15 @@ final class ProcessTapController: ProcessTapControlling {
         app: AudioApp,
         targetDeviceUIDs: [String],
         deviceMonitor: AudioDeviceMonitor? = nil,
-        preferredTapSourceDeviceUID: String? = nil
+        preferredTapSourceDeviceUID: String? = nil,
+        settingsManager: SettingsManager? = nil
     ) {
         precondition(!targetDeviceUIDs.isEmpty, "Must have at least one target device")
         self.app = app
         self.targetDeviceUIDs = targetDeviceUIDs
         self.deviceMonitor = deviceMonitor
         self.preferredTapSourceDeviceUID = preferredTapSourceDeviceUID
+        self.settingsManager = settingsManager
         self.logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "ProcessTapController(\(app.name))")
     }
 
@@ -280,13 +283,15 @@ final class ProcessTapController: ProcessTapControlling {
         app: AudioApp,
         targetDeviceUID: String,
         deviceMonitor: AudioDeviceMonitor? = nil,
-        preferredTapSourceDeviceUID: String? = nil
+        preferredTapSourceDeviceUID: String? = nil,
+        settingsManager: SettingsManager? = nil
     ) {
         self.init(
             app: app,
             targetDeviceUIDs: [targetDeviceUID],
             deviceMonitor: deviceMonitor,
-            preferredTapSourceDeviceUID: preferredTapSourceDeviceUID
+            preferredTapSourceDeviceUID: preferredTapSourceDeviceUID,
+            settingsManager: settingsManager
         )
     }
 
@@ -718,13 +723,14 @@ final class ProcessTapController: ProcessTapControlling {
         logger.info("EQ processing is stereo-only and will be bypassed for tap format with \(asbd.mChannelsPerFrame) channels.")
     }
 
-    /// Creates a process tap, preferring a device-stream tap to preserve multichannel routing.
-    /// Falls back to stereo mixdown if stream-specific tap creation fails.
+    /// Creates a process tap, preferring a device-stream tap to preserve multichannel routing for single-stream devices.
+    /// For multi-stream devices (>1 streams), uses a process-wide tap so audio routed to channels 3-16+ is captured.
     private func createProcessTap(preferredDeviceUID: String?) throws -> (description: CATapDescription, tapID: AudioObjectID) {
         var lastError: OSStatus = noErr
 
         if let deviceUID = preferredDeviceUID {
-            if let outputStream = outputStreamIndex(for: deviceUID) {
+            let streamCount = audioDeviceID(for: deviceUID)?.streamCount(scope: kAudioObjectPropertyScopeOutput) ?? 0
+            if streamCount <= 1, let outputStream = outputStreamIndex(for: deviceUID) {
                 let streamTap = CATapDescription(processes: app.processObjectIDs, deviceUID: deviceUID, stream: outputStream)
                 streamTap.uuid = UUID()
                 streamTap.muteBehavior = .mutedWhenTapped
@@ -740,6 +746,8 @@ final class ProcessTapController: ProcessTapControlling {
 
                 lastError = err
                 logger.warning("Stream-specific tap creation failed for device \(deviceUID, privacy: .public) stream \(outputStream): \(err). Falling back to stereo mixdown.")
+            } else if streamCount > 1 {
+                logger.info("Device \(deviceUID, privacy: .public) has \(streamCount) output streams. Using process-wide tap to capture all audio streams/channels.")
             } else {
                 logger.warning("Could not resolve an output stream index for device \(deviceUID, privacy: .public). Falling back to stereo mixdown.")
             }
@@ -814,6 +822,10 @@ final class ProcessTapController: ProcessTapControlling {
         }
 
         logger.debug("Created aggregate device #\(self.primaryResources.aggregateDeviceID)")
+
+        // Configure aggregate device buffer frame size for low latency (Issue #379).
+        // Checks user preference (Auto, 256, 512, 768, 1024, 2048) or defaults to low latency.
+        updateAggregateBufferFrameSize(targetUIDs: targetDeviceUIDs)
 
         // Compute ramp coefficient from actual device sample rate.
         // Formula: coeff = 1 - exp(-1 / (sampleRate * rampTime))
@@ -2076,6 +2088,34 @@ final class ProcessTapController: ProcessTapControlling {
             }
         } else {
             _secondaryCurrentVolume = currentVol
+        }
+    }
+
+    /// Dynamically updates the aggregate device's buffer frame size when user settings change.
+    func updateAggregateBufferFrameSize(targetUIDs: [String]? = nil) {
+        guard primaryResources.aggregateDeviceID.isValid else { return }
+        let aggID = primaryResources.aggregateDeviceID
+        let uids = targetUIDs ?? currentDeviceUIDs
+
+        if let targetUID = uids.first,
+           let targetID = audioDeviceID(for: targetUID) {
+            let userPref = settingsManager?.getDeviceBufferFrameSizePreference(for: targetUID) ?? .auto
+            let desiredBufferFrameSize: UInt32
+
+            if userPref != BufferFrameSizePreference.auto {
+                desiredBufferFrameSize = UInt32(userPref.rawValue)
+            } else if let targetBufferFrameSize = targetID.readBufferFrameSize() {
+                let targetTransport = targetID.readTransportType()
+                let isBT = (targetTransport == .bluetooth || targetTransport == .bluetoothLE)
+                desiredBufferFrameSize = isBT ? Swift.min(targetBufferFrameSize, 512) : targetBufferFrameSize
+            } else {
+                desiredBufferFrameSize = 512
+            }
+
+            try? aggID.writeBufferFrameSize(desiredBufferFrameSize)
+            logger.info("Set aggregate device buffer frame size to \(desiredBufferFrameSize) frames (Pref: \(userPref.rawValue))")
+        } else {
+            try? aggID.writeBufferFrameSize(512)
         }
     }
 }

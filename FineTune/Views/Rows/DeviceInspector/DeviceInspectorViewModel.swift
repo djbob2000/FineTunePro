@@ -27,11 +27,22 @@ final class DeviceInspectorViewModel {
         category: "DeviceInspectorViewModel"
     )
 
-    init(deviceID: AudioDeviceID, uid: String, transportType: TransportType) {
+    private let settingsManager: SettingsManager?
+    private let onBufferFrameSizePreferenceChange: ((BufferFrameSizePreference) -> Void)?
+
+    init(
+        deviceID: AudioDeviceID,
+        uid: String,
+        transportType: TransportType,
+        settingsManager: SettingsManager? = nil,
+        onBufferFrameSizePreferenceChange: ((BufferFrameSizePreference) -> Void)? = nil
+    ) {
         self.deviceID = deviceID
         self.uid = uid
         self.transportType = transportType
-        self.info = Self.snapshot(deviceID: deviceID, uid: uid, transportType: transportType)
+        self.settingsManager = settingsManager
+        self.onBufferFrameSizePreferenceChange = onBufferFrameSizePreferenceChange
+        self.info = Self.snapshot(deviceID: deviceID, uid: uid, transportType: transportType, settingsManager: settingsManager)
         self.hogModeOwnerName = Self.resolveHogModeOwnerName(self.info.hogModeOwner)
     }
 
@@ -66,17 +77,27 @@ final class DeviceInspectorViewModel {
         }
     }
 
+    func selectBufferFrameSizePreference(_ pref: BufferFrameSizePreference) {
+        if let onBufferFrameSizePreferenceChange {
+            onBufferFrameSizePreferenceChange(pref)
+        } else if let settingsManager {
+            settingsManager.setDeviceBufferFrameSizePreference(for: uid, to: pref)
+        }
+        refresh()
+    }
+
     // MARK: - Refresh
 
     private func refresh() {
-        info = Self.snapshot(deviceID: deviceID, uid: uid, transportType: transportType)
+        info = Self.snapshot(deviceID: deviceID, uid: uid, transportType: transportType, settingsManager: settingsManager)
         hogModeOwnerName = Self.resolveHogModeOwnerName(info.hogModeOwner)
     }
 
     private static func snapshot(
         deviceID: AudioDeviceID,
         uid: String,
-        transportType: TransportType
+        transportType: TransportType,
+        settingsManager: SettingsManager?
     ) -> DeviceInspectorInfo {
         let sampleRate = (try? deviceID.readNominalSampleRate()) ?? 0
         let available = deviceID.readAvailableSampleRates()
@@ -85,6 +106,8 @@ final class DeviceInspectorViewModel {
             scope: kAudioObjectPropertyScopeGlobal
         )
         let asbd = deviceID.readPhysicalFormat()
+        let bufferSize = deviceID.readBufferFrameSize() ?? 0
+        let bufferPref = settingsManager?.getDeviceBufferFrameSizePreference(for: uid) ?? .auto
         let hogOwner = deviceID.readHogModeOwner()
 
         return DeviceInspectorInfo(
@@ -93,6 +116,8 @@ final class DeviceInspectorViewModel {
             availableSampleRates: available,
             sampleRateSettable: settable,
             formatLabel: DeviceInspectorInfo.formatPhysicalFormat(asbd),
+            bufferFrameSize: bufferSize,
+            bufferFrameSizePreference: bufferPref,
             hogModeOwner: hogOwner,
             uid: uid
         )

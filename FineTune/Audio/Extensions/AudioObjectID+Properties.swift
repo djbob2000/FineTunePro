@@ -138,3 +138,33 @@ nonisolated extension AudioObjectID {
         return items
     }
 }
+
+// MARK: - Property Writing
+
+nonisolated extension AudioObjectID {
+    func write<T: BitwiseCopyable>(
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioScope = .global,
+        value: T
+    ) throws {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: scope.propertyScope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var val = value
+        let size = UInt32(MemoryLayout<T>.size)
+        let err = AudioObjectSetPropertyData(self, &address, 0, nil, size, &val)
+        guard err == noErr else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(err))
+        }
+    }
+
+    func readBufferFrameSize(scope: AudioScope = .global) -> UInt32? {
+        try? read(kAudioDevicePropertyBufferFrameSize, scope: scope, defaultValue: 512)
+    }
+
+    func writeBufferFrameSize(_ frameSize: UInt32, scope: AudioScope = .global) throws {
+        try write(kAudioDevicePropertyBufferFrameSize, scope: scope, value: frameSize)
+    }
+}

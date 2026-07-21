@@ -7,6 +7,7 @@ import SwiftUI
 struct DeviceInspectorInfoGrid: View {
     let info: DeviceInspectorInfo
     let onSampleRateSelected: (Double) -> Void
+    var onBufferFrameSizePreferenceSelected: ((BufferFrameSizePreference) -> Void)? = nil
 
     var body: some View {
         let layout = InfoGridLayout(info: info)
@@ -48,6 +49,19 @@ struct DeviceInspectorInfoGrid: View {
             GridRow {
                 labelCell("Format")
                 valueCell(value)
+            }
+        case .bufferSize(let display, let currentPref):
+            GridRow {
+                labelCell("Buffer size / Latency")
+                BufferSizePickerValue(
+                    currentDisplay: display,
+                    currentPref: currentPref,
+                    onSelect: { pref in
+                        onBufferFrameSizePreferenceSelected?(pref)
+                    }
+                )
+                .gridColumnAlignment(.trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         case .deviceID(let uid):
             GridRow {
@@ -115,6 +129,62 @@ private struct SampleRatePickerValue: View {
     private var pickerLabel: some View {
         HStack(spacing: DesignTokens.Spacing.xs) {
             Text(currentDisplay)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.sm)
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Buffer-size / Latency picker
+
+private struct BufferSizePickerValue: View {
+    let currentDisplay: String
+    let currentPref: BufferFrameSizePreference
+    let onSelect: (BufferFrameSizePreference) -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            ForEach(BufferFrameSizePreference.allCases) { pref in
+                Button {
+                    onSelect(pref)
+                } label: {
+                    HStack {
+                        Text(pref.displayLabel)
+                        if pref == currentPref {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            pickerLabel
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .glassStyle(
+            cornerRadius: DesignTokens.Dimensions.buttonRadius,
+            borderColor: isHovered ? DesignTokens.Colors.glassRowBorderHover : DesignTokens.Colors.glassRowBorder,
+            borderWidth: 0.5
+        )
+        .onHover { isHovered = $0 }
+        .animation(DesignTokens.Animation.hover, value: isHovered)
+        .accessibilityLabel(L10n.format("Buffer size: %@. Activate to change.", currentDisplay))
+    }
+
+    private var pickerLabel: some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Text(currentPref == .auto ? "\(currentPref.displayLabel) (\(currentDisplay))" : "\(currentPref.displayLabel) frames")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
             Image(systemName: "chevron.down")

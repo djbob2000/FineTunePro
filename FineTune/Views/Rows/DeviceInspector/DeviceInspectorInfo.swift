@@ -12,6 +12,8 @@ nonisolated struct DeviceInspectorInfo: Equatable {
     let availableSampleRates: [Double]
     let sampleRateSettable: Bool
     let formatLabel: String?
+    let bufferFrameSize: UInt32
+    let bufferFrameSizePreference: BufferFrameSizePreference
     let hogModeOwner: pid_t
     let uid: String
 
@@ -21,6 +23,8 @@ nonisolated struct DeviceInspectorInfo: Equatable {
         availableSampleRates: [],
         sampleRateSettable: false,
         formatLabel: nil,
+        bufferFrameSize: 0,
+        bufferFrameSizePreference: .auto,
         hogModeOwner: -1,
         uid: ""
     )
@@ -48,6 +52,14 @@ nonisolated extension DeviceInspectorInfo {
         return "\(asbd.mBitsPerChannel)-bit PCM"
     }
 
+    /// "512 frames (~10.7 ms)" or "256 frames (~5.3 ms)"
+    static func formatBufferSize(_ frames: UInt32, sampleRate: Double = 48000) -> String {
+        guard frames > 0 else { return "—" }
+        let sr = sampleRate > 0 ? sampleRate : 48000
+        let ms = Double(frames) / sr * 1000.0
+        return String(format: "%d (~%.1f ms)", frames, ms)
+    }
+
     /// Human-readable hog-mode owner string for the inline row.
     /// Returns nil when the device is not held exclusively by another process.
     static func formatHogModeOwner(_ owner: pid_t, processName: String?) -> String? {
@@ -68,6 +80,7 @@ nonisolated struct InfoGridLayout: Equatable {
         case transport(String)
         case sampleRate(display: String, isPicker: Bool, options: [Double])
         case format(String)
+        case bufferSize(display: String, currentPref: BufferFrameSizePreference)
         case deviceID(String)
     }
 
@@ -89,6 +102,15 @@ nonisolated struct InfoGridLayout: Equatable {
 
         if let formatLabel = info.formatLabel {
             rows.append(.format(formatLabel))
+        }
+
+        if info.bufferFrameSize > 0 {
+            rows.append(
+                .bufferSize(
+                    display: DeviceInspectorInfo.formatBufferSize(info.bufferFrameSize, sampleRate: info.sampleRate),
+                    currentPref: info.bufferFrameSizePreference
+                )
+            )
         }
 
         rows.append(.deviceID(info.uid))
