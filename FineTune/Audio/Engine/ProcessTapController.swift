@@ -718,13 +718,14 @@ final class ProcessTapController: ProcessTapControlling {
         logger.info("EQ processing is stereo-only and will be bypassed for tap format with \(asbd.mChannelsPerFrame) channels.")
     }
 
-    /// Creates a process tap, preferring a device-stream tap to preserve multichannel routing.
-    /// Falls back to stereo mixdown if stream-specific tap creation fails.
+    /// Creates a process tap, preferring a device-stream tap to preserve multichannel routing for single-stream devices.
+    /// For multi-stream devices (>1 streams), uses a process-wide tap so audio routed to channels 3-16+ is captured.
     private func createProcessTap(preferredDeviceUID: String?) throws -> (description: CATapDescription, tapID: AudioObjectID) {
         var lastError: OSStatus = noErr
 
         if let deviceUID = preferredDeviceUID {
-            if let outputStream = outputStreamIndex(for: deviceUID) {
+            let streamCount = audioDeviceID(for: deviceUID)?.streamCount(scope: kAudioObjectPropertyScopeOutput) ?? 0
+            if streamCount <= 1, let outputStream = outputStreamIndex(for: deviceUID) {
                 let streamTap = CATapDescription(processes: app.processObjectIDs, deviceUID: deviceUID, stream: outputStream)
                 streamTap.uuid = UUID()
                 streamTap.muteBehavior = .mutedWhenTapped
@@ -740,6 +741,8 @@ final class ProcessTapController: ProcessTapControlling {
 
                 lastError = err
                 logger.warning("Stream-specific tap creation failed for device \(deviceUID, privacy: .public) stream \(outputStream): \(err). Falling back to stereo mixdown.")
+            } else if streamCount > 1 {
+                logger.info("Device \(deviceUID, privacy: .public) has \(streamCount) output streams. Using process-wide tap to capture all audio streams/channels.")
             } else {
                 logger.warning("Could not resolve an output stream index for device \(deviceUID, privacy: .public). Falling back to stereo mixdown.")
             }
@@ -814,6 +817,21 @@ final class ProcessTapController: ProcessTapControlling {
         }
 
         logger.debug("Created aggregate device #\(self.primaryResources.aggregateDeviceID)")
+
+        // Configure aggregate device buffer frame size for low latency (Issue #379).
+        // Default unconfigured aggregate devices use 1024 or 2048 frames in CoreAudio,
+        // adding noticeable latency to Bluetooth headphones (AirPods Pro, etc.).
+        if let targetUID = targetDeviceUIDs.first,
+           let targetID = audioDeviceID(for: targetUID),
+           let targetBufferFrameSize = targetID.readBufferFrameSize() {
+            let targetTransport = targetID.readTransportType()
+            let isBT = (targetTransport == .bluetooth || targetTransport == .bluetoothLE)
+            let desiredBufferFrameSize = isBT ? Swift.min(targetBufferFrameSize, 512) : targetBufferFrameSize
+            try? aggID.writeBufferFrameSize(desiredBufferFrameSize)
+            logger.info("Set aggregate device buffer frame size to \(desiredBufferFrameSize) frames (BT: \(isBT))")
+        } else {
+            try? aggID.writeBufferFrameSize(512)
+        }
 
         // Compute ramp coefficient from actual device sample rate.
         // Formula: coeff = 1 - exp(-1 / (sampleRate * rampTime))
