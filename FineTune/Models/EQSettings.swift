@@ -19,16 +19,26 @@ nonisolated struct EQSettings: Codable, Equatable {
     /// Whether dynamic AutoEQ processing is enabled
     var isAutoEQEnabled: Bool
 
-    init(bandGains: [Float] = Array(repeating: 0, count: 10), isEnabled: Bool = true, isAutoEQEnabled: Bool = false) {
+    /// Treble exciter wet amount (0.0 to 1.0)
+    var trebleExciterWet: Float
+
+    /// Treble exciter crossover frequency in Hz (1000 to 8000 Hz)
+    var trebleExciterFrequency: Double
+
+    init(bandGains: [Float] = Array(repeating: 0, count: 10), isEnabled: Bool = true, isAutoEQEnabled: Bool = false, trebleExciterWet: Float = 0.0, trebleExciterFrequency: Double = 1000.0) {
         self.bandGains = Self.normalizeBands(bandGains)
         self.isEnabled = isEnabled
         self.isAutoEQEnabled = isAutoEQEnabled
+        self.trebleExciterWet = min(1.0, max(0.0, trebleExciterWet))
+        self.trebleExciterFrequency = min(8000.0, max(1000.0, trebleExciterFrequency))
     }
 
     private enum CodingKeys: String, CodingKey {
         case bandGains
         case isEnabled
         case isAutoEQEnabled
+        case trebleExciterWet
+        case trebleExciterFrequency
     }
 
     init(from decoder: Decoder) throws {
@@ -38,6 +48,10 @@ nonisolated struct EQSettings: Codable, Equatable {
         self.bandGains = Self.normalizeBands(decoded)
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.isAutoEQEnabled = try container.decodeIfPresent(Bool.self, forKey: .isAutoEQEnabled) ?? false
+        let exciter = try container.decodeIfPresent(Float.self, forKey: .trebleExciterWet) ?? 0.0
+        self.trebleExciterWet = min(1.0, max(0.0, exciter))
+        let freq = try container.decodeIfPresent(Double.self, forKey: .trebleExciterFrequency) ?? 1000.0
+        self.trebleExciterFrequency = min(8000.0, max(1000.0, freq))
     }
 
     /// Normalize band gains array to exactly `bandCount` elements,

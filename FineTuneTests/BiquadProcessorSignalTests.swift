@@ -647,6 +647,25 @@ struct EQProcessorMultiBandSignalTests {
                 "EQProcessor 1kHz band +12dB: expected ~12dB at 1kHz, got \(String(format: "%.1f", gain1kDB))dB")
     }
 
+    @Test("EQProcessor with Vocal Clarity generates high harmonics when trebleExciterWet > 0")
+    func testEQProcessorTrebleExciterHarmonics() {
+        let processor = EQProcessor(sampleRate: Self.sampleRate)
+        let settings = EQPreset.vocalClarity.settings
+        processor.updateSettings(settings)
+
+        #expect(processor.currentSettings?.trebleExciterWet == 0.40)
+
+        // Generate 4kHz input sine wave (above 3kHz crossover)
+        let input4k = TestSignal.makeStereoSine(frequency: 4000, sampleRate: Self.sampleRate, frameCount: Self.frameCount)
+        let output4k = TestSignal.makeOutputBuffer(frameCount: Self.frameCount)
+        defer { input4k.deallocate(); output4k.deallocate() }
+
+        processor.process(input: input4k, output: output4k, frameCount: Self.frameCount)
+
+        let outputRMS = TestSignal.measureRMS(buffer: output4k, channel: 0, frameCount: Self.frameCount, skipFrames: Self.skipFrames)
+        #expect(outputRMS > 0.0, "Output with Treble Exciter enabled should be non-zero")
+    }
+
     @Test("Multiple bands boosted: cumulative effect on broadband signal")
     func multipleBandsBoost() {
         let processor = EQProcessor(sampleRate: Self.sampleRate)

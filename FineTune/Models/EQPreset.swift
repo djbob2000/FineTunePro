@@ -110,8 +110,14 @@ enum EQPreset: String, CaseIterable, Identifiable {
 
         // MARK: - Speech
         case .vocalClarity:
-            // Cut rumble & muddiness, boost presence (2-4kHz)
-            return EQSettings(bandGains: [-4, -2, -1, -3, 0, 2, 4, 4, 1, 0])
+            // Enhanced vocal presence (1k-2kHz), reduced boxiness (125Hz & 250Hz) + 1kHz Exciter generating 2kHz harmonics
+            return EQSettings(
+                bandGains: [-5, -3, -3, -4, -1, 2, 4, 3, 1, 0],
+                isEnabled: true,
+                isAutoEQEnabled: false,
+                trebleExciterWet: 0.40,
+                trebleExciterFrequency: 1000.0
+            )
         case .podcast:
             // Optimized for speech with some music/effects
             return EQSettings(bandGains: [-6, -4, -2, -1, 0, 2, 4, 3, 1, 0])

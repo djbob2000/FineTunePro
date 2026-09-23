@@ -123,6 +123,12 @@ private struct BuiltInPresetItemView: View {
         HStack(spacing: DesignTokens.Spacing.xs) {
             Text(item.name)
                 .lineLimit(1)
+            if let exciter = item.builtInPreset?.settings.trebleExciterWet, exciter > 0 {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.accentColor)
+                    .help(L10n.string("Treble Exciter Active"))
+            }
             Spacer(minLength: DesignTokens.Spacing.xs)
             if isSelected {
                 Image(systemName: "checkmark")
