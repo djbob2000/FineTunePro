@@ -23,6 +23,7 @@ struct EQPanelView: View {
 
     @State private var liveGains: [Float] = [0, 0, 0, 0, 0]
     @State private var liveGainsTimer: Timer?
+    @State private var lastNonZeroWet: Float = 0.40
 
     private let frequencyLabels = ["32", "64", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
 
@@ -30,6 +31,15 @@ struct EQPanelView: View {
         let labels = ["68Hz", "350Hz", "1.4kHz", "4.5kHz", "9.5kHz"]
         guard index >= 0 && index < labels.count else { return "" }
         return labels[index]
+    }
+
+    private func formatExciterFrequency(_ freq: Double) -> String {
+        if freq >= 1000 {
+            let khz = freq / 1000.0
+            return String(format: khz.truncatingRemainder(dividingBy: 1) == 0 ? "%.0fkHz" : "%.1fkHz", khz)
+        } else {
+            return "\(Int(freq))Hz"
+        }
     }
 
     // MARK: - Preset Matching
@@ -167,6 +177,113 @@ struct EQPanelView: View {
                 .allowsHitTesting(settings.isEnabled)
                 .transition(.opacity)
             }
+
+            // Treble Exciter controls section (Option 1: Explicit toggleable feature)
+            let isExciterEnabled = Binding<Bool>(
+                get: { settings.trebleExciterWet > 0 },
+                set: { newValue in
+                    if newValue {
+                        settings.trebleExciterWet = lastNonZeroWet > 0 ? lastNonZeroWet : 0.40
+                    } else {
+                        if settings.trebleExciterWet > 0 {
+                            lastNonZeroWet = settings.trebleExciterWet
+                        }
+                        settings.trebleExciterWet = 0.0
+                    }
+                    onSettingsChanged(settings)
+                }
+            )
+
+            VStack(spacing: 6) {
+                // Header with Toggle Switch
+                HStack {
+                    HStack(spacing: 6) {
+                        Toggle("", isOn: isExciterEnabled)
+                            .toggleStyle(.switch)
+                            .scaleEffect(0.65)
+                            .labelsHidden()
+
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11))
+                            .foregroundStyle(settings.trebleExciterWet > 0 ? Color.accentColor : DesignTokens.Colors.textTertiary)
+
+                        Text("Treble Exciter")
+                            .font(DesignTokens.Typography.pickerText)
+                            .foregroundStyle(settings.trebleExciterWet > 0 ? .primary : DesignTokens.Colors.textSecondary)
+                    }
+
+                    Spacer()
+
+                    if settings.trebleExciterWet > 0 {
+                        Text("\(Int((settings.trebleExciterWet * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+
+                if settings.trebleExciterWet > 0 {
+                    // Exciter Mix Slider
+                    HStack(spacing: 8) {
+                        Text("Mix")
+                            .font(DesignTokens.Typography.pickerText)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .frame(width: 36, alignment: .leading)
+
+                        Slider(
+                            value: Binding(
+                                get: { Double(settings.trebleExciterWet) },
+                                set: { newValue in
+                                    let floatVal = Float(newValue)
+                                    settings.trebleExciterWet = floatVal
+                                    if floatVal > 0 { lastNonZeroWet = floatVal }
+                                    onSettingsChanged(settings)
+                                }
+                            ),
+                            in: 0.05...1.0
+                        )
+                        .controlSize(.small)
+
+                        Text("\(Int((settings.trebleExciterWet * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 36, alignment: .trailing)
+                    }
+
+                    // Exciter Frequency Slider
+                    HStack(spacing: 8) {
+                        Text("Freq")
+                            .font(DesignTokens.Typography.pickerText)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .frame(width: 36, alignment: .leading)
+
+                        Slider(
+                            value: Binding(
+                                get: { settings.trebleExciterFrequency },
+                                set: { newValue in
+                                    settings.trebleExciterFrequency = newValue
+                                    onSettingsChanged(settings)
+                                }
+                            ),
+                            in: 1000.0...6000.0,
+                            step: 100.0
+                        )
+                        .controlSize(.small)
+
+                        Text(formatExciterFrequency(settings.trebleExciterFrequency))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.primary.opacity(0.04))
+            }
+            .opacity(settings.isEnabled ? 1.0 : 0.3)
+            .allowsHitTesting(settings.isEnabled)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

@@ -78,6 +78,16 @@ struct UserEQPresetModelTests {
         // Both have the same bandGains — only isEnabled differs
         #expect(decodedE.settings.bandGains == decodedD.settings.bandGains)
     }
+
+    @Test("vocalClarity preset exists in Speech category with trebleExciterWet > 0")
+    func testVocalClarityPreset() {
+        let preset = EQPreset.vocalClarity
+        #expect(preset.category == .speech)
+        #expect(preset.name == "Vocal Clarity")
+        #expect(preset.settings.trebleExciterWet == 0.40)
+        #expect(preset.settings.trebleExciterFrequency == 1000.0)
+        #expect(preset.settings.bandGains.count == 10)
+    }
 }
 
 // MARK: - SettingsManager — User EQ Preset CRUD
