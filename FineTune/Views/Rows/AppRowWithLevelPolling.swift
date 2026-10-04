@@ -6,6 +6,8 @@ struct AppRowWithLevelPolling: View {
     let app: AudioApp
     let volume: Float
     let isMuted: Bool
+    let isMonoDownmix: Bool
+    let onMonoDownmixChange: (Bool) -> Void
     let useLogScale: Bool
     let devices: [AudioDevice]
     let deviceIconOverrides: [String: String]
@@ -59,6 +61,8 @@ struct AppRowWithLevelPolling: View {
         volume: Float,
         isMuted: Bool,
         useLogScale: Bool = false,
+        isMonoDownmix: Bool = false,
+        onMonoDownmixChange: @escaping (Bool) -> Void = { _ in },
         devices: [AudioDevice],
         deviceIconOverrides: [String: String] = [:],
         selectedDeviceUID: String,
@@ -108,6 +112,8 @@ struct AppRowWithLevelPolling: View {
         self.volume = volume
         self.isMuted = isMuted
         self.useLogScale = useLogScale
+        self.isMonoDownmix = isMonoDownmix
+        self.onMonoDownmixChange = onMonoDownmixChange
         self.devices = devices
         self.deviceIconOverrides = deviceIconOverrides
         self.selectedDeviceUID = selectedDeviceUID
@@ -169,6 +175,8 @@ struct AppRowWithLevelPolling: View {
             isMuted: isMuted,
             isSmartVolumeEnabled: isSmartVolumeEnabled,
             useLogScale: useLogScale,
+            isMonoDownmix: isMonoDownmix,
+            onMonoDownmixChange: onMonoDownmixChange,
             onSmartVolumeToggle: onSmartVolumeToggle,
             onVolumeChange: onVolumeChange,
             onMuteChange: onMuteChange,

@@ -22,6 +22,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func activate(initial: TapInitialState) throws
     func invalidate()
     func invalidateAsync() async
+    func setMonoDownmix(_ enabled: Bool)
     func updateEQSettings(_ settings: EQSettings)
     func updateAutoEQProfile(_ profile: AutoEQProfile?)
     func setAutoEQPreampEnabled(_ enabled: Bool)
@@ -49,6 +50,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
 }
 
 extension ProcessTapControlling {
+    func setMonoDownmix(_ enabled: Bool) {}
     func updateAggregateBufferFrameSize() {
         updateAggregateBufferFrameSize(targetUIDs: nil)
     }

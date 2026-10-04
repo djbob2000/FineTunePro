@@ -7,6 +7,8 @@ struct AppRowControls: View {
     let volume: Float
     let isMuted: Bool
     let useLogScale: Bool
+    var isMonoDownmix: Bool = false
+    var onMonoDownmixChange: (Bool) -> Void = { _ in }
     let devices: [AudioDevice]
     var deviceIconOverrides: [String: String] = [:]
     let selectedDeviceUID: String
@@ -109,6 +111,20 @@ struct AppRowControls: View {
                 useLogScale: useLogScale,
                 isRowFocused: isRowFocused
             )
+
+            Button {
+                onMonoDownmixChange(!isMonoDownmix)
+            } label: {
+                Image(systemName: "speaker.wave.2.bubble")
+                    .font(.system(size: 12))
+                    .foregroundStyle(isMonoDownmix ? DesignTokens.Colors.interactiveActive : DesignTokens.Colors.interactiveDefault)
+                    .frame(minWidth: DesignTokens.Dimensions.minTouchTarget, minHeight: DesignTokens.Dimensions.minTouchTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.string("Play this app in mono"))
+            .accessibilityLabel(L10n.string("Play this app in mono"))
+            .accessibilityAddTraits(isMonoDownmix ? [.isSelected] : [])
 
             // Smart Volume button
             SmartVolumeButton(

@@ -1638,6 +1638,8 @@ struct ObservedAppRow: View {
                 volume: audioEngine.getVolume(for: app),
                 isMuted: audioEngine.getMute(for: app),
                 useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
+            isMonoDownmix: audioEngine.isMonoDownmix(for: app),
+            onMonoDownmixChange: { audioEngine.setMonoDownmix(for: app, to: $0) },
                 devices: sortedDevices,
                 deviceIconOverrides: audioEngine.settingsManager.deviceIconOverrides,
                 selectedDeviceUID: deviceUID,
@@ -1764,6 +1766,8 @@ struct ObservedInactiveAppRow: View {
             isMuted: audioEngine.getMuteForInactive(identifier: identifier),
             isSmartVolumeEnabled: audioEngine.settingsManager.getAppSmartVolumeEnabled(for: identifier),
             useLogScale: audioEngine.settingsManager.appSettings.useLogScale,
+            isMonoDownmix: audioEngine.getMonoDownmixForInactive(identifier: identifier),
+            onMonoDownmixChange: { audioEngine.setMonoDownmixForInactive(identifier: identifier, to: $0) },
             onSmartVolumeToggle: { enabled in
                 audioEngine.setAppSmartVolumeEnabledForInactive(identifier: identifier, enabled: enabled)
             },

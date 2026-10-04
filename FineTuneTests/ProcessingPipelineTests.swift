@@ -109,7 +109,8 @@ private func processWithDefaults(
     loudnessEqualizerProc: LoudnessEqualizer? = nil,
     postAgcCompressorProc: PostAgcCompressor? = nil,
     loudnessCompensatorProc: LoudnessCompensator? = nil,
-    brickwallLimiter: BrickwallLimiter? = nil
+    brickwallLimiter: BrickwallLimiter? = nil,
+    monoDownmix: Bool = false
 ) {
     _ = ProcessTapController.processMappedBuffers(
         inputBuffers: input.bufferList,
@@ -130,7 +131,8 @@ private func processWithDefaults(
         postAgcCompressorProc: postAgcCompressorProc,
         loudnessCompensatorProc: loudnessCompensatorProc,
         brickwallLimiter: brickwallLimiter,
-        sampleRate: 48000.0
+        sampleRate: 48000.0,
+        monoDownmix: monoDownmix
     )
 }
 
@@ -1505,5 +1507,51 @@ struct AUInputSilenceTests {
         #expect(!ProcessTapController.advanceAUTail(rawPeak: 0, tailSamples: 8, frameCount: 4, silentSamples: &silent))
         #expect(!ProcessTapController.advanceAUTail(rawPeak: 0.4, tailSamples: 8, frameCount: 4, silentSamples: &silent))
         #expect(silent == 0)
+    }
+}
+
+@Suite("Per-app mono processing")
+struct MonoProcessingTests {
+    @Test("Mono averages source stereo and writes only the preferred destination pair",
+          arguments: [(UInt32(2), UInt32(2), 0, 1), (2, 6, 2, 3), (6, 6, 2, 3), (1, 2, 0, 1)])
+    func foldDown(shape: (UInt32, UInt32, Int, Int)) {
+        let (inputChannels, outputChannels, left, right) = shape
+        let input = TestABL(buffers: [(channels: inputChannels, frames: 16)])
+        let output = TestABL(buffers: [(channels: outputChannels, frames: 20)])
+        for frame in 0..<16 {
+            let base = frame * Int(inputChannels)
+            input.data(at: 0)[base] = 0.6
+            if inputChannels > 1 { input.data(at: 0)[base + 1] = 0.2 }
+            for channel in 2..<max(2, Int(inputChannels)) { input.data(at: 0)[base + channel] = 0.9 }
+        }
+        fill(output, bufferIndex: 0, value: 0.9)
+        var volume: Float = 1
+        processWithDefaults(input: input, output: output, preferredStereoLeft: left, preferredStereoRight: right, currentVol: &volume, monoDownmix: true)
+        let expected: Float = inputChannels == 1 ? 0.6 : 0.4
+        for frame in 0..<20 {
+            for channel in 0..<Int(outputChannels) {
+                let value: Float = frame < 16 && (channel == left || channel == right) ? expected : 0
+                #expect(abs(output.data(at: 0)[frame * Int(outputChannels) + channel] - value) < 0.00001)
+            }
+        }
+    }
+
+    @Test("Mono retains EQ processing and the app volume gain")
+    func monoKeepsDSPAndGain() {
+        let input = TestABL(buffers: [(channels: 2, frames: 4096)])
+        let output = TestABL(buffers: [(channels: 2, frames: 4096)])
+        for frame in 0..<4096 { input.data(at: 0)[frame * 2 + 1] = 0.8 * sinf(2 * .pi * 1000 * Float(frame) / 48000) }
+        var volume: Float = 0.25
+        let eq = EQProcessor(sampleRate: 48000)
+        var settings = EQSettings.flat
+        settings.bandGains[5] = -6
+        eq.updateSettings(settings)
+        processWithDefaults(input: input, output: output, targetVol: 0.25, currentVol: &volume, eqProc: eq, monoDownmix: true)
+        var peak: Float = 0
+        for frame in 4000..<4096 {
+            peak = max(peak, abs(output.data(at: 0)[frame * 2]))
+            #expect(output.data(at: 0)[frame * 2] == output.data(at: 0)[frame * 2 + 1])
+        }
+        #expect(peak > 0.04 && peak < 0.06)
     }
 }

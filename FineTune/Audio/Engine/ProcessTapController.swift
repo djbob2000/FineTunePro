@@ -59,6 +59,7 @@ final class ProcessTapController: ProcessTapControlling {
     private nonisolated(unsafe) var _forceSilence: Bool = false
     /// User-controlled mute - still tracks VU levels but outputs silence
     private nonisolated(unsafe) var _isMuted: Bool = false
+    private nonisolated(unsafe) var _monoDownmix = false
     // Device volume compensation removed — was dead code (always 1.0).
     // If implementing, ensure both primary and secondary callbacks disable
     // compensation during crossfade to avoid gain jumps (RT-013).
@@ -258,6 +259,8 @@ final class ProcessTapController: ProcessTapControlling {
         get { _isMuted }
         set { _isMuted = newValue }
     }
+
+    func setMonoDownmix(_ enabled: Bool) { _monoDownmix = enabled }
 
     // MARK: - Initialization
 
@@ -812,6 +815,7 @@ final class ProcessTapController: ProcessTapControlling {
     }
 
     func activate(initial: TapInitialState) throws {
+        _monoDownmix = initial.monoDownmix
         guard !activated else { return }
 
         logger.debug("Activating tap for \(self.app.name)")
@@ -1701,7 +1705,8 @@ final class ProcessTapController: ProcessTapControlling {
         outputMeterChannelPeaks: UnsafeMutablePointer<(Float, Float)>? = nil,
         outputMeterChannelCount: UnsafeMutablePointer<Int>? = nil,
         sampleRate: Double,
-        renderAudioUnits: Bool = true
+        renderAudioUnits: Bool = true,
+        monoDownmix: Bool = false
     ) -> (Float, Bool) {
         let inputBufferCount = inputBuffers.count
         let outputBufferCount = outputBuffers.count
@@ -1756,9 +1761,23 @@ final class ProcessTapController: ProcessTapControlling {
             let safeRight = min(max(preferredStereoRight, 0), max(outputChannels - 1, 0))
 
             let eq = eqProc  // Parameter read — each callback passes its own processor
-            let eqCanProcessStereoInterleaved = (inputChannels == 2 && outputChannels == 2)
+            let eqCanProcessStereoInterleaved = (outputChannels == 2 && (inputChannels == 2 || monoDownmix))
 
-            if inputChannels == outputChannels {
+            if monoDownmix {
+                for frame in 0..<frameCount {
+                    let inBase = frame * inputChannels
+                    let mono = inputChannels == 1 ? inputSamples[inBase]
+                        : (inputSamples[inBase] + inputSamples[inBase + 1]) * 0.5
+                    let outBase = frame * outputChannels
+                    for channel in 0..<outputChannels { outputSamples[outBase + channel] = 0 }
+                    outputSamples[outBase + safeLeft] = mono
+                    outputSamples[outBase + safeRight] = mono
+                }
+                let written = frameCount * outputChannels
+                if written < outputSampleCount {
+                    memset(outputSamples.advanced(by: written), 0, (outputSampleCount - written) * MemoryLayout<Float>.size)
+                }
+            } else if inputChannels == outputChannels {
                 let sampleCount = frameCount * inputChannels
                 for frame in 0..<frameCount {
                     let base = frame * inputChannels
@@ -2079,7 +2098,9 @@ final class ProcessTapController: ProcessTapControlling {
                 isPrimary: isPrimary,
                 primarySampleRate: _primarySampleRate,
                 secondarySampleRate: _secondarySampleRate
-            )
+            ),
+            renderAudioUnits: renderAudioUnits,
+            monoDownmix: _monoDownmix
         )
 
         if isPrimary {

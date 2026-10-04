@@ -138,6 +138,7 @@ final class SettingsManager {
         var appVolumes: [String: Float] = [:]
         var appDeviceRouting: [String: String] = [:]  // bundleID → deviceUID
         var appMutes: [String: Bool] = [:]  // bundleID → isMuted
+        var appMonoDownmix: [String: Bool] = [:]
         var appBoosts: [String: Float] = [:]  // bundleID → boost rawValue (1.0, 2.0, 3.0, 4.0)
         var appEQSettings: [String: EQSettings] = [:]  // bundleID → EQ settings
         var appAUEffectChains: [String: [AUEffectChainEntry]] = [:]  // persistenceIdentifier → AU chain
@@ -215,6 +216,7 @@ final class SettingsManager {
                 .mapValues { min($0, 1.0) }  // Clamp old volumes > 1.0 (boost is now per-app)
             appDeviceRouting = try c.decodeIfPresent([String: String].self, forKey: .appDeviceRouting) ?? [:]
             appMutes = try c.decodeIfPresent([String: Bool].self, forKey: .appMutes) ?? [:]
+            appMonoDownmix = try c.decodeIfPresent([String: Bool].self, forKey: .appMonoDownmix) ?? [:]
             appBoosts = try c.decodeIfPresent([String: Float].self, forKey: .appBoosts) ?? [:]
             appEQSettings = try c.decodeIfPresent([String: EQSettings].self, forKey: .appEQSettings) ?? [:]
             appAUEffectChains = try c.decodeIfPresent([String: [AUEffectChainEntry]].self, forKey: .appAUEffectChains) ?? [:]
@@ -472,6 +474,15 @@ final class SettingsManager {
         settings.deviceAUBypassed[deviceUID] ?? false
     }
 
+    // MARK: - Per-App Mono Playback
+
+    func getMonoDownmix(for identifier: String) -> Bool? { settings.appMonoDownmix[identifier] }
+
+    func setMonoDownmix(for identifier: String, to enabled: Bool) {
+        settings.appMonoDownmix[identifier] = enabled
+        scheduleSave()
+    }
+
     // MARK: - Device Selection Mode
 
     func getDeviceSelectionMode(for identifier: String) -> DeviceSelectionMode? {
@@ -548,6 +559,7 @@ final class SettingsManager {
         settings.pinnedAppInfo.removeValue(forKey: identifier)
         // Clear per-app settings — FineTune won't interact with this app
         settings.appVolumes.removeValue(forKey: identifier)
+        settings.appMonoDownmix.removeValue(forKey: identifier)
         settings.appBoosts.removeValue(forKey: identifier)
         settings.appMutes.removeValue(forKey: identifier)
         settings.appDeviceRouting.removeValue(forKey: identifier)
@@ -873,6 +885,7 @@ final class SettingsManager {
     /// - Parameter activeIdentifiers: Persistence identifiers of currently active apps.
     func pruneStaleSettings(keeping activeIdentifiers: Set<String>) {
         let allIdentifiers = Set(settings.appVolumes.keys)
+            .union(settings.appMonoDownmix.keys)
             .union(settings.appBoosts.keys)
             .union(settings.appMutes.keys)
             .union(settings.appEQSettings.keys)
@@ -898,19 +911,21 @@ final class SettingsManager {
             let boost = settings.appBoosts[identifier]
 
             let isDefaultVolume = volume == nil || volume == 1.0
+            let isDefaultMonoDownmix = settings.appMonoDownmix[identifier] != true
             let isDefaultBoost = boost == nil || boost == BoostLevel.x1.rawValue
             let isDefaultMute = mute == nil || mute == false
             let isDefaultEQ = eq == nil || eq == .flat
             let isDefaultSelectionMode = selectionMode == nil
             let isDefaultSelectedUIDs = selectedUIDs == nil || selectedUIDs?.isEmpty == true
 
-            guard isDefaultVolume && isDefaultBoost && isDefaultMute && isDefaultEQ
+            guard isDefaultMonoDownmix && isDefaultVolume && isDefaultBoost && isDefaultMute && isDefaultEQ
                     && isDefaultSelectionMode && isDefaultSelectedUIDs else {
                 continue
             }
 
             // All values are defaults — safe to prune
             settings.appVolumes.removeValue(forKey: identifier)
+            settings.appMonoDownmix.removeValue(forKey: identifier)
             settings.appBoosts.removeValue(forKey: identifier)
             settings.appMutes.removeValue(forKey: identifier)
             settings.appEQSettings.removeValue(forKey: identifier)
@@ -1187,6 +1202,7 @@ final class SettingsManager {
     func resetAllSettings() {
         isSettingUp = true
         settings.appVolumes.removeAll()
+        settings.appMonoDownmix.removeAll()
         settings.appBoosts.removeAll()
         settings.appDeviceRouting.removeAll()
         settings.appMutes.removeAll()

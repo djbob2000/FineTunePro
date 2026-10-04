@@ -3,6 +3,7 @@ import Foundation
 
 /// Persisted settings applied to a fresh ProcessTapController before its IOProc starts.
 struct TapInitialState {
+    var monoDownmix: Bool = false
     var eqSettings: EQSettings = .flat
     var autoEQProfile: AutoEQProfile? = nil
     var autoEQPreampEnabled: Bool = false

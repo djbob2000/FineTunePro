@@ -722,6 +722,7 @@ final class AudioEngine {
         // 5. Push defaults to all active taps
         for tap in taps.values {
             applyTapOutputState(to: tap, for: tap.app.id, deviceUIDs: tap.currentDeviceUIDs)
+            tap.setMonoDownmix(false)
             tap.updateEQSettings(.flat)
             tap.updateAutoEQProfile(nil)
             tap.updateAUEffectChain([])
@@ -1190,6 +1191,21 @@ final class AudioEngine {
         }
     }
 
+    func setMonoDownmix(for app: AudioApp, to enabled: Bool) {
+        volumeState.setMonoDownmix(for: app.id, to: enabled, identifier: app.persistenceIdentifier)
+        taps[app.id]?.setMonoDownmix(enabled)
+    }
+
+    func isMonoDownmix(for app: AudioApp) -> Bool { volumeState.getMonoDownmix(for: app.id) }
+
+    func getMonoDownmixForInactive(identifier: String) -> Bool {
+        appListCoordinator.getMonoDownmixForInactive(identifier: identifier)
+    }
+
+    func setMonoDownmixForInactive(identifier: String, to enabled: Bool) {
+        appListCoordinator.setMonoDownmixForInactive(identifier: identifier, to: enabled)
+    }
+
     // MARK: - Per-Device AutoEQ
 
     func getAutoEQProfile(for deviceUID: String) -> AutoEQProfile? {
@@ -1517,6 +1533,7 @@ final class AudioEngine {
     }
 
     private func tapInitialState(forApp app: AudioApp, primaryDeviceUID: String, deviceVolume: Float) -> TapInitialState {
+        _ = volumeState.loadSavedMonoDownmix(for: app.id, identifier: app.persistenceIdentifier)
         // Build initial LoudnessEqualizerSettings (Smart Volume).
         var loudnessEqSettings = LoudnessEqualizerSettings()
         let isSmartVolumeActive = settingsManager.getAppSmartVolumeEnabled(for: app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: primaryDeviceUID)
@@ -1530,6 +1547,7 @@ final class AudioEngine {
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: primaryDeviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: primaryDeviceUID)
         return TapInitialState(
+            monoDownmix: volumeState.getMonoDownmix(for: app.id),
             eqSettings: settingsManager.getEQSettings(for: app.persistenceIdentifier),
             autoEQProfile: autoEQProfileForActivation(deviceUID: primaryDeviceUID),
             autoEQPreampEnabled: settingsManager.autoEQPreampEnabled,
@@ -1865,6 +1883,7 @@ final class AudioEngine {
             let savedVolume = volumeState.loadSavedVolume(for: app.id, identifier: app.persistenceIdentifier)
             let savedMute = volumeState.loadSavedMute(for: app.id, identifier: app.persistenceIdentifier)
             _ = volumeState.loadSavedBoost(for: app.id, identifier: app.persistenceIdentifier)
+            _ = volumeState.loadSavedMonoDownmix(for: app.id, identifier: app.persistenceIdentifier)
 
             // Handle multi-device mode
             if mode == .multi {

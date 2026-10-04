@@ -28,6 +28,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
     /// Plain snapshot of `TapInitialState` so test asserts don't depend on
     /// the source-type's identity (defensive against future mutations).
     struct TapInitialStateSnapshot: Equatable {
+        var monoDownmix: Bool
         var eqSettings: EQSettings
         var autoEQProfileID: String?
         var autoEQPreampEnabled: Bool
@@ -45,6 +46,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
 
         @MainActor
         init(_ s: TapInitialState) {
+            self.monoDownmix = s.monoDownmix
             self.eqSettings = s.eqSettings
             self.autoEQProfileID = s.autoEQProfile?.id
             self.autoEQPreampEnabled = s.autoEQPreampEnabled
@@ -67,6 +69,9 @@ final class RecordingProcessTapController: ProcessTapControlling {
     private(set) var lastLoudnessDigitalVolume: Float?
 
     // Mutable surface — recorded as plain property writes (not events).
+    private(set) var monoDownmix = false
+    func setMonoDownmix(_ enabled: Bool) { monoDownmix = enabled }
+
     var volume: Float = 1.0
     var isMuted: Bool = false
     var currentDeviceVolume: Float = 1.0
@@ -242,6 +247,22 @@ private final class TapBox {
 struct AudioEngineTapInitialStateTests {
 
     // MARK: Single-knob derivation
+
+    @Test("Mono preference is applied before tap activation and updates live")
+    func monoInitialStateAndLiveUpdate() async throws {
+        let fix = makeFixture()
+        fix.settings.setMonoDownmix(for: fix.app.persistenceIdentifier, to: true)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        let activation = try #require(tap.events.compactMap { event -> RecordingProcessTapController.TapInitialStateSnapshot? in
+            if case .activate(let state) = event { return state }; return nil
+        }.first)
+        #expect(activation.monoDownmix)
+        fix.engine.setMonoDownmix(for: fix.app, to: false)
+        #expect(!tap.monoDownmix)
+        #expect(fix.settings.getMonoDownmix(for: fix.app.persistenceIdentifier) == false)
+        fix.engine.stop()
+    }
 
     @Test("The saved loudness threshold is applied before the first audio callback")
     func loudnessMaxDBIsCarried() throws {
