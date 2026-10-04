@@ -9,6 +9,7 @@ struct TapInitialState {
     var loudnessVolume: Float = 1.0
     var loudnessCompensationEnabled: Bool = false
     var loudnessReferencePhon: Double = ISO226Contours.defaultReferencePhon
+    var loudnessMaxDB: Double = -30.0
     var loudnessEqualizerSettings: LoudnessEqualizerSettings = .init()
     var loudnessBassCrossover: Double = 70.0
     var loudnessGainScale: Double = 1.0

@@ -1,15 +1,14 @@
 import Foundation
 import Accelerate
 
-/// RT-safe loudness compensation processor based on ISO 226:2023 equal-loudness contours.
+/// RT-safe hybrid loudness compensation: a four-section bass curve plus harmonic exciters.
 ///
-/// Applies frequency-dependent gain to counteract the human ear's reduced sensitivity
-/// to bass and treble at low listening levels. At the reference level (~80 phon),
-/// compensation is flat (bypassed). At lower levels, the contour difference is
-/// normalized around 1 kHz so only spectral balance is corrected. The app then fits
-/// that target curve with a low-cost four-section shelf/bell cascade.
-/// Headroom is computed from the realized cascade response and subtracted from all
-/// band gains so the cascade peak never exceeds 0 dBFS.
+/// The existing volume-dependent curve uses a low shelf and low-mid bell; treble lift
+/// comes from the exciter. At full listening volume compensation is bypassed.
+/// A global preamp reserves headroom for the realized cascade and the exciter wet mix.
+/// Digital attenuation upstream supplies headroom; hardware device volume does not.
+/// Filter gains retain their original shape. The final limiter guards upstream boost,
+/// filter transients and the tap volume ramp during control changes.
 ///
 /// Subclass of `BiquadProcessor` — inherits atomic setup swaps, stereo biquad processing,
 /// delay buffer management, and NaN safety. Follows the same pattern as `EQProcessor`.
@@ -45,8 +44,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     // MARK: - State
 
-    /// Phon level used for the last coefficient computation.
-    private var _currentPhon: Double = ISO226Contours.defaultReferencePhon
     /// Reference phon level used for the last coefficient computation.
     private var _currentReferencePhon: Double = ISO226Contours.defaultReferencePhon
     /// System volume used for the last coefficient computation.
@@ -78,14 +75,15 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _lowPostHPFL = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFR = BiquadState()
 
-private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
-private nonisolated(unsafe) var _highExciterWet: Float = 0.0
-private nonisolated(unsafe) var _bassEQ0DB: Double = 0.0
-private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
+    private nonisolated(unsafe) var _lowExciterWet: Float = 0.0
+    private nonisolated(unsafe) var _highExciterWet: Float = 0.0
+    private nonisolated(unsafe) var _bassEQ0DB: Double = 0.0
+    private nonisolated(unsafe) var _preampGain: Float = 1.0
+    /// Cached gain budget; digital-volume-only updates need no coefficient rebuild.
+    private var _peakGainDB: Double = 0.0
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
-    var outputGainCorrection: Float { _outputGainCorrection }
 
     // MARK: - Init
 
@@ -103,22 +101,27 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
 
     /// Update compensation coefficients for a new system volume level.
     ///
-    /// Converts volume → estimated phon, skips recomputation if phon changed by less
-    /// than 1.0 (coalesces rapid slider drags), bypasses processor when at reference level.
+    /// Rebuilds the hybrid curve when its controls change. Digital-gain-only changes
+    /// always refresh the preamp, without rebuilding the biquad cascade.
     ///
     /// - Important: **Main thread only.** This method mutates `_eqSetup` and `_isEnabled`
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
     func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 180.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
-        // Volume-based phon estimation (primary — tracks user's intended listening level,
-        // matching Dolby Volume Modeler / THX Loudness Plus architecture).
-        let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume, referencePhon: referencePhon)
+        let curveChanged = systemVolume != _currentSystemVolume
+            || referencePhon != _currentReferencePhon
+            || gainScale != _currentGainScale || maxDB != _currentMaxDB
+            || bassCrossoverFrequency != _bassCrossoverFrequency
+            || trebleCrossoverFrequency != _trebleCrossoverFrequency
+            || trebleGainScale != _trebleGainScale
+            || bassExciterWet != _currentBassExciterWet || bassLinearWet != _currentBassLinearWet
+        _currentDigitalVolume = digitalVolume
+        if isEnabled && !curveChanged {
+            updatePreamp()
+            return
+        }
 
-        // Coalesce rapid updates, but never skip a disabled processor because re-enabling
-        // loudness from the UI must rebuild coefficients immediately even at the same volume.
-        guard !isEnabled || _bassCrossoverFrequency != bassCrossoverFrequency || _trebleCrossoverFrequency != trebleCrossoverFrequency || _trebleGainScale != trebleGainScale || abs(phon - _currentPhon) >= 1.0 || abs(referencePhon - _currentReferencePhon) >= 0.1 || abs(digitalVolume - _currentDigitalVolume) >= 0.05 || abs(gainScale - _currentGainScale) >= 0.01 || _currentMaxDB != maxDB || _currentBassExciterWet != bassExciterWet || _currentBassLinearWet != bassLinearWet else { return }
-        
         var crossoverChanged = false
         if _bassCrossoverFrequency != bassCrossoverFrequency {
             _bassCrossoverFrequency = bassCrossoverFrequency
@@ -133,72 +136,23 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
         }
         _trebleGainScale = trebleGainScale
         
-        _currentPhon = phon
         _currentReferencePhon = referencePhon
         _currentSystemVolume = systemVolume
-        _currentDigitalVolume = digitalVolume
         _currentGainScale = gainScale
         _currentMaxDB = maxDB
         _currentBassExciterWet = bassExciterWet
         _currentBassLinearWet = bassLinearWet
 
-        // RME ADI-2 Style Dual-Point Decibel-Linear Loudness Transition (needed for treble)
-        let linearVol = max(Double(systemVolume), 0.0001)
-        let volDB = 40.0 * (linearVol - 1.0) // 100% -> 0 dB, 50% -> -20 dB, 0% -> -40 dB
-        let mDB = (maxDB >= -40.0 && maxDB <= -20.0) ? maxDB : -30.0
-        let K_linear = min(1.0, max(0.0, -volDB / abs(mDB)))
-        let K = pow(K_linear, 1.8)
-
-        // Clean ISO 226 low-frequency EQ curve, pushed a bit harder for the soft MaxxBass-style variant.
-        let bassEQ0 = 10.0 * K
-        let bassEQ1 = 2.0 * K
-        let trebleEQ2 = 0.0
-        let trebleEQ3 = 0.0
-        _bassEQ0DB = bassEQ0
-        
-        let eqGains = [
-            bassEQ0,
-            bassEQ1,
-            trebleEQ2,
-            trebleEQ3
-        ]
-
-        let harmonicsEnabled = bassExciterWet > 0.0
-
-        // Multi-harmonic exciter wet mix, scaled dynamically by K.
-        _lowExciterWet = harmonicsEnabled ? 0.35 * Float(K) : 0.0
-
-        // High lift comes from the exciter, using the amplitude delta of a 3 dB shelf as the wet target.
-        let highBoostDB = 3.0 * Double(_trebleGainScale) * K
-        let highLinear = pow(10.0, highBoostDB / 20.0)
-        _highExciterWet = harmonicsEnabled ? Float(highLinear - 1.0) : 0.0
-        
-        // Output gain correction factor (BrickwallLimiter handles headroom downstream)
-        _outputGainCorrection = 1.0
-
-        // Calculate realized response and headroom based on actual EQ gains
-        let realized = Self.realizedResponseDB(sectionGains: eqGains, sampleRate: sampleRate)
-        let frequencies = Self.fitGridFrequencies()
-        var peakDB = 0.0
-        for (index, freq) in frequencies.enumerated() {
-            if freq >= 30.0 {
-                peakDB = max(peakDB, realized[index])
-            }
-        }
-        
-        let linearVolume = max(Double(digitalVolume), 1e-4)
-        let volumeAttenuationDB = -20.0 * log10(linearVolume)
-        
-        // Always subtract headroom (dynamic headroom subtraction)
-        let headroomToSubtract = max(0.0, peakDB - volumeAttenuationDB)
-
-        let gains = eqGains.map { Float($0) - Float(headroomToSubtract) }
+        let gains = computeBandGains()
+        updateHeadroom(gains: gains)
 
         // Bypass when all gains are negligible (near reference level) and exciter is off
         let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
         if allNegligible {
             setEnabled(false)
             swapSetup(nil)
+            _peakGainDB = 0
+            _preampGain = 1
             return
         }
 
@@ -219,34 +173,47 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
 
     // MARK: - Coefficient Computation
 
-    /// Compute per-section gains (dB) for the fixed four-filter loudness topology.
-    ///
-    /// Post-processes the fitted gains by computing the realized cascade response,
-    /// finding its peak (the "headroom" needed), and subtracting that peak from all
-    /// band gains so the cascade never clips.
-    private func computeBandGains(phon: Double, referencePhon: Double, digitalVolume: Float, gainScale: Float = 1.0, amount: Double = 0.5) -> [Float] {
-        let gains = Self.fittedSectionGains(forPhon: phon, referencePhon: referencePhon, amount: amount, sampleRate: sampleRate)
-        let scaledGains = gains.map { $0 * gainScale }
-        let realized = Self.realizedResponseDB(sectionGains: scaledGains.map(Double.init), sampleRate: sampleRate)
-        
-        // Exclude infrasound frequencies below 30 Hz from the headroom calculation
-        // to maximize dynamic range, since most output devices cannot reproduce them.
-        let frequencies = Self.fitGridFrequencies()
-        var peakDB = 0.0
-        for (index, freq) in frequencies.enumerated() {
-            if freq >= 30.0 {
-                peakDB = max(peakDB, realized[index])
-            }
-        }
-        
-        // Calculate digital headroom from actual digital volume attenuation in the pipeline
-        let linearVolume = max(Double(digitalVolume), 1e-4)
-        let volumeAttenuationDB = -20.0 * log10(linearVolume)
-        
-        // Dynamic headroom subtraction (only subtract boost exceeding the digital attenuation)
-        let headroomToSubtract = max(0.0, peakDB - volumeAttenuationDB)
-        
-        return scaledGains.map { $0 - Float(headroomToSubtract) }
+    /// The same hybrid curve is used for control updates and sample-rate changes.
+    private func computeBandGains() -> [Float] {
+        let volume = max(0, min(1, Double(_currentSystemVolume)))
+        let volumeDB = 40.0 * (volume - 1.0)
+        let maxDB = (_currentMaxDB >= -40 && _currentMaxDB <= -20) ? _currentMaxDB : -30
+        let amount = pow(min(1, max(0, -volumeDB / abs(maxDB))), 1.8)
+        let bassScale = max(0, Double(_currentGainScale))
+        let linearWet = max(0, min(1, Double(_currentBassLinearWet)))
+        let bassAmount = amount * bassScale * linearWet
+        _bassEQ0DB = 10 * bassAmount
+
+        // Preserve the existing harmonic character and its default 35% bass wet mix.
+        let harmonicsEnabled = _currentBassExciterWet > 0
+        _lowExciterWet = harmonicsEnabled ? 0.35 * Float(amount * bassScale) : 0
+        let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
+        _highExciterWet = harmonicsEnabled ? Float(pow(10, highBoostDB / 20) - 1) : 0
+        return [Float(_bassEQ0DB), Float(2 * bassAmount), 0, 0]
+    }
+
+    private func updateHeadroom(gains: [Float]) {
+        let response = Self.realizedResponseDB(sectionGains: gains.map(Double.init), sampleRate: sampleRate)
+        let peak = zip(Self.fitGridFrequencies(), response)
+            .filter { $0.0 < sampleRate / 2 }
+            .map { $0.1 }.max() ?? 0
+        // For |c| <= 1, the saturator polynomial is bounded by the sum of its
+        // absolute coefficients times |c|. Include the input drive (1.4 / 1.1)
+        // and reserve the wet gain in addition to the dry cascade response.
+        // This is a conservative mix budget, not a true-peak guarantee for arbitrary
+        // material: crossover ringing and other upstream DSP remain limiter-handled.
+        let wetGain = 1 + Double(_lowExciterWet) * 1.4 * 1.55
+            + Double(_highExciterWet) * 1.1 * 1.36
+        _peakGainDB = max(0, peak) + 20 * log10(wetGain)
+        updatePreamp()
+    }
+
+    private func updatePreamp() {
+        // Boost above unity contributes no headroom. It remains the final limiter's job.
+        let digital = max(1e-8, min(1, Double(_currentDigitalVolume)))
+        let availableDB = -20 * log10(digital)
+        let cutDB = max(0, _peakGainDB - availableDB)
+        _preampGain = Float(pow(10, -cutDB / 20))
     }
 
     /// Fit the fixed four-section loudness topology to the ISO-derived target curve.
@@ -320,11 +287,19 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
     // MARK: - BiquadProcessor Overrides
 
     override func recomputeCoefficients() -> (coefficients: [Double], sectionCount: Int)? {
-        let gains = computeBandGains(phon: _currentPhon, referencePhon: _currentReferencePhon, digitalVolume: _currentDigitalVolume, gainScale: _currentGainScale, amount: 1.0)
+        let gains = computeBandGains()
+        updateHeadroom(gains: gains)
         let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
         guard !allNegligible else { return nil }
         let coefficients = Self.coefficientsForBands(gains: gains, sampleRate: sampleRate)
         return (coefficients, Self.bandCount)
+    }
+
+    /// RT-safe global attenuation before the linear cascade and harmonic branches.
+    override func preProcess(output: UnsafeMutablePointer<Float>, frameCount: Int) {
+        var gain = _preampGain
+        guard gain != 1 else { return }
+        vDSP_vsmul(output, 1, &gain, output, 1, vDSP_Length(frameCount * 2))
     }
 
     override func updateSampleRate(_ newRate: Double) {
@@ -338,17 +313,9 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
         
         let lowWet = _lowExciterWet
         let highWet = _highExciterWet
-        let correction = _outputGainCorrection
         
-        guard isEnabled, (lowWet > 0.0 || highWet > 0.0) else {
-            // Apply linear correction headroom even if exciter is off
-            if correction != 1.0 {
-                var scale = correction
-                vDSP_vsmul(output, 1, &scale, output, 1, vDSP_Length(frameCount * 2))
-            }
-            return
-        }
-        
+        guard isEnabled, (lowWet > 0 || highWet > 0) else { return }
+
         // Crossover and non-linear processing (Stereo Interleaved)
         for frame in 0..<frameCount {
             let idxL = frame * 2
@@ -392,9 +359,9 @@ private nonisolated(unsafe) var _outputGainCorrection: Float = 1.0
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
             
-            // Sum Dry + Wet, apply gain correction factor
-            let outL = (xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)) * correction
-            let outR = (xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)) * correction
+            // Sum dry and wet; their headroom was reserved by the global preamp.
+            let outL = xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)
+            let outR = xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)
             
             output[idxL] = outL
             output[idxR] = outR

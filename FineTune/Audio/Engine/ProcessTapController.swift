@@ -138,6 +138,7 @@ final class ProcessTapController: ProcessTapControlling {
     private nonisolated(unsafe) var loudnessCompensator: LoudnessCompensator?
     private nonisolated(unsafe) var loudnessEqualizerProcessor: LoudnessEqualizer?
     private nonisolated(unsafe) var postAgcCompressorProcessor: PostAgcCompressor?
+    private var _lastLoudnessEnabled = false
     private var _lastLoudnessVolume: Float = 1.0
     /// Last effective reference phon level passed to updateLoudnessCompensation.
     private var _lastLoudnessReferencePhon: Double = ISO226Contours.defaultReferencePhon
@@ -317,10 +318,16 @@ final class ProcessTapController: ProcessTapControlling {
     }
 
     func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 180.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+        _lastLoudnessEnabled = enabled
         _lastLoudnessVolume = volume
         _lastLoudnessReferencePhon = referencePhon
         _lastLoudnessGainScale = gainScale
         _lastLoudnessBassCrossover = bassCrossover
+        _lastLoudnessTrebleCrossover = trebleCrossover
+        _lastLoudnessTrebleGainScale = trebleGainScale
+        _lastLoudnessBassExciterWet = bassExciterWet
+        _lastLoudnessBassLinearWet = bassLinearWet
+        _lastLoudnessMaxDB = maxDB
         if enabled {
             loudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet)
             secondaryLoudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet)
@@ -328,6 +335,22 @@ final class ProcessTapController: ProcessTapControlling {
             loudnessCompensator?.setEnabled(false)
             secondaryLoudnessCompensator?.setEnabled(false)
         }
+    }
+
+    /// Create a processor with the complete current state before its callback starts.
+    /// Primary and secondary taps own separate filter delay buffers.
+    func makeLoudnessCompensator(sampleRate: Double) -> LoudnessCompensator {
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        if _lastLoudnessEnabled {
+            processor.updateForVolume(
+                _lastLoudnessVolume, digitalVolume: _volume,
+                referencePhon: _lastLoudnessReferencePhon, maxDB: _lastLoudnessMaxDB,
+                gainScale: _lastLoudnessGainScale, bassCrossoverFrequency: _lastLoudnessBassCrossover,
+                trebleCrossoverFrequency: _lastLoudnessTrebleCrossover, trebleGainScale: _lastLoudnessTrebleGainScale,
+                bassExciterWet: _lastLoudnessBassExciterWet, bassLinearWet: _lastLoudnessBassLinearWet
+            )
+        }
+        return processor
     }
 
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {
@@ -851,7 +874,6 @@ final class ProcessTapController: ProcessTapControlling {
         var compressorSettings = PostAgcCompressorSettings()
         compressorSettings.enabled = initial.loudnessEqualizerSettings.enabled
         postAgcCompressorProcessor = PostAgcCompressor(settings: compressorSettings, sampleRate: Float(sampleRate))
-        loudnessCompensator = LoudnessCompensator(sampleRate: sampleRate)
 
         // Apply persisted state to fresh processors before AudioDeviceStart so the
         // first IOProc callback sees correct EQ/AutoEQ/Loudness coefficients.
@@ -860,30 +882,14 @@ final class ProcessTapController: ProcessTapControlling {
         if let profile = initial.autoEQProfile {
             autoEQProcessor?.updateProfile(profile)
         }
-        loudnessCompensator?.setEnabled(initial.loudnessCompensationEnabled)
-        if initial.loudnessCompensationEnabled {
-            loudnessCompensator?.updateForVolume(
-                initial.loudnessVolume,
-                digitalVolume: _volume,
-                referencePhon: initial.loudnessReferencePhon,
-                maxDB: -30.0,
-                gainScale: Float(initial.loudnessGainScale),
-                bassCrossoverFrequency: initial.loudnessBassCrossover,
-                trebleCrossoverFrequency: initial.loudnessTrebleCrossover,
-                trebleGainScale: Float(initial.loudnessTrebleGainScale),
-                bassExciterWet: Float(initial.loudnessBassExciterWet),
-                bassLinearWet: Float(initial.loudnessBassLinearWet)
-            )
-        }
-        _lastLoudnessVolume = initial.loudnessVolume
-        _lastLoudnessReferencePhon = initial.loudnessReferencePhon
-        _lastLoudnessGainScale = Float(initial.loudnessGainScale)
-        _lastLoudnessBassCrossover = initial.loudnessBassCrossover
-        _lastLoudnessTrebleCrossover = initial.loudnessTrebleCrossover
-        _lastLoudnessTrebleGainScale = Float(initial.loudnessTrebleGainScale)
-        _lastLoudnessBassExciterWet = Float(initial.loudnessBassExciterWet)
-        _lastLoudnessBassLinearWet = Float(initial.loudnessBassLinearWet)
-        _lastLoudnessMaxDB = -30.0
+        updateLoudnessCompensation(
+            volume: initial.loudnessVolume, enabled: initial.loudnessCompensationEnabled,
+            referencePhon: initial.loudnessReferencePhon, maxDB: initial.loudnessMaxDB,
+            gainScale: Float(initial.loudnessGainScale), bassCrossover: initial.loudnessBassCrossover,
+            trebleCrossover: initial.loudnessTrebleCrossover, trebleGainScale: Float(initial.loudnessTrebleGainScale),
+            bassExciterWet: Float(initial.loudnessBassExciterWet), bassLinearWet: Float(initial.loudnessBassLinearWet)
+        )
+        loudnessCompensator = makeLoudnessCompensator(sampleRate: sampleRate)
 
         // Create IO proc with gain processing
         nextCallbackID += 1
@@ -1277,20 +1283,7 @@ final class ProcessTapController: ProcessTapControlling {
         let secPostAgcCompressor = PostAgcCompressor(settings: postAgcCompressorProcessor?.currentSettings ?? PostAgcCompressorSettings(), sampleRate: Float(sampleRate))
         secondaryPostAgcCompressorProcessor = secPostAgcCompressor
 
-        let secLoudness = LoudnessCompensator(sampleRate: sampleRate)
-        secLoudness.updateForVolume(
-            _lastLoudnessVolume,
-            digitalVolume: _volume,
-            referencePhon: _lastLoudnessReferencePhon,
-            maxDB: _lastLoudnessMaxDB,
-            gainScale: _lastLoudnessGainScale,
-            bassCrossoverFrequency: _lastLoudnessBassCrossover,
-            trebleCrossoverFrequency: _lastLoudnessTrebleCrossover,
-            trebleGainScale: _lastLoudnessTrebleGainScale,
-            bassExciterWet: _lastLoudnessBassExciterWet,
-            bassLinearWet: _lastLoudnessBassLinearWet
-        )
-        if !(loudnessCompensator?.isEnabled ?? false) { secLoudness.setEnabled(false) }
+        let secLoudness = makeLoudnessCompensator(sampleRate: sampleRate)
         secondaryLoudnessCompensator = secLoudness
 
         if !_currentAUEntries.isEmpty {
