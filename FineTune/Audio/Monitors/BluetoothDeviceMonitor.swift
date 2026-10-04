@@ -47,7 +47,25 @@ final class BluetoothDeviceMonitor {
     /// In-flight refresh task — cancelled on each new refresh to avoid stacking.
     private var refreshTask: Task<Void, Never>?
 
-    private let connectTimeoutSeconds: Double = 12
+    private let connectTimeoutSeconds: Double
+    private let connectionOpener: (@Sendable (String) async -> Int32)?
+    private var pendingOutputMAC: String?
+    private var connectingDevices: [String: PairedBluetoothDevice] = [:]
+    private var connectionGenerations: [String: UUID] = [:]
+
+    init(connectTimeoutSeconds: Double = 12, connectionOpener: (@Sendable (String) async -> Int32)? = nil) {
+        self.connectTimeoutSeconds = connectTimeoutSeconds
+        self.connectionOpener = connectionOpener
+    }
+
+    func wantsToSelectOutput(_ device: AudioDevice) -> Bool {
+        pendingOutputMAC.map { BluetoothOutputIdentity.matches(mac: $0, device: device) } ?? false
+    }
+
+    func completeOutputSelection(_ device: AudioDevice, succeeded: Bool) {
+        guard let mac = pendingOutputMAC, BluetoothOutputIdentity.matches(mac: mac, device: device) else { return }
+        finishConnecting(mac: mac, error: succeeded ? nil : L10n.string("Couldn't connect"))
+    }
 
     // MARK: - A2DP / HFP SDP UUIDs
 
@@ -104,6 +122,7 @@ final class BluetoothDeviceMonitor {
             isBluetoothOn = powered
 
             guard powered else {
+                for mac in Array(connectingIDs) { finishConnecting(mac: mac, error: L10n.string("Couldn't connect")) }
                 pairedDevices = []
                 return
             }
@@ -124,7 +143,11 @@ final class BluetoothDeviceMonitor {
                     )
                 )
             }
-            pairedDevices = devices
+            let remaining = connectingDevices.values.filter { device in
+                (connectingIDs.contains(device.id) || connectionErrors[device.id] != nil)
+                    && !devices.contains(where: { $0.id == device.id })
+            }
+            pairedDevices = (devices + remaining).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             logger.debug("Paired BT audio devices: \(devices.count)")
         }
     }
@@ -138,26 +161,38 @@ final class BluetoothDeviceMonitor {
 
         logger.info("Connecting to \(device.name) (\(mac))")
 
+        pendingOutputMAC = mac
+        connectingDevices[mac] = device
+        let generation = UUID()
+        connectionGenerations[mac] = generation
         connectingIDs.insert(mac)
         connectionErrors.removeValue(forKey: mac)
+        errorClearTasks[mac]?.cancel()
+        startConnectTimeout(mac: mac, name: device.name)
+        if !pairedDevices.contains(where: { $0.id == mac }) { pairedDevices.append(device) }
 
         Task {
-            let result = await Self.runOnBTQueue {
+            let result: Int32
+            if let connectionOpener {
+                result = await connectionOpener(mac)
+            } else {
+                result = await Self.runOnBTQueue {
                 guard let btDevice = IOBluetoothDevice(addressString: mac) else {
                     return kIOReturnNotFound
                 }
                 return btDevice.openConnection()
+                }
             }
+            guard connectionGenerations[mac] == generation, connectingIDs.contains(mac) else { return }
 
             if result != kIOReturnSuccess {
                 logger.error("\(device.name): openConnection failed (IOReturn \(result))")
-                finishConnecting(mac: mac, error: "Couldn't connect")
+                finishConnecting(mac: mac, error: L10n.string("Couldn't connect"))
                 return
             }
 
             // openConnection() is asynchronous — success detected when the device
             // appears in CoreAudio and notifyDeviceAppearedInCoreAudio() is called.
-            startConnectTimeout(mac: mac, name: device.name)
         }
     }
 
@@ -165,32 +200,14 @@ final class BluetoothDeviceMonitor {
     /// Always refreshes the paired list so auto-connected devices (not initiated
     /// via FineTune) are removed. If a FineTune-initiated connection is in flight,
     /// clears the connecting state for devices that succeeded.
-    func notifyDeviceAppearedInCoreAudio() {
-        if !connectingIDs.isEmpty {
-            Task {
-                let stillDisconnected = await Self.runOnBTQueue {
-                    let allPaired = IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? []
-                    return Set(allPaired.filter { !$0.isConnected() }.compactMap { $0.addressString })
-                }
-
-                // Clear connecting state for devices that actually connected
-                for mac in connectingIDs {
-                    if !stillDisconnected.contains(mac) {
-                        logger.debug("Device \(mac) connected; clearing in-flight state")
-                        timeoutTasks[mac]?.cancel()
-                        timeoutTasks.removeValue(forKey: mac)
-                        connectingIDs.remove(mac)
-                        pairedDevices.removeAll { $0.id == mac }
-                    }
-                }
-
-                refresh()
+    func notifyDeviceAppearedInCoreAudio(_ devices: [AudioDevice]) {
+        // Older connections may complete, but only the latest Connect owns default selection.
+        for mac in Array(connectingIDs) where mac != pendingOutputMAC {
+            if devices.contains(where: { BluetoothOutputIdentity.matches(mac: mac, device: $0) }) {
+                finishConnecting(mac: mac, error: nil)
             }
-        } else {
-            // Auto-connected device (not via FineTune) — still need to refresh
-            // so the device is removed from the paired list.
-            refresh()
         }
+        refresh()
     }
 
     // MARK: - IOBluetooth Queue Helper
@@ -266,7 +283,7 @@ final class BluetoothDeviceMonitor {
             try? await Task.sleep(for: .seconds(connectTimeoutSeconds))
             guard !Task.isCancelled else { return }
             self?.logger.warning("\(name) connect timeout after \(connectTimeoutSeconds)s")
-            self?.finishConnecting(mac: mac, error: "Connection timed out")
+            self?.finishConnecting(mac: mac, error: L10n.string("Connection timed out"))
         }
     }
 
@@ -274,10 +291,15 @@ final class BluetoothDeviceMonitor {
         timeoutTasks[mac]?.cancel()
         timeoutTasks.removeValue(forKey: mac)
         connectingIDs.remove(mac)
+        connectionGenerations.removeValue(forKey: mac)
+        if pendingOutputMAC == mac { pendingOutputMAC = nil }
 
         if let error {
             connectionErrors[mac] = error
             scheduleErrorClear(mac: mac)
+        } else {
+            connectingDevices.removeValue(forKey: mac)
+            pairedDevices.removeAll { $0.id == mac }
         }
 
         refresh()
@@ -289,6 +311,8 @@ final class BluetoothDeviceMonitor {
             try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled else { return }
             self?.connectionErrors.removeValue(forKey: mac)
+            self?.connectingDevices.removeValue(forKey: mac)
+            self?.refresh()
         }
     }
 

@@ -452,7 +452,7 @@ final class AudioEngine {
 
         deviceMonitor.onDeviceConnected = { [weak self] deviceUID, deviceName in
             self?.handleDeviceConnected(deviceUID, name: deviceName)
-            self?.bluetoothDeviceMonitor.notifyDeviceAppearedInCoreAudio()
+            if let self { self.bluetoothDeviceMonitor.notifyDeviceAppearedInCoreAudio(self.outputDevices) }
         }
 
         deviceMonitor.onInputDeviceDisconnected = { [weak self] deviceUID, deviceName in
@@ -2374,6 +2374,15 @@ final class AudioEngine {
         if let device = deviceMonitor.device(for: deviceUID),
            !isAliveCheck(device.id) {
             installAliveWatcher(deviceID: device.id, uid: deviceUID, name: deviceName)
+        }
+
+        if let device = deviceMonitor.device(for: deviceUID), bluetoothDeviceMonitor.wantsToSelectOutput(device) {
+            // Explicit Connect wins over priority policy. Wait for the alive watcher if needed.
+            if isAliveCheck(device.id) {
+                let success = setDefaultOutputDevice(device.id)
+                bluetoothDeviceMonitor.completeOutputSelection(device, succeeded: success)
+            }
+            return
         }
 
         let autoSwitchConnectedOutput = settingsManager.appSettings.autoSwitchToConnectedOutputDevice

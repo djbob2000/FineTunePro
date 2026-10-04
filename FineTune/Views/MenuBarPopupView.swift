@@ -568,36 +568,7 @@ struct MenuBarPopupView: View {
                     editableDeviceRow(device: device, index: index, defaultDeviceID: defaultDeviceID)
                 }
 
-                // Paired Bluetooth devices (output tab only)
-                if !showingInputDevices {
-                    if !isBluetoothOn {
-                        Text("Turn on Bluetooth to connect devices")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, DesignTokens.Spacing.xs)
-                    } else {
-                        // Filter out any device already in the output list (handles
-                        // IOBluetooth/CoreAudio timing desync where both report the device).
-                        let connectedNames = Set(editableDeviceOrder.map(\.name))
-                        let filteredPaired = pairedDevices.filter { !connectedNames.contains($0.name) }
-                        if !filteredPaired.isEmpty {
-                            SectionHeader(title: "Paired")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, DesignTokens.Spacing.xs)
-
-                            ForEach(filteredPaired) { device in
-                                PairedDeviceRow(
-                                    device: device,
-                                    isConnecting: audioEngine.bluetoothDeviceMonitor.connectingIDs.contains(device.id),
-                                    errorMessage: audioEngine.bluetoothDeviceMonitor.connectionErrors[device.id],
-                                    onConnect: {
-                                        audioEngine.bluetoothDeviceMonitor.connect(device: device)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                if !showingInputDevices { pairedBluetoothContent }
             } else if showingInputDevices {
                 ForEach(sortedInputDevices) { device in
                     ObservedInputDeviceRow(
@@ -628,6 +599,34 @@ struct MenuBarPopupView: View {
                         auPluginScanner: auPluginScanner
                     )
                     .id(PopupKeyboardNavModel.RowID.device(uid: device.uid))
+                }
+                pairedBluetoothContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pairedBluetoothContent: some View {
+        if !isBluetoothOn {
+            Text("Turn on Bluetooth to connect devices")
+                .font(.caption).foregroundStyle(.secondary)
+                .padding(.top, DesignTokens.Spacing.xs)
+        } else {
+            let available = pairedDevices.filter { paired in
+                audioEngine.bluetoothDeviceMonitor.connectingIDs.contains(paired.id)
+                    || !audioEngine.outputDevices.contains { BluetoothOutputIdentity.matches(mac: paired.id, device: $0) }
+            }
+            if !available.isEmpty {
+                SectionHeader(title: "Paired")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, DesignTokens.Spacing.xs)
+                ForEach(available) { device in
+                    PairedDeviceRow(
+                        device: device,
+                        isConnecting: audioEngine.bluetoothDeviceMonitor.connectingIDs.contains(device.id),
+                        errorMessage: audioEngine.bluetoothDeviceMonitor.connectionErrors[device.id],
+                        onConnect: { audioEngine.bluetoothDeviceMonitor.connect(device: device) }
+                    )
                 }
             }
         }
