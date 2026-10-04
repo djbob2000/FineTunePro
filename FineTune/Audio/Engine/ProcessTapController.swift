@@ -396,11 +396,18 @@ final class ProcessTapController: ProcessTapControlling {
 
     // MARK: - AU Effect Chain
 
+    private func invalidateAUEditors(_ chain: AUEffectChain?) {
+        guard let chain else { return }
+        AUPluginWindowManager.shared.invalidate(entryIDs: Set(chain.entries.map(\.id)))
+    }
+
     func updateAUEffectChain(_ entries: [AUEffectChainEntry]) {
         _currentAUEntries = entries
         let sampleRate = (try? primaryResources.aggregateDeviceID.readNominalSampleRate()) ?? 48000
         let newChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: sampleRate)
         let old = auEffectChain
+        invalidateAUEditors(old)
+        newChain?.setBypassed(old?.isBypassed ?? false)
         auEffectChain = newChain
         updateMaxTailTime()
         if let old {
@@ -409,6 +416,7 @@ final class ProcessTapController: ProcessTapControlling {
         if secondaryAUEffectChain != nil, let secRate = try? secondaryResources.aggregateDeviceID.readNominalSampleRate() {
             let oldSec = secondaryAUEffectChain
             secondaryAUEffectChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: secRate)
+            secondaryAUEffectChain?.setBypassed(newChain?.isBypassed ?? false)
             if let oldSec {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldSec }
             }
@@ -473,6 +481,8 @@ final class ProcessTapController: ProcessTapControlling {
         let sampleRate = (try? primaryResources.aggregateDeviceID.readNominalSampleRate()) ?? 48000
         let newChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: sampleRate)
         let old = deviceAUEffectChain
+        invalidateAUEditors(old)
+        newChain?.setBypassed(old?.isBypassed ?? false)
         deviceAUEffectChain = newChain
         updateMaxTailTime()
         if let old {
@@ -481,6 +491,7 @@ final class ProcessTapController: ProcessTapControlling {
         if secondaryDeviceAUEffectChain != nil, let secRate = try? secondaryResources.aggregateDeviceID.readNominalSampleRate() {
             let oldSec = secondaryDeviceAUEffectChain
             secondaryDeviceAUEffectChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: secRate)
+            secondaryDeviceAUEffectChain?.setBypassed(newChain?.isBypassed ?? false)
             if let oldSec {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldSec }
             }
@@ -1075,6 +1086,8 @@ final class ProcessTapController: ProcessTapControlling {
     private func beginInvalidation() -> Bool {
         guard activated, !_invalidating else { return false }
         _invalidating = true
+        invalidateAUEditors(auEffectChain)
+        invalidateAUEditors(deviceAUEffectChain)
         activated = false
 
         _lastRenderHostTime = 0
@@ -1288,9 +1301,11 @@ final class ProcessTapController: ProcessTapControlling {
 
         if !_currentAUEntries.isEmpty {
             secondaryAUEffectChain = AUEffectChain(entries: _currentAUEntries, sampleRate: sampleRate)
+            secondaryAUEffectChain?.setBypassed(auEffectChain?.isBypassed ?? false)
         }
         if !_currentDeviceAUEntries.isEmpty {
             secondaryDeviceAUEffectChain = AUEffectChain(entries: _currentDeviceAUEntries, sampleRate: sampleRate)
+            secondaryDeviceAUEffectChain?.setBypassed(deviceAUEffectChain?.isBypassed ?? false)
         }
 
         nextCallbackID += 1
@@ -1365,7 +1380,9 @@ final class ProcessTapController: ProcessTapControlling {
         let oldLoudnessEqualizer = loudnessEqualizerProcessor
         let oldPostAgcCompressor = postAgcCompressorProcessor
         let oldAUChain = auEffectChain
+        invalidateAUEditors(oldAUChain)
         let oldDeviceAUChain = deviceAUEffectChain
+        invalidateAUEditors(oldDeviceAUChain)
         eqProcessor = secondaryEQProcessor
         autoEQProcessor = secondaryAutoEQProcessor
         dynamicEqualizer = secondaryDynamicEqualizer
@@ -1556,14 +1573,18 @@ final class ProcessTapController: ProcessTapControlling {
             // AU chains are immutable — rebuild at new sample rate
             if !_currentAUEntries.isEmpty {
                 let oldChain = auEffectChain
+                invalidateAUEditors(oldChain)
                 auEffectChain = AUEffectChain(entries: _currentAUEntries, sampleRate: deviceSampleRate)
+                auEffectChain?.setBypassed(oldChain?.isBypassed ?? false)
                 if let oldChain {
                     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldChain }
                 }
             }
             if !_currentDeviceAUEntries.isEmpty {
                 let oldChain = deviceAUEffectChain
+                invalidateAUEditors(oldChain)
                 deviceAUEffectChain = AUEffectChain(entries: _currentDeviceAUEntries, sampleRate: deviceSampleRate)
+                deviceAUEffectChain?.setBypassed(oldChain?.isBypassed ?? false)
                 if let oldChain {
                     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldChain }
                 }
@@ -1631,6 +1652,32 @@ final class ProcessTapController: ProcessTapControlling {
         isPrimary ? primarySampleRate : secondarySampleRate
     }
 
+    /// Scan every channel; a silent left channel says nothing about the right.
+    @inline(__always)
+    nonisolated static func inputPeakAndFrameCount(_ buffers: UnsafeMutableAudioBufferListPointer) -> (peak: Float, frames: Int) {
+        var peak: Float = 0
+        var frames = 0
+        for buffer in buffers {
+            guard let data = buffer.mData else { continue }
+            let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
+            if frames == 0 { frames = count / max(1, Int(buffer.mNumberChannels)) }
+            let samples = data.assumingMemoryBound(to: Float.self)
+            for index in 0..<count { peak = max(peak, abs(samples[index])) }
+        }
+        return (min(peak, 1), frames)
+    }
+
+    @inline(__always)
+    nonisolated static func advanceAUTail(rawPeak: Float, tailSamples: UInt64, frameCount: Int, silentSamples: inout UInt64) -> Bool {
+        guard tailSamples > 0, rawPeak < outputGateSilenceThreshold else {
+            silentSamples = 0
+            return false
+        }
+        let next = silentSamples.addingReportingOverflow(UInt64(max(frameCount, 0)))
+        silentSamples = next.overflow ? UInt64.max : next.partialValue
+        return silentSamples <= tailSamples
+    }
+
     @inline(__always)
     nonisolated static func processMappedBuffers(
         inputBuffers: UnsafeMutableAudioBufferListPointer,
@@ -1653,7 +1700,8 @@ final class ProcessTapController: ProcessTapControlling {
         brickwallLimiter: BrickwallLimiter?,
         outputMeterChannelPeaks: UnsafeMutablePointer<(Float, Float)>? = nil,
         outputMeterChannelCount: UnsafeMutablePointer<Int>? = nil,
-        sampleRate: Double
+        sampleRate: Double,
+        renderAudioUnits: Bool = true
     ) -> (Float, Bool) {
         let inputBufferCount = inputBuffers.count
         let outputBufferCount = outputBuffers.count
@@ -1797,12 +1845,12 @@ final class ProcessTapController: ProcessTapControlling {
             }
 
             // Per-app AU effect chain (after EQ/AutoEQ, before device AU chain)
-            if let appAUChain, eqCanProcessStereoInterleaved {
+            if renderAudioUnits, let appAUChain, eqCanProcessStereoInterleaved {
                 appAUChain.processInterleaved(samples: outputSamples, frameCount: frameCount)
             }
 
             // Per-device AU effect chain (after per-app AU, before volume/loudness)
-            if let deviceAUChain, eqCanProcessStereoInterleaved {
+            if renderAudioUnits, let deviceAUChain, eqCanProcessStereoInterleaved {
                 deviceAUChain.processInterleaved(samples: outputSamples, frameCount: frameCount)
             }
 
@@ -1906,23 +1954,9 @@ final class ProcessTapController: ProcessTapControlling {
             return
         }
 
-        // Track peak level for VU meter
-        var maxPeak: Float = 0.0
-        var totalSamplesThisBuffer: Int = 0
-        for inputBuffer in inputBuffers {
-            guard let inputData = inputBuffer.mData else { continue }
-            let inputSamples = inputData.assumingMemoryBound(to: Float.self)
-            let channels = max(1, Int(inputBuffer.mNumberChannels))
-            let sampleCount = Int(inputBuffer.mDataByteSize) / MemoryLayout<Float>.size
-            if totalSamplesThisBuffer == 0 {
-                totalSamplesThisBuffer = sampleCount / channels
-            }
-            for i in stride(from: 0, to: sampleCount, by: channels) {
-                let absSample = abs(inputSamples[i])
-                if absSample > maxPeak { maxPeak = absSample }
-            }
-        }
-        let rawPeak = min(maxPeak, 1.0)
+        let inputState = Self.inputPeakAndFrameCount(inputBuffers)
+        let rawPeak = inputState.peak
+        let totalSamplesThisBuffer = inputState.frames
 
         if isPrimary {
             _peakLevel = rawPeak >= _peakLevel ? rawPeak : _peakLevel + levelSmoothingFactor * (rawPeak - _peakLevel)
@@ -1932,24 +1966,12 @@ final class ProcessTapController: ProcessTapControlling {
             _ = crossfadeState.updateProgress(samples: totalSamplesThisBuffer)
         }
 
-        // AU tail time: track silent input to allow reverb/delay tails to fade naturally
-        let tailSamples = _maxTailSamples
-        if isPrimary && tailSamples > 0 {
-            let silenceThreshold: Float = 0.0001
-            if rawPeak < silenceThreshold {
-                _silentSampleCount += UInt64(totalSamplesThisBuffer)
-                if _silentSampleCount > tailSamples {
-                    // Tail has expired — zero output
-                    for buf in outputBuffers {
-                        if let data = buf.mData { memset(data, 0, Int(buf.mDataByteSize)) }
-                    }
-                    return
-                }
-                // Still in tail period — continue processing with silent input
-            } else {
-                _silentSampleCount = 0
-            }
-        }
+        let tailActive = isPrimary && Self.advanceAUTail(
+            rawPeak: rawPeak, tailSamples: _maxTailSamples,
+            frameCount: totalSamplesThisBuffer, silentSamples: &_silentSampleCount
+        )
+        // Only skip AU work; retain the fork's gain/gate/meter processing during silence.
+        let renderAudioUnits = !isPrimary || rawPeak >= Self.outputGateSilenceThreshold || tailActive
 
         // Advance the gate before the _isMuted early-return: feeding synthetic silence
         // while muted lets _outputGateSilentSamples accumulate and re-arm the gate after
@@ -1958,7 +1980,7 @@ final class ProcessTapController: ProcessTapControlling {
         // a fresh activate(initial:) and so resets gate state.
         let outputGateMultiplier: Float
         if isPrimary {
-            let gateInputPeak: Float = _isMuted ? 0.0 : rawPeak
+            let gateInputPeak: Float = _isMuted ? 0.0 : (tailActive ? Self.outputGateSilenceThreshold * 2 : rawPeak)
             outputGateMultiplier = Self.advanceOutputGate(
                 phase: &_outputGateRawPhase,
                 progress: &_outputGateProgress,

@@ -1,5 +1,6 @@
 // FineTuneTests/AUPluginTests.swift
 import AudioToolbox
+import AppKit
 import Testing
 @testable import FineTune
 
@@ -332,6 +333,23 @@ struct AUEffectHostTests {
         // A 200Hz lowpass should massively attenuate a 10kHz signal
         #expect(energyAfter < energyBefore * 0.01,
                 "AULowPassFilter at 200Hz should attenuate 10kHz signal by >40dB, got ratio \(energyAfter / energyBefore)")
+    }
+
+    @Test("AU processes the entire buffer beyond its preallocated slice")
+    func oversizedRenderBuffer() throws {
+        let descriptor = AUPluginDescriptor(componentType: kAudioUnitType_Effect, componentSubType: 0x6C706173, componentManufacturer: 0x6170706C, name: "AULowPassFilter", manufacturer: "Apple", version: 1)
+        let host = AUEffectHost(descriptor: descriptor, entryID: UUID(), sampleRate: 44100, maxFrames: 512)
+        #expect(host.instantiate())
+        let unit = try #require(host.audioUnit)
+        #expect(AudioUnitSetParameter(unit, 0, kAudioUnitScope_Global, 0, 200, 0) == noErr)
+        let frames = 5000
+        var samples = (0..<(frames * 2)).map { index in
+            sinf(2 * .pi * 10000 * Float(index / 2) / 44100) * 0.5
+        }
+        let originalTailEnergy = samples[(4096 * 2)...].reduce(Float(0)) { $0 + $1 * $1 }
+        samples.withUnsafeMutableBufferPointer { host.renderInterleaved(samples: $0.baseAddress!, frameCount: frames) }
+        let tailEnergy = samples[(4096 * 2)...].reduce(Float(0)) { $0 + $1 * $1 }
+        #expect(tailEnergy < originalTailEnergy * 0.01)
     }
 
     @Test("renderInterleaved works with AUReverb2")
@@ -669,5 +687,64 @@ struct SettingsManagerAUTests {
             manufacturer: "Test",
             version: 1
         )
+    }
+}
+
+@Suite("AU hardening regressions")
+struct AUHardeningTests {
+    private func delay() -> AUPluginDescriptor {
+        AUPluginDescriptor(componentType: kAudioUnitType_Effect, componentSubType: 0x64656C79, componentManufacturer: 0x6170706C, name: "AUDelay", manufacturer: "Apple", version: 1)
+    }
+
+    @Test("A render error bypasses the failed host and preserves dry audio")
+    func failedRenderBypassesHost() throws {
+        final class Counter: @unchecked Sendable { nonisolated(unsafe) var calls = 0 }
+        let counter = Counter()
+        let host = AUEffectHost(descriptor: delay(), entryID: UUID(), sampleRate: 44100, renderBackend: { _, _, _, _, _, _ in
+            counter.calls += 1
+            return kAudioUnitErr_Uninitialized
+        })
+        #expect(host.instantiate())
+        var samples: [Float] = [0.2, -0.2, 0.3, -0.3]
+        for _ in 0..<2 {
+            samples.withUnsafeMutableBufferPointer { host.renderInterleaved(samples: $0.baseAddress!, frameCount: 2) }
+        }
+        #expect(host.renderFailed)
+        #expect(counter.calls == 1)
+        #expect(samples == [0.2, -0.2, 0.3, -0.3])
+    }
+
+    @Test("A corrupt saved preset is reported instead of loading an unintended default")
+    func corruptPresetFailsChainEntry() {
+        var entry = AUEffectChainEntry(plugin: delay())
+        entry.presetData = Data([1, 2, 3])
+        let chain = AUEffectChain(entries: [entry], sampleRate: 44100)
+        #expect(chain.failedEntryIDs == [entry.id])
+        #expect(chain.hosts.isEmpty)
+    }
+}
+
+@Suite("AU editor lifecycle")
+@MainActor
+struct AUEditorLifecycleTests {
+    @Test("Vendor editor dimensions survive an empty fitting size")
+    func vendorEditorSize() {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 820, height: 620))
+        #expect(AUPluginEditorSizing.preferredContentSize(for: view) == NSSize(width: 820, height: 620))
+    }
+
+    @Test("Closing an editor saves exactly once and releases its registered window")
+    func closeSavesOnce() throws {
+        let descriptor = AUPluginDescriptor(componentType: kAudioUnitType_Effect, componentSubType: 0x64656C79, componentManufacturer: 0x6170706C, name: "AUDelay", manufacturer: "Apple", version: 1)
+        let host = AUEffectHost(descriptor: descriptor, entryID: UUID(), sampleRate: 44100)
+        #expect(host.instantiate())
+        let unit = try #require(host.audioUnit)
+        let manager = AUPluginWindowManager()
+        var saves = 0
+        manager.showWindow(for: host.entryID, host: host, audioUnit: unit, pluginName: descriptor.name, forceGeneric: true) { saves += 1 }
+        manager.closeWindow(for: host.entryID)
+        #expect(saves == 1)
+        manager.closeWindow(for: host.entryID)
+        #expect(saves == 1)
     }
 }

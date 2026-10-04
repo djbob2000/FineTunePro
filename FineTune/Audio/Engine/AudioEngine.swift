@@ -704,6 +704,7 @@ final class AudioEngine {
     /// Resets all persisted settings and synchronizes in-memory engine state.
     /// Active taps are kept alive but reverted to defaults (unity volume, unmuted, flat EQ).
     func handleSettingsReset() {
+        AUPluginWindowManager.shared.closeAllWindows()
         // 1. Clear persisted state
         settingsManager.resetAllSettings()
 
@@ -925,19 +926,19 @@ final class AudioEngine {
     // MARK: - Per-App AU Effect Chains
 
     func addAUEffect(for app: AudioApp, plugin: AUPluginDescriptor) {
-        var state = appAU[app.persistenceIdentifier] ?? AUChainState()
+        var state = currentAppAUState(for: app)
         state.entries.append(AUEffectChainEntry(plugin: plugin))
         commitAppAU(state, for: app)
     }
 
     func removeAUEffect(for app: AudioApp, entryID: UUID) {
-        var state = appAU[app.persistenceIdentifier] ?? AUChainState()
+        var state = currentAppAUState(for: app)
         state.entries.removeAll { $0.id == entryID }
         commitAppAU(state, for: app)
     }
 
     func toggleAUEffect(for app: AudioApp, entryID: UUID, enabled: Bool) {
-        var state = appAU[app.persistenceIdentifier] ?? AUChainState()
+        var state = currentAppAUState(for: app)
         if let idx = state.entries.firstIndex(where: { $0.id == entryID }) {
             state.entries[idx].isEnabled = enabled
         }
@@ -945,7 +946,7 @@ final class AudioEngine {
     }
 
     func reorderAUEffects(for app: AudioApp, entries: [AUEffectChainEntry]) {
-        var state = appAU[app.persistenceIdentifier] ?? AUChainState()
+        var state = currentAppAUState(for: app)
         state.entries = entries
         commitAppAU(state, for: app)
     }
@@ -955,7 +956,7 @@ final class AudioEngine {
     }
 
     func updateAUEffectPreset(for app: AudioApp, entryID: UUID, presetData: Data?) {
-        var state = appAU[app.persistenceIdentifier] ?? AUChainState()
+        var state = currentAppAUState(for: app)
         if let idx = state.entries.firstIndex(where: { $0.id == entryID }) {
             state.entries[idx].presetData = presetData
             state.entries[idx].selectedFactoryPresetIndex = nil
@@ -964,7 +965,7 @@ final class AudioEngine {
     }
 
     func selectAUFactoryPreset(for app: AudioApp, entryID: UUID, presetIndex: Int) {
-        var state = appAU[app.persistenceIdentifier] ?? AUChainState()
+        var state = currentAppAUState(for: app)
         if let idx = state.entries.firstIndex(where: { $0.id == entryID }) {
             state.entries[idx].selectedFactoryPresetIndex = presetIndex >= 0 ? presetIndex : nil
             state.entries[idx].presetData = nil
@@ -987,7 +988,7 @@ final class AudioEngine {
               let host = tap.getAUHost(for: entryID),
               let au = host.audioUnit else { return }
         AUPluginWindowManager.shared.closeWindow(for: entryID)
-        AUPluginWindowManager.shared.showWindow(for: entryID, audioUnit: au, pluginName: host.descriptor.name, forceGeneric: forceGeneric) { [weak self] in
+        AUPluginWindowManager.shared.showWindow(for: entryID, host: host, audioUnit: au, pluginName: host.descriptor.name, forceGeneric: forceGeneric) { [weak self] in
             self?.saveAUHostState(host, for: app, entryID: entryID)
         }
     }
@@ -1004,11 +1005,15 @@ final class AudioEngine {
     }
 
     func getAUFailedEntryIDs(for app: AudioApp) -> Set<UUID> {
-        appAU[app.persistenceIdentifier]?.failedEntryIDs ?? []
+        (taps[app.id] as? ProcessTapController)?.auEffectChainFailedIDs ?? appAU[app.persistenceIdentifier]?.failedEntryIDs ?? []
     }
 
     func getDeviceAUFailedEntryIDs(deviceUID: String) -> Set<UUID> {
-        deviceAU[deviceUID]?.failedEntryIDs ?? []
+        var result = deviceAU[deviceUID]?.failedEntryIDs ?? []
+        for tap in taps.values where tap.currentDeviceUIDs.contains(deviceUID) {
+            if let controller = tap as? ProcessTapController { result.formUnion(controller.deviceAUEffectChainFailedIDs) }
+        }
+        return result
     }
 
     func getAUFactoryPresets(for app: AudioApp, entryID: UUID) -> [(index: Int, name: String)] {
@@ -1017,7 +1022,18 @@ final class AudioEngine {
         return host.factoryPresets
     }
 
+    private func currentAppAUState(for app: AudioApp) -> AUChainState {
+        AUPluginWindowManager.shared.saveAllOpenWindows()
+        return appAU[app.persistenceIdentifier] ?? AUChainState()
+    }
+
+    private func currentDeviceAUState(deviceUID: String) -> AUChainState {
+        AUPluginWindowManager.shared.saveAllOpenWindows()
+        return deviceAU[deviceUID] ?? AUChainState()
+    }
+
     private func commitAppAU(_ state: AUChainState, for app: AudioApp) {
+        AUPluginWindowManager.shared.invalidate(entryIDs: Set(getAUEffectChain(for: app).map(\.id)), saveBeforeClose: false)
         let id = app.persistenceIdentifier
         appAU[id] = state.entries.isEmpty ? nil : state
         settingsManager.setAUEffectChain(state.entries, for: id)
@@ -1039,19 +1055,19 @@ final class AudioEngine {
     // MARK: - Per-Device AU Effect Chains
 
     func addDeviceAUEffect(deviceUID: String, plugin: AUPluginDescriptor) {
-        var state = deviceAU[deviceUID] ?? AUChainState()
+        var state = currentDeviceAUState(deviceUID: deviceUID)
         state.entries.append(AUEffectChainEntry(plugin: plugin))
         commitDeviceAU(state, for: deviceUID)
     }
 
     func removeDeviceAUEffect(deviceUID: String, entryID: UUID) {
-        var state = deviceAU[deviceUID] ?? AUChainState()
+        var state = currentDeviceAUState(deviceUID: deviceUID)
         state.entries.removeAll { $0.id == entryID }
         commitDeviceAU(state, for: deviceUID)
     }
 
     func toggleDeviceAUEffect(deviceUID: String, entryID: UUID, enabled: Bool) {
-        var state = deviceAU[deviceUID] ?? AUChainState()
+        var state = currentDeviceAUState(deviceUID: deviceUID)
         if let idx = state.entries.firstIndex(where: { $0.id == entryID }) {
             state.entries[idx].isEnabled = enabled
         }
@@ -1059,7 +1075,7 @@ final class AudioEngine {
     }
 
     func reorderDeviceAUEffects(deviceUID: String, entries: [AUEffectChainEntry]) {
-        var state = deviceAU[deviceUID] ?? AUChainState()
+        var state = currentDeviceAUState(deviceUID: deviceUID)
         state.entries = entries
         commitDeviceAU(state, for: deviceUID)
     }
@@ -1069,7 +1085,7 @@ final class AudioEngine {
     }
 
     func selectDeviceAUFactoryPreset(deviceUID: String, entryID: UUID, presetIndex: Int) {
-        var state = deviceAU[deviceUID] ?? AUChainState()
+        var state = currentDeviceAUState(deviceUID: deviceUID)
         if let idx = state.entries.firstIndex(where: { $0.id == entryID }) {
             state.entries[idx].selectedFactoryPresetIndex = presetIndex >= 0 ? presetIndex : nil
             state.entries[idx].presetData = nil
@@ -1084,7 +1100,7 @@ final class AudioEngine {
                let au = host.audioUnit {
                 let uid = deviceUID
                 AUPluginWindowManager.shared.closeWindow(for: entryID)
-                AUPluginWindowManager.shared.showWindow(for: entryID, audioUnit: au, pluginName: host.descriptor.name, forceGeneric: forceGeneric) { [weak self] in
+                AUPluginWindowManager.shared.showWindow(for: entryID, host: host, audioUnit: au, pluginName: host.descriptor.name, forceGeneric: forceGeneric) { [weak self] in
                     self?.saveDeviceAUHostState(host, deviceUID: uid, entryID: entryID)
                 }
                 return
@@ -1125,6 +1141,7 @@ final class AudioEngine {
     }
 
     private func commitDeviceAU(_ state: AUChainState, for deviceUID: String) {
+        AUPluginWindowManager.shared.invalidate(entryIDs: Set(getDeviceAUEffectChain(deviceUID: deviceUID).map(\.id)), saveBeforeClose: false)
         deviceAU[deviceUID] = state.entries.isEmpty ? nil : state
         settingsManager.setDeviceAUEffectChain(state.entries, for: deviceUID)
         applyDeviceAUChainToTaps(deviceUID: deviceUID, chain: state.entries)

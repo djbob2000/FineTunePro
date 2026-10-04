@@ -1485,3 +1485,25 @@ struct LoudnessIntegrationTests {
                 "Adding loudness equalizer should change output beyond compensator alone")
     }
 }
+
+@Suite("AU input silence regressions")
+struct AUInputSilenceTests {
+    @Test("Right-only interleaved input is audible to silence detection")
+    func rightOnlyPeak() {
+        let input = TestABL(buffers: [(channels: 2, frames: 32)])
+        for i in 0..<32 { input.data(at: 0)[i * 2 + 1] = 0.7 }
+        let result = ProcessTapController.inputPeakAndFrameCount(input.bufferList)
+        #expect(result.peak == 0.7)
+        #expect(result.frames == 32)
+    }
+
+    @Test("AU tails run until their sample budget expires, then audible input resets it")
+    func tailBudget() {
+        var silent: UInt64 = 0
+        #expect(ProcessTapController.advanceAUTail(rawPeak: 0, tailSamples: 8, frameCount: 4, silentSamples: &silent))
+        #expect(ProcessTapController.advanceAUTail(rawPeak: 0, tailSamples: 8, frameCount: 4, silentSamples: &silent))
+        #expect(!ProcessTapController.advanceAUTail(rawPeak: 0, tailSamples: 8, frameCount: 4, silentSamples: &silent))
+        #expect(!ProcessTapController.advanceAUTail(rawPeak: 0.4, tailSamples: 8, frameCount: 4, silentSamples: &silent))
+        #expect(silent == 0)
+    }
+}

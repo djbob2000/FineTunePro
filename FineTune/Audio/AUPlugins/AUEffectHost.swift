@@ -16,6 +16,7 @@ import os
 ///
 /// Follows the same deferred-destroy pattern as `BiquadProcessor`.
 final class AUEffectHost: @unchecked Sendable {
+    typealias RenderBackend = @Sendable (AudioUnit, UnsafeMutablePointer<AudioUnitRenderActionFlags>, UnsafePointer<AudioTimeStamp>, UInt32, UInt32, UnsafeMutablePointer<AudioBufferList>) -> OSStatus
 
     let descriptor: AUPluginDescriptor
     let entryID: UUID
@@ -23,6 +24,8 @@ final class AUEffectHost: @unchecked Sendable {
     private nonisolated(unsafe) var _audioUnit: AudioUnit?
     private nonisolated(unsafe) var _isEnabled: Bool
     private nonisolated(unsafe) var _sampleTime: Float64 = 0
+    private nonisolated(unsafe) var _renderFailed = false
+    private var isCrashTracked = false
 
     // Pre-allocated deinterleaved buffers for AU rendering (RT-safe).
     // Accessed by the C render callback — must not be private.
@@ -41,27 +44,33 @@ final class AUEffectHost: @unchecked Sendable {
     private let logger: Logger
     private let sampleRate: Double
     private let maxFrames: UInt32
+    private let renderBackend: RenderBackend
 
     var isEnabled: Bool { _isEnabled }
     var audioUnit: AudioUnit? { _audioUnit }
+    var renderFailed: Bool { _renderFailed }
 
     init(
         descriptor: AUPluginDescriptor,
         entryID: UUID,
         sampleRate: Double,
         maxFrames: UInt32 = 4096,
-        enabled: Bool = true
+        enabled: Bool = true,
+        renderBackend: @escaping RenderBackend = { au, flags, timestamp, bus, frames, buffers in
+            AudioUnitRender(au, flags, timestamp, bus, frames, buffers)
+        }
     ) {
         self.descriptor = descriptor
         self.entryID = entryID
         self.sampleRate = sampleRate
-        self.maxFrames = maxFrames
+        self.maxFrames = max(1, maxFrames)
         self._isEnabled = enabled
-        self._bufferCapacity = Int(maxFrames)
-        self._bufferL = .allocate(capacity: Int(maxFrames))
-        self._bufferR = .allocate(capacity: Int(maxFrames))
-        self._bufferL.initialize(repeating: 0, count: Int(maxFrames))
-        self._bufferR.initialize(repeating: 0, count: Int(maxFrames))
+        self.renderBackend = renderBackend
+        self._bufferCapacity = Int(max(1, maxFrames))
+        self._bufferL = .allocate(capacity: Int(max(1, maxFrames)))
+        self._bufferR = .allocate(capacity: Int(max(1, maxFrames)))
+        self._bufferL.initialize(repeating: 0, count: Int(max(1, maxFrames)))
+        self._bufferR.initialize(repeating: 0, count: Int(max(1, maxFrames)))
 
         // Allocate AudioBufferList with space for 2 AudioBuffers.
         // AudioBufferList has 1 inline AudioBuffer; we need room for 1 extra.
@@ -74,6 +83,7 @@ final class AUEffectHost: @unchecked Sendable {
     }
 
     deinit {
+        if isCrashTracked { CrashGuard.untrackPlugin(descriptor.id) }
         if let au = _audioUnit {
             AudioUnitUninitialize(au)
             AudioComponentInstanceDispose(au)
@@ -86,6 +96,9 @@ final class AUEffectHost: @unchecked Sendable {
     // MARK: - Instantiation (main thread)
 
     func instantiate() -> Bool {
+        if _audioUnit != nil { return true }
+        CrashGuard.trackPlugin(descriptor.id)
+        isCrashTracked = true
         var desc = descriptor.audioComponentDescription
         guard let component = AudioComponentFindNext(nil, &desc) else {
             logger.error("AudioComponent not found for \(self.descriptor.name)")
@@ -117,25 +130,22 @@ final class AUEffectHost: @unchecked Sendable {
             kAudioUnitScope_Input, 0,
             &streamFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         )
-        if err != noErr {
-            logger.warning("Failed to set input stream format: \(err)")
-        }
+        guard err == noErr else { AudioComponentInstanceDispose(au); return false }
 
         err = AudioUnitSetProperty(
             au, kAudioUnitProperty_StreamFormat,
             kAudioUnitScope_Output, 0,
             &streamFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         )
-        if err != noErr {
-            logger.warning("Failed to set output stream format: \(err)")
-        }
+        guard err == noErr else { AudioComponentInstanceDispose(au); return false }
 
         var frames = maxFrames
-        AudioUnitSetProperty(
+        err = AudioUnitSetProperty(
             au, kAudioUnitProperty_MaximumFramesPerSlice,
             kAudioUnitScope_Global, 0,
             &frames, UInt32(MemoryLayout<UInt32>.size)
         )
+        guard err == noErr else { AudioComponentInstanceDispose(au); return false }
 
         var renderCallback = AURenderCallbackStruct(
             inputProc: auRenderCallback,
@@ -179,35 +189,39 @@ final class AUEffectHost: @unchecked Sendable {
     /// All buffers are pre-allocated — no allocations on the RT thread.
     @inline(__always)
     func renderInterleaved(samples: UnsafeMutablePointer<Float>, frameCount: Int) {
-        guard _isEnabled, let au = _audioUnit else { return }
-        let count = min(frameCount, _bufferCapacity)
+        guard _isEnabled, !_renderFailed, let au = _audioUnit else { return }
+        var offset = 0
+        while offset < frameCount {
+            let count = min(frameCount - offset, _bufferCapacity)
 
-        // Deinterleave: LRLRLR... → separate L and R buffers
-        for i in 0..<count {
-            _bufferL[i] = samples[i * 2]
-            _bufferR[i] = samples[i * 2 + 1]
-        }
+            // Deinterleave: LRLRLR... → separate L and R buffers
+            for i in 0..<count {
+                _bufferL[i] = samples[(offset + i) * 2]
+                _bufferR[i] = samples[(offset + i) * 2 + 1]
+            }
 
-        // Configure pre-allocated 2-buffer AudioBufferList (no stack corruption)
-        let byteCount = UInt32(count * MemoryLayout<Float>.size)
-        let ablBufs = UnsafeMutableAudioBufferListPointer(_ablPtr)
-        _ablPtr.pointee.mNumberBuffers = 2
-        ablBufs[0] = AudioBuffer(mNumberChannels: 1, mDataByteSize: byteCount, mData: _bufferL)
-        ablBufs[1] = AudioBuffer(mNumberChannels: 1, mDataByteSize: byteCount, mData: _bufferR)
+            // Configure pre-allocated 2-buffer AudioBufferList (no stack corruption)
+            let byteCount = UInt32(count * MemoryLayout<Float>.size)
+            let ablBufs = UnsafeMutableAudioBufferListPointer(_ablPtr)
+            _ablPtr.pointee.mNumberBuffers = 2
+            ablBufs[0] = AudioBuffer(mNumberChannels: 1, mDataByteSize: byteCount, mData: _bufferL)
+            ablBufs[1] = AudioBuffer(mNumberChannels: 1, mDataByteSize: byteCount, mData: _bufferR)
 
-        var flags = AudioUnitRenderActionFlags(rawValue: 0)
-        var timestamp = AudioTimeStamp()
-        timestamp.mFlags = .sampleTimeValid
-        timestamp.mSampleTime = _sampleTime
-        _sampleTime += Float64(count)
+            var flags = AudioUnitRenderActionFlags(rawValue: 0)
+            var timestamp = AudioTimeStamp()
+            timestamp.mFlags = .sampleTimeValid
+            timestamp.mSampleTime = _sampleTime
+            _sampleTime += Float64(count)
 
-        let err = AudioUnitRender(au, &flags, &timestamp, 0, UInt32(count), _ablPtr)
-        if err != noErr { return }
+            let err = renderBackend(au, &flags, &timestamp, 0, UInt32(count), _ablPtr)
+            if err != noErr { _renderFailed = true; return }
 
-        // Interleave: separate L and R → LRLRLR...
-        for i in 0..<count {
-            samples[i * 2] = _bufferL[i]
-            samples[i * 2 + 1] = _bufferR[i]
+            // Interleave: separate L and R → LRLRLR...
+            for i in 0..<count {
+                samples[(offset + i) * 2] = _bufferL[i]
+                samples[(offset + i) * 2 + 1] = _bufferR[i]
+            }
+            offset += count
         }
     }
 
