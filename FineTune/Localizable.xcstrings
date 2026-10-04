@@ -87857,6 +87857,1356 @@
           }
         }
       }
+    },
+    "\"%@\" disconnected. %lld apps switched to %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@”已断开连接。%2$lld 个 App 已切换到 %3$@"
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" غير متصل. %lld تم تحويل التطبيق (التطبيقات) إلى %@"
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" সংযোগ বিচ্ছিন্ন হয়েছে৷ %lld অ্যাপ(গুলি) %@ এ স্যুইচ করা হয়েছে"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" desconnectat. Les aplicacions %lld s'han canviat a %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”已斷開連線。 %lld應用程式切換至%@"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" isključen. %lld aplikacija(e) prebačena na %@"
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" odpojeno. Aplikace %lld přepnuty na %@"
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" afbrudt. %lld app(er) skiftet til %@"
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" verbinding verbroken. %lld app(s) overgeschakeld naar %@"
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" disconnected. %lld app(s) switched to %@"
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" disconnected. %lld app(s) switched to %@"
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" disconnected. %lld app(s) switched to %@"
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" disconnected. %lld app(s) switched to %@"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" yhteys katkennut. %lld sovellukset vaihdettu %@"
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" déconnecté. %lld application(s) basculée(s) vers %@"
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" déconnecté. %lld application(s) basculée(s) vers %@"
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ getrennt. %lld App(s) auf %@ umgestellt"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το \"%@\" αποσυνδέθηκε. Οι εφαρμογές %lld άλλαξαν σε %@"
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ડિસ્કનેક્ટ થયું. %lld એપ્લિકેશન(ઓ) %@ પર સ્વિચ કરી"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" מנותק. אפליקציות %lld הועברו ל-%@"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" डिस्कनेक्ट हो गया। %lld ऐप %@ पर स्विच किया गया"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" kapcsolat megszakadt. %lld alkalmazás(ok) átváltva erre: %@"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" terputus. %lld aplikasi dialihkan ke %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" disconnesso. %lld app passate a %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" が切断されました。 %lld アプリが %@ に切り替えられました"
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ. %lld ಅಪ್ಲಿಕೇಶನ್(ಗಳು) %@ ಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" 연결이 끊어졌습니다. %lld 앱이 %@으로 전환되었습니다."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" terputus sambungan. %lld apl bertukar kepada %@"
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" വിച്ഛേദിച്ചു. %lld ആപ്പ്(കൾ) %@ എന്നതിലേക്ക് മാറി"
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" डिस्कनेक्ट केले. %lld ॲप(चे) %@ वर स्विच केले"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" frakoblet. %lld app(er) byttet til %@"
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ବିଚ୍ଛିନ୍ନ ହୋଇଛି। %lld ଆପ୍ %@ କୁ ବଦଳାଗଲା"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" rozłączony. Aplikacje %lld zostały przełączone na %@"
+          }
+        },
+        "pt-BR": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" desconectado. %lld app mudou para %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" desconectado. %lld apps mudou para %@"
+                }
+              }
+            }
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" desconectado. Aplicativo(s) %lld alterados para %@"
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ਡਿਸਕਨੈਕਟ ਕੀਤਾ ਗਿਆ। %lld ਐਪ(ਆਂ) ਨੂੰ %@ 'ਤੇ ਬਦਲਿਆ ਗਿਆ"
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@” deconectat. Aplicația(ele) %lld au fost comutate la %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" отключен. Приложение %lld переключено на %@"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" odpojený. Aplikácia %lld prepnutá na %@"
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" prekinjen. Aplikacija(-e) %lld preklopljena na %@"
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" desconectado. %lld aplicaciones cambiadas a %@"
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" desconectado. %lld aplicaciones cambiadas a %@"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" frånkopplad. %lld app(ar) bytte till %@"
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" துண்டிக்கப்பட்டது. %lld பயன்பாடு(கள்) %@க்கு மாறியது"
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" డిస్‌కనెక్ట్ చేయబడింది. %lld యాప్(లు) %@కి మారాయి"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ถูกตัดการเชื่อมต่อ %lld แอปเปลี่ยนเป็น %@"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" bağlantısı kesildi. %lld uygulama(lar)ı %@ olarak değiştirildi"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" відключено. %lld додаток(и) переведено на %@"
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" منقطع ہو گیا۔ %lld ایپ (ایپ) کو %@ پر تبدیل کر دیا گیا"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" đã bị ngắt kết nối. %lld ứng dụng đã chuyển sang %@"
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" disconnected. %lld app switched to %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" disconnected. %lld apps switched to %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "\"%@\" is back. %lld apps switched back.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@”已重新连接。%2$lld 个 App 已切换回来。"
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "عاد \"%@\". تم تبديل التطبيق (التطبيقات) %lld مرة أخرى."
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ফিরে এসেছে। %lld অ্যাপ(গুলি) ফিরে এসেছে৷"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ha tornat. Les aplicacions %lld s'han tornat a canviar."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”回來了。 %lld 應用程式切換回來。"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" se vratio. %lld aplikacija(e) vraćena(e)."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" je zpět. Aplikace %lld přepnuty zpět."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" er tilbage. %lld app(er) skiftet tilbage."
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" is terug. %lld app(s) teruggeschakeld."
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" is back. %lld app(s) switched back."
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" is back. %lld app(s) switched back."
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" is back. %lld app(s) switched back."
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" is back. %lld app(s) switched back."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" on palannut. %lld sovellus(t) vaihdettu takaisin."
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" est de retour. %lld application(s) rétablie(s)."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" est de retour. %lld application(s) rétablie(s)."
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ ist zurück. %lld App(s) zurückgeschaltet."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το \"%@\" επέστρεψε. Οι εφαρμογές %lld επέστρεψαν."
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" પાછો આવ્યો છે. %lld એપ્લિકેશન(ઓ) પાછી સ્વિચ કરી."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" חוזר. אפליקציות %lld הוחזרו."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" वापस आ गया है। %lld ऐप वापस स्विच हो गया।"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" visszatért. %lld alkalmazás(ok) visszakapcsolva."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" telah kembali. %lld aplikasi dialihkan kembali."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" è tornato. %lld app ripristinate."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」が帰ってきました。 %lld アプリが元に戻りました。"
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ಹಿಂತಿರುಗಿದೆ. %lld ಅಪ್ಲಿಕೇಶನ್(ಗಳು) ಹಿಂದಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\"이 돌아왔습니다. %lld 앱이 다시 전환되었습니다."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" telah kembali. %lld apl ditukar kembali."
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" തിരിച്ചെത്തി. %lld ആപ്പ്(കൾ) തിരികെ മാറി."
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" परत आला आहे. %lld ॲप(चे) परत स्विच केले."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" er tilbake. %lld app(er) byttet tilbake."
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ଫେରି ଆସିଛି | %lld ଆପ୍ (ଗୁଡିକ) ପଛକୁ ସୁଇଚ୍ ହେଲା |"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@” powrócił. %lld aplikacje zostały ponownie włączone."
+          }
+        },
+        "pt-BR": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" está de volta. %lld app mudou de volta."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" está de volta. %lld apps mudaram de volta."
+                }
+              }
+            }
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" está de volta. Os aplicativos %lld voltaram."
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ਵਾਪਸ ਆ ਗਿਆ ਹੈ। %lld ਐਪ(ਆਂ) ਨੂੰ ਵਾਪਸ ਬਦਲਿਆ ਗਿਆ।"
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@” a revenit. Aplicația(ele) %lld au fost comutate înapoi."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" вернулся. %lld приложения переключены обратно."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" je späť. Aplikácia %lld bola prepnutá späť."
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" je nazaj. %lld aplikacije so preklopljene nazaj."
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ha vuelto. %lld las aplicaciones volvieron a cambiar."
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" ha vuelto. %lld las aplicaciones volvieron a cambiar."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" är tillbaka. %lld app(ar) bytte tillbaka."
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" மீண்டும் வந்துவிட்டது. %lld பயன்பாடு(கள்) மீண்டும் மாறியது."
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" తిరిగి వచ్చింది. %lld యాప్(లు) తిరిగి మార్చబడ్డాయి."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" กลับมาแล้ว %lld เปลี่ยนแอปกลับแล้ว"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" geri döndü. %lld uygulama(lar) geri alındı."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" повернувся. Програми %lld повернуто назад."
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" واپس آ گیا ہے۔ %lld ایپ (ایپ) کو واپس بدل دیا گیا۔"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" đã trở lại. (Các) ứng dụng %lld đã chuyển trở lại."
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" is back. %lld app switched back."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"%@\" is back. %lld apps switched back."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld apps switched to \"%@\"": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld 个 App 已切换到“%2$@”"
+          }
+        },
+        "ar-SA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld تم تحويل التطبيق (التطبيقات) إلى \"%@\""
+          }
+        },
+        "bn-BD": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld অ্যাপ(গুলি) \"%@\" এ স্যুইচ করা হয়েছে"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les aplicacions %lld s'han canviat a \"%@\""
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 應用程式切換到“%@”"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplikacije prebačene na \"%@\""
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplikace %lld přepnuty na \"%@\""
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(er) skiftet til \"%@\""
+          }
+        },
+        "nl-NL": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(s) overgeschakeld naar \"%@\""
+          }
+        },
+        "en-AU": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(s) switched to \"%@\""
+          }
+        },
+        "en-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(s) switched to \"%@\""
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(s) switched to \"%@\""
+          }
+        },
+        "en-US": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(s) switched to \"%@\""
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sovellus(t) vaihdettiin \"%@\""
+          }
+        },
+        "fr-FR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld application(s) passée(s) à \"%@\""
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld application(s) passée(s) à \"%@\""
+          }
+        },
+        "de-DE": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld App(s) auf „%@“ umgestellt"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld οι εφαρμογές άλλαξαν σε \"%@\""
+          }
+        },
+        "gu-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld એપ્લિકેશન(ઓ) \"%@\" પર સ્વિચ કરી"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld אפליקציות הועברו ל-\"%@\""
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ऐप को \"%@\" पर स्विच किया गया"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld alkalmazás(ok) „%@”-ra váltottak"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplikasi dialihkan ke \"%@\""
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app cambiate in \"%@\""
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld アプリが「%@」に切り替わりました"
+          }
+        },
+        "kn-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ಅಪ್ಲಿಕೇಶನ್(ಗಳು) \"%@\" ಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 앱이 \"%@\"으로 전환되었습니다."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplikasi(s) bertukar kepada \"%@\""
+          }
+        },
+        "ml-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ആപ്പ്(കൾ) \"%@\" എന്നതിലേക്ക് മാറി"
+          }
+        },
+        "mr-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ॲप(ने) \"%@\" वर स्विच केले"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(er) byttet til \"%@\""
+          }
+        },
+        "or-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ଆପ୍ (ଗୁଡିକ) \"%@\" କୁ ବଦଳିଗଲା |"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplikacje przełączone na „%@”"
+          }
+        },
+        "pt-BR": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "A aplicação %lld mudou para \"%@\""
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld aplicativos mudaram para \"%@\""
+                }
+              }
+            }
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplicativo(s) alterado(s) para \"%@\""
+          }
+        },
+        "pa-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ਐਪ(ਆਂ) ਨੂੰ \"%@\" 'ਤੇ ਬਦਲਿਆ ਗਿਆ"
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplicația(ele) au fost comutate la „%@”"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld приложения переключены на \"%@\""
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplikácia %lld bola prepnutá na \"%@\""
+          }
+        },
+        "sl-SI": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aplikacija(-e) preklopljena na \"%@\""
+          }
+        },
+        "es-MX": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld las aplicaciones cambiaron a \"%@\""
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld las aplicaciones cambiaron a \"%@\""
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld app(ar) bytte till \"%@\""
+          }
+        },
+        "ta-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld பயன்பாடு(கள்) \"%@\"க்கு மாறியது"
+          }
+        },
+        "te-IN": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld యాప్(లు) \"%@\"కి మారాయి"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld แอปเปลี่ยนเป็น \"%@\""
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld uygulama(lar) \"%@\" olarak değiştirildi"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld додаток(и) переведено на \"%@\""
+          }
+        },
+        "ur-PK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ایپ (ایپ) کو \"%@\" پر تبدیل کر دیا گیا"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld (các) ứng dụng đã chuyển sang \"%@\""
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld app switched to \"%@\""
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld apps switched to \"%@\""
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Apps": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apps"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        }
+      }
+    },
+    "Change icon": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alterar ícone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改图标"
+          }
+        }
+      }
+    },
+    "Computers & Displays": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computadores e monitores"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电脑与显示器"
+          }
+        }
+      }
+    },
+    "Connection timed out": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O tempo da conexão se esgotou"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接超时"
+          }
+        }
+      }
+    },
+    "Connectors & Other": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectores e outros"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接口与其他"
+          }
+        }
+      }
+    },
+    "Couldn't connect": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível conectar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接"
+          }
+        }
+      }
+    },
+    "Device": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dispositivo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备"
+          }
+        }
+      }
+    },
+    "Failed to fetch catalog": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha ao buscar catálogo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法获取目录"
+          }
+        }
+      }
+    },
+    "Headphones & Earbuds": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fones de ouvido e intra-auriculares"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "耳机与入耳式耳机"
+          }
+        }
+      }
+    },
+    "In exclusive use by %@ (PID %@)": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em uso exclusivo por %@ (PID %@)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正由 %1$@ 独占使用（PID %2$@）"
+          }
+        }
+      }
+    },
+    "In exclusive use by PID %@": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em uso exclusivo pelo PID %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正由 PID %@ 独占使用"
+          }
+        }
+      }
+    },
+    "Invalid catalog data": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dados de catálogo inválidos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目录数据无效"
+          }
+        }
+      }
+    },
+    "Lower volume for the app playing audio": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volume mais baixo para o aplicativo reproduzir áudio"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "降低当前发声 App 的音量"
+          }
+        }
+      }
+    },
+    "Microphones": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microfones"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风"
+          }
+        }
+      }
+    },
+    "Network error: %@": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erro de rede: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网络错误：%@"
+          }
+        }
+      }
+    },
+    "No matching icons": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum ícone correspondente"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有匹配的图标"
+          }
+        }
+      }
+    },
+    "Restore Default": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restaurar padrão"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复默认"
+          }
+        }
+      }
+    },
+    "Search icons": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pesquisar ícones"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索图标"
+          }
+        }
+      }
+    },
+    "Speakers": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alto-falantes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扬声器"
+          }
+        }
+      }
+    },
+    "Suggested": {
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sugerido"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建议"
+          }
+        }
+      }
+    },
+    "Play this app in mono": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以单声道播放此 App"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproduzir este app em mono"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Воспроизводить это приложение в моно"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відтворювати цю програму в моно"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
