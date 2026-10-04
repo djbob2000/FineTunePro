@@ -90,6 +90,14 @@ final class AudioEngine {
     private var isStopped = false
     @ObservationIgnored private var workspaceObservers: [NSObjectProtocol] = []
     private var wakeRecoveryTask: Task<Void, Never>?
+    private var outputBeforeSleepUID: String?
+    private var wakeOutputProtectionUntil: Date?
+    private var wakeOutputRestoreTask: Task<Void, Never>?
+    private let wakeOutputSettlingInterval: TimeInterval = 5
+
+    private var isProtectingWakeOutput: Bool {
+        outputBeforeSleepUID != nil && wakeOutputProtectionUntil.map { recoveryClock() < $0 } == true
+    }
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "AudioEngine")
 
@@ -338,7 +346,12 @@ final class AudioEngine {
         }
 
         outputEchoTracker.onTimeout = { [weak self] _ in
-            self?.restoreConfirmedDefault()
+            guard let self else { return }
+            if self.wakeOutputProtectionUntil.map({ self.recoveryClock() >= $0 }) == true {
+                self.clearWakeOutputProtection()
+                return
+            }
+            self.restoreConfirmedDefault()
         }
         inputEchoTracker.onTimeout = { [weak self] _ in
             guard let self, self.settingsManager.appSettings.lockInputDevice else { return }
@@ -695,6 +708,7 @@ final class AudioEngine {
 
     func stop() {
         isStopped = true
+        clearWakeOutputProtection()
         audioLifecycleGeneration &+= 1
         wakeRecoveryTask?.cancel()
         wakeRecoveryTask = nil
@@ -1710,10 +1724,15 @@ final class AudioEngine {
     /// UI code should call this instead of `deviceVolumeMonitor.setDefaultDevice` directly.
     @discardableResult
     func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        clearExpiredWakeOutputProtection()
         guard deviceVolumeMonitor.setDefaultDevice(deviceID) else { return false }
         if let uid = deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid {
             outputEchoTracker.increment(uid)
             lastConfirmedDefaultUID = uid
+            if isSleeping || isProtectingWakeOutput {
+                // An explicit picker choice supersedes the pre-sleep preference.
+                outputBeforeSleepUID = uid
+            }
             routeFollowsDefaultApps(to: uid)
         }
         return true
@@ -2118,6 +2137,7 @@ final class AudioEngine {
     /// Restores the default to `lastConfirmedDefaultUID` (what the user/FineTune intended).
     /// Falls back to highest-priority device if the confirmed device is gone.
     private func restoreConfirmedDefault() {
+        guard !isStopped, !isSleeping else { return }
         if let restoreUID = lastConfirmedDefaultUID,
            let device = deviceMonitor.device(for: restoreUID),
            isAliveCheck(device.id) {
@@ -2192,7 +2212,9 @@ final class AudioEngine {
     /// Routes all followsDefault apps to the given device UID and switches their taps.
     /// Early-exits if all apps are already routed to the target (avoids unnecessary tap switches).
     private func routeFollowsDefaultApps(to targetUID: String) {
-        guard !followsDefault.allSatisfy({ appDeviceRouting[$0] == targetUID }) else { return }
+        guard !followsDefault.allSatisfy({ pid in
+            appDeviceRouting[pid] == targetUID && (taps[pid].map { $0.currentDeviceUIDs == [targetUID] } ?? true)
+        }) else { return }
 
         for pid in followsDefault {
             appDeviceRouting[pid] = targetUID
@@ -2226,6 +2248,10 @@ final class AudioEngine {
 
     /// Called when device disappears - updates routing and switches taps immediately
     private func handleDeviceDisconnected(_ deviceUID: String, name deviceName: String) {
+        guard !isStopped else { return }
+        clearExpiredWakeOutputProtection()
+        // Sleep device churn must not replace the remembered route or start IO switches.
+        guard !isSleeping else { return }
         // Clean up alive watcher — use UID lookup since device is already removed from monitor
         removeAliveWatcher(forUID: deviceUID)
 
@@ -2338,6 +2364,10 @@ final class AudioEngine {
 
         // If the disconnected device was the system default, override to priority fallback
         if wasDefaultOutput {
+            if isProtectingWakeOutput {
+                restoreWakeOutput(excluding: deviceUID)
+                return
+            }
             if let restoreUID = previousConfirmedDefaultUID,
                restoreUID != deviceUID,
                let device = deviceMonitor.device(for: restoreUID),
@@ -2351,6 +2381,8 @@ final class AudioEngine {
 
     /// Called when a device appears - switches pinned apps back to their preferred device
     private func handleDeviceConnected(_ deviceUID: String, name deviceName: String) {
+        guard !isStopped, !isSleeping else { return }
+        clearExpiredWakeOutputProtection()
         // Re-seed device volume/mute state and re-push it into all taps. A
         // power-cycled display mints a NEW AudioDeviceID for the same UID; the
         // route-back below is optimistic and non-retrying, so without this heal a
@@ -2442,6 +2474,11 @@ final class AudioEngine {
             if settingsManager.appSettings.showDeviceDisconnectAlerts {
                 showReconnectNotification(deviceName: deviceName, affectedApps: affectedApps)
             }
+        }
+
+        if isProtectingWakeOutput {
+            restoreWakeOutput()
+            return
         }
 
         // Only override the default if the newly connected device IS the highest-priority
@@ -2649,6 +2686,16 @@ final class AudioEngine {
 
     /// Called when system default output device changes - switches apps that follow default
     private func handleDefaultDeviceChanged(_ newDefaultUID: String) {
+        guard !isStopped else { return }
+        clearExpiredWakeOutputProtection()
+        if isSleeping {
+            _ = outputEchoTracker.consume(newDefaultUID)
+            return
+        }
+        if isProtectingWakeOutput {
+            if !outputEchoTracker.consume(newDefaultUID) { restoreWakeOutput() }
+            return
+        }
         // State machine: if we're waiting for macOS to auto-switch after a device connect,
         // check whether this change is the expected auto-switch or user intent.
         if case .pendingAutoSwitch(let pendingUID, let timeoutTask) = outputPriorityState {
@@ -3038,6 +3085,16 @@ final class AudioEngine {
 
     func handleSystemWillSleep() {
         guard !isStopped else { return }
+        if !isSleeping {
+            outputBeforeSleepUID = lastConfirmedDefaultUID ?? deviceVolumeMonitor.defaultDeviceUID
+        }
+        wakeOutputRestoreTask?.cancel()
+        wakeOutputRestoreTask = nil
+        wakeOutputProtectionUntil = nil
+        outputEchoTracker.reset()
+        if case .pendingAutoSwitch(_, let task) = outputPriorityState { task.cancel() }
+        outputPriorityState = .stable
+        lastAutoSwitchOverrideTime = nil
         isSleeping = true
         audioLifecycleGeneration &+= 1
         wakeRecoveryTask?.cancel()
@@ -3047,20 +3104,75 @@ final class AudioEngine {
 
     func handleSystemDidWake() async {
         guard !isStopped, !Task.isCancelled else { return }
+        if outputBeforeSleepUID != nil {
+            wakeOutputProtectionUntil = recoveryClock().addingTimeInterval(wakeOutputSettlingInterval)
+        }
         isSleeping = false
         audioLifecycleGeneration &+= 1
         let generation = audioLifecycleGeneration
         (deviceMonitor as? AudioDeviceMonitor)?.refreshNow()
+        restoreWakeOutput()
+        startWakeOutputRestoration()
         processMonitor.refreshNow()
         tapRecoveryCooldownUntil.removeAll()
         // HAL can keep the same IDs across sleep while their underlying IO proc is dead.
         for pid in Array(taps.keys) {
             guard !isStopped, !isSleeping, !Task.isCancelled, generation == audioLifecycleGeneration else { return }
-            await recreateTap(for: pid)
+            // Rebuild default-following taps on the restored route, not the stale
+            // HDMI destination reported during sleep. Explicit app routes stay explicit.
+            let restoredUID = isProtectingWakeOutput && followsDefault.contains(pid) ? lastConfirmedDefaultUID : nil
+            await recreateTap(for: pid, overridingDeviceUIDs: restoredUID.map { [$0] })
         }
         guard !isStopped, !isSleeping, !Task.isCancelled, generation == audioLifecycleGeneration else { return }
+        restoreWakeOutput()
         applyPersistedSettings()
         if permission.status == .authorized { startHealthMonitor() }
+    }
+
+    /// Preserve user intent through HAL re-enumeration and delayed HDMI default changes.
+    /// If the preferred output is temporarily absent, keep its UID while using a live fallback.
+    private func restoreWakeOutput(excluding excludedUID: String? = nil) {
+        guard !isStopped, !isSleeping, isProtectingWakeOutput else { return }
+        let preferred = outputDevices.first {
+            $0.uid == outputBeforeSleepUID && $0.uid != excludedUID && isAliveCheck($0.id)
+        }
+        let target = preferred ?? Self.resolveHighestPriority(
+            priorityOrder: settingsManager.devicePriorityOrder,
+            connectedDevices: outputDevices, excluding: excludedUID, isAlive: isAliveCheck
+        )
+        guard let target else { return }
+        _ = applyOutputDefault(to: target)
+    }
+
+    private func startWakeOutputRestoration() {
+        wakeOutputRestoreTask?.cancel()
+        guard isProtectingWakeOutput else { return }
+        wakeOutputRestoreTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled, let self, !self.isStopped, !self.isSleeping else { return }
+                guard self.isProtectingWakeOutput else {
+                    self.clearWakeOutputProtection()
+                    return
+                }
+                // Also retry failed writes or a device that becomes alive without reconnecting.
+                self.restoreWakeOutput()
+            }
+        }
+    }
+
+    private func clearExpiredWakeOutputProtection() {
+        if wakeOutputProtectionUntil.map({ recoveryClock() >= $0 }) == true {
+            clearWakeOutputProtection()
+        }
+    }
+
+    private func clearWakeOutputProtection() {
+        outputEchoTracker.reset()
+        wakeOutputRestoreTask?.cancel()
+        wakeOutputRestoreTask = nil
+        wakeOutputProtectionUntil = nil
+        outputBeforeSleepUID = nil
     }
 
     private var rateRebuildingPIDs: Set<pid_t> = []

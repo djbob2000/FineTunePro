@@ -66,6 +66,12 @@ final class EchoTracker {
         return true
     }
 
+    /// Discard notifications from a previous routing phase. Existing timeout tasks
+    /// find no matching tokens and cannot later restore an obsolete default.
+    func reset() {
+        activeTimeouts.removeAll()
+    }
+
     /// Whether any echo is pending for any device.
     /// Used to skip interim routing when an override is in flight.
     var hasPending: Bool {
