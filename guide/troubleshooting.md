@@ -33,6 +33,8 @@ Common apps that may need to be ignored:
 
 FineTune prepares registered audio clients before playback, retains their taps while paused, and rebuilds taps after wake or output sample-rate changes. A streaming client that stops delivering callbacks is retried after repeated health-check failures; cooldowns prevent repeated teardown loops. A newly created CoreAudio client can still start before macOS reports it, so these changes do not promise zero delay for every app.
 
+After wake, FineTune restores the system output selected before sleep, even if an HDMI monitor remains connected or has a higher priority. During the first five seconds of wake recovery, delayed default-output notifications and reconnects cannot replace that selection. If the previous output is unavailable, FineTune uses the highest-priority live output and restores the previous one if it returns within that window. Selecting an output in FineTune takes effect immediately; external selections in System Settings are respected after this short settling period.
+
 For Wine/Scotch, check both the launcher and the actual game's executable in edit mode. If the problem persists, ignore the affected executable to return it to native routing and include its name, output device, and reproduction steps in a report.
 
 ## Using Airwave or BlackHole
