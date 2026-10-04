@@ -28,6 +28,10 @@ final class RecordingProcessTapController: ProcessTapControlling {
     /// Plain snapshot of `TapInitialState` so test asserts don't depend on
     /// the source-type's identity (defensive against future mutations).
     struct TapInitialStateSnapshot: Equatable {
+        var appAUEffectChain: [AUEffectChainEntry]
+        var deviceAUEffectChain: [AUEffectChainEntry]
+        var appAUBypassed: Bool
+        var deviceAUBypassed: Bool
         var monoDownmix: Bool
         var eqSettings: EQSettings
         var autoEQProfileID: String?
@@ -46,6 +50,10 @@ final class RecordingProcessTapController: ProcessTapControlling {
 
         @MainActor
         init(_ s: TapInitialState) {
+            self.appAUEffectChain = s.appAUEffectChain
+            self.deviceAUEffectChain = s.deviceAUEffectChain
+            self.appAUBypassed = s.appAUBypassed
+            self.deviceAUBypassed = s.deviceAUBypassed
             self.monoDownmix = s.monoDownmix
             self.eqSettings = s.eqSettings
             self.autoEQProfileID = s.autoEQProfile?.id
@@ -67,6 +75,16 @@ final class RecordingProcessTapController: ProcessTapControlling {
     let app: AudioApp
     private(set) var events: [Event] = []
     private(set) var lastLoudnessDigitalVolume: Float?
+    private(set) var preparedDeviceAU: (String, DeviceAUEffectConfiguration)?
+    private(set) var auStateAtSwitch: (String, DeviceAUEffectConfiguration)?
+    private(set) var deviceAUBypassed = false
+
+    func prepareDeviceAUEffectChain(for deviceUID: String, configuration: DeviceAUEffectConfiguration) {
+        preparedDeviceAU = (deviceUID, configuration)
+    }
+
+    func setDeviceAUChainBypassed(_ bypassed: Bool) { deviceAUBypassed = bypassed }
+    var isDeviceAUChainBypassed: Bool { deviceAUBypassed }
 
     // Mutable surface — recorded as plain property writes (not events).
     private(set) var monoDownmix = false
@@ -126,10 +144,12 @@ final class RecordingProcessTapController: ProcessTapControlling {
     }
 
     func switchDevice(to newDeviceUID: String, preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws {
+        auStateAtSwitch = preparedDeviceAU
         currentDeviceUIDs = [newDeviceUID]
     }
 
     func updateDevices(to newDeviceUIDs: [String], preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws {
+        auStateAtSwitch = preparedDeviceAU
         currentDeviceUIDs = newDeviceUIDs
     }
 
@@ -247,6 +267,53 @@ private final class TapBox {
 struct AudioEngineTapInitialStateTests {
 
     // MARK: Single-knob derivation
+
+    @Test("App and device AU settings are available before single and multi-output activation", arguments: [false, true])
+    func auInitialState(multi: Bool) async throws {
+        let fix = makeFixture()
+        let plugin = AUPluginDescriptor(componentType: kAudioUnitType_Effect, componentSubType: kAudioUnitSubType_LowPassFilter, componentManufacturer: kAudioUnitManufacturer_Apple, name: "Low Pass", manufacturer: "Apple", version: 0)
+        let appEntry = AUEffectChainEntry(plugin: plugin)
+        let deviceEntry = AUEffectChainEntry(plugin: plugin)
+        fix.settings.setAUEffectChain([appEntry], for: fix.app.persistenceIdentifier)
+        fix.settings.setDeviceAUEffectChain([deviceEntry], for: fix.device.uid)
+        fix.settings.setAppAUBypassed(true, for: fix.app.persistenceIdentifier)
+        fix.settings.setDeviceAUBypassed(true, for: fix.device.uid)
+        if multi {
+            fix.engine.setSelectedDeviceUIDs(for: fix.app, to: [fix.device.uid])
+            fix.engine.setDeviceSelectionMode(for: fix.app, to: .multi)
+            for _ in 0..<100 where fix.lastTap() == nil { await Task.yield() }
+        } else {
+            fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        }
+        let initial = try #require(capturedInitial(fix))
+        #expect(initial.appAUEffectChain == [appEntry])
+        #expect(initial.deviceAUEffectChain == [deviceEntry])
+        #expect(initial.appAUBypassed)
+        #expect(initial.deviceAUBypassed)
+        fix.engine.stop()
+    }
+
+
+    @Test("Routing prepares destination AU settings before switching and restores bypass", arguments: [false, true])
+    func destinationAUIsPrepared(bypassed: Bool) async throws {
+        let fix = makeFixture()
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        let destination = AudioDevice(id: 100, uid: "uid-destination", name: "Destination", icon: nil, supportsAutoEQ: false, transportType: .usb)
+        fix.deviceMonitor.addOutputDevice(destination)
+        let plugin = AUPluginDescriptor(componentType: kAudioUnitType_Effect, componentSubType: kAudioUnitSubType_LowPassFilter, componentManufacturer: kAudioUnitManufacturer_Apple, name: "Low Pass", manufacturer: "Apple", version: 0)
+        let entry = AUEffectChainEntry(plugin: plugin)
+        fix.settings.setDeviceAUEffectChain([entry], for: destination.uid)
+        fix.settings.setDeviceAUBypassed(bypassed, for: destination.uid)
+        fix.engine.setDevice(for: fix.app, deviceUID: destination.uid)
+        for _ in 0..<100 where tap.auStateAtSwitch == nil { await Task.yield() }
+        let (uid, config) = try #require(tap.auStateAtSwitch)
+        #expect(uid == destination.uid)
+        #expect(config.entries == [entry])
+        #expect(config.isBypassed == bypassed)
+        #expect(tap.deviceAUBypassed == bypassed)
+        fix.engine.stop()
+    }
 
     @Test("Mono preference is applied before tap activation and updates live")
     func monoInitialStateAndLiveUpdate() async throws {

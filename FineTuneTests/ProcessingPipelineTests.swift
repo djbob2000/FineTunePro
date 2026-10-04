@@ -1536,6 +1536,51 @@ struct MonoProcessingTests {
         }
     }
 
+    @Test("Mono averages planar source channels into either output layout", arguments: [false, true])
+    func planarSource(planarOutput: Bool) {
+        let input = TestABL(buffers: [(channels: 1, frames: 16), (channels: 1, frames: 8)])
+        let output = TestABL(buffers: planarOutput ? [(channels: 1, frames: 20), (channels: 1, frames: 20)] : [(channels: 2, frames: 20)])
+        fill(input, bufferIndex: 0, value: 0.6)
+        fill(input, bufferIndex: 1, value: 0.2)
+        var volume: Float = 1
+        processWithDefaults(input: input, output: output, currentVol: &volume, monoDownmix: true)
+        for bufferIndex in 0..<output.bufferList.count {
+            let channels = Int(output.bufferList[bufferIndex].mNumberChannels)
+            for frame in 0..<20 {
+                let expected: Float = frame < 8 ? 0.4 : (frame < 16 ? 0.3 : 0)
+                for channel in 0..<channels {
+                    #expect(abs(output.data(at: bufferIndex)[frame * channels + channel] - expected) < 0.00001)
+                }
+            }
+        }
+    }
+
+    @Test("Planar mono channels share the same volume ramp")
+    func planarMonoVolumeRamp() {
+        let input = TestABL(buffers: [(channels: 1, frames: 16), (channels: 1, frames: 16)])
+        let output = TestABL(buffers: [(channels: 1, frames: 16), (channels: 1, frames: 16)])
+        fill(input, bufferIndex: 0, value: 0.6)
+        fill(input, bufferIndex: 1, value: 0.2)
+        var volume: Float = 1
+        processWithDefaults(input: input, output: output, targetVol: 0.25, rampCoefficient: 0.1, currentVol: &volume, monoDownmix: true)
+        for frame in 0..<16 {
+            #expect(abs(output.data(at: 0)[frame] - output.data(at: 1)[frame]) < 0.00001)
+        }
+        #expect(abs(volume - (0.25 + 0.75 * powf(0.9, 16))) < 0.00001)
+    }
+
+    @Test("A single mono source is duplicated into planar stereo outputs")
+    func monoSourceIntoPlanarOutput() {
+        let input = TestABL(buffers: [(channels: 1, frames: 16)])
+        let output = TestABL(buffers: [(channels: 1, frames: 16), (channels: 1, frames: 16)])
+        fill(input, bufferIndex: 0, value: 0.6)
+        var volume: Float = 1
+        processWithDefaults(input: input, output: output, currentVol: &volume, monoDownmix: true)
+        for buffer in 0..<2 {
+            for frame in 0..<16 { #expect(abs(output.data(at: buffer)[frame] - 0.6) < 0.00001) }
+        }
+    }
+
     @Test("Mono retains EQ processing and the app volume gain")
     func monoKeepsDSPAndGain() {
         let input = TestABL(buffers: [(channels: 2, frames: 4096)])

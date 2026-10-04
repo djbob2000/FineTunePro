@@ -83,7 +83,7 @@ final class AUEffectHost: @unchecked Sendable {
     }
 
     deinit {
-        if isCrashTracked { CrashGuard.untrackPlugin(descriptor.id) }
+        defer { if isCrashTracked { CrashGuard.untrackPlugin(descriptor.id) } }
         if let au = _audioUnit {
             AudioUnitUninitialize(au)
             AudioComponentInstanceDispose(au)
@@ -97,8 +97,10 @@ final class AUEffectHost: @unchecked Sendable {
 
     func instantiate() -> Bool {
         if _audioUnit != nil { return true }
-        CrashGuard.trackPlugin(descriptor.id)
-        isCrashTracked = true
+        if !isCrashTracked {
+            CrashGuard.trackPlugin(descriptor.id)
+            isCrashTracked = true
+        }
         var desc = descriptor.audioComponentDescription
         guard let component = AudioComponentFindNext(nil, &desc) else {
             logger.error("AudioComponent not found for \(self.descriptor.name)")

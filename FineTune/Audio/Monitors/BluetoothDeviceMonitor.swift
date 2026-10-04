@@ -177,10 +177,10 @@ final class BluetoothDeviceMonitor {
                 result = await connectionOpener(mac)
             } else {
                 result = await Self.runOnBTQueue {
-                guard let btDevice = IOBluetoothDevice(addressString: mac) else {
-                    return kIOReturnNotFound
-                }
-                return btDevice.openConnection()
+                    guard let btDevice = IOBluetoothDevice(addressString: mac) else {
+                        return kIOReturnNotFound
+                    }
+                    return btDevice.openConnection()
                 }
             }
             guard connectionGenerations[mac] == generation, connectingIDs.contains(mac) else { return }

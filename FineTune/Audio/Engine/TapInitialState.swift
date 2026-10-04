@@ -3,6 +3,10 @@ import Foundation
 
 /// Persisted settings applied to a fresh ProcessTapController before its IOProc starts.
 struct TapInitialState {
+    var appAUEffectChain: [AUEffectChainEntry] = []
+    var deviceAUEffectChain: [AUEffectChainEntry] = []
+    var appAUBypassed: Bool = false
+    var deviceAUBypassed: Bool = false
     var monoDownmix: Bool = false
     var eqSettings: EQSettings = .flat
     var autoEQProfile: AutoEQProfile? = nil
@@ -18,4 +22,10 @@ struct TapInitialState {
     var loudnessTrebleGainScale: Double = 1.0
     var loudnessBassExciterWet: Double = 0.20
     var loudnessBassLinearWet: Double = 1.0
+}
+
+/// Destination settings captured on main before a routing operation suspends.
+struct DeviceAUEffectConfiguration: Equatable {
+    var entries: [AUEffectChainEntry]
+    var isBypassed: Bool
 }

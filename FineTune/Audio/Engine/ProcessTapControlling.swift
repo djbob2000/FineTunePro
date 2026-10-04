@@ -39,6 +39,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func recreateForOutputRateChange() async throws
 
     // AU effect chains
+    func prepareDeviceAUEffectChain(for deviceUID: String, configuration: DeviceAUEffectConfiguration)
     func updateAUEffectChain(_ entries: [AUEffectChainEntry])
     func getAUEffectChainEntries() -> [AUEffectChainEntry]
     func setAUChainBypassed(_ bypassed: Bool)
@@ -84,6 +85,7 @@ extension ProcessTapControlling {
         // Default no-op for mocks that don't override
     }
 
+    func prepareDeviceAUEffectChain(for deviceUID: String, configuration: DeviceAUEffectConfiguration) {}
     func updateAUEffectChain(_ entries: [AUEffectChainEntry]) {}
     func getAUEffectChainEntries() -> [AUEffectChainEntry] { [] }
     func setAUChainBypassed(_ bypassed: Bool) {}
