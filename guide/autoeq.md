@@ -8,7 +8,7 @@ FineTune can apply headphone-specific frequency response corrections using profi
 
 Every pair of headphones colors the sound differently. Some boost bass, others are harsh in the treble. AutoEQ measures these deviations and generates corrective EQ filters. FineTune applies these filters per-device, so each pair of headphones gets its own correction profile.
 
-Corrections are applied on top of FineTune's 10-band EQ, so you can still tweak the sound to your taste after applying a profile.
+Corrections are applied on top of FineTune's 10-band EQ, so you can still tweak the sound to your taste after applying a profile. In multi-device mirroring, each output receives its own correction profile, preamp, software gain, and final limiter. An output without an enabled profile stays uncorrected; another output's profile is never broadcast to it. Other device effects in a mirrored route continue to use the primary output's settings.
 
 ## Browse Built-in Profiles
 
