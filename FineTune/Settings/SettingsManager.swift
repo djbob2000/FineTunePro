@@ -4,6 +4,22 @@ import os
 import ServiceManagement
 import AppKit
 
+@MainActor
+protocol LaunchAtLoginProviding {
+    var status: SMAppService.Status { get }
+    func register() throws
+    func unregister() throws
+    func openLoginItems()
+}
+
+@MainActor
+struct SystemLaunchAtLoginService: LaunchAtLoginProviding {
+    var status: SMAppService.Status { SMAppService.mainApp.status }
+    func register() throws { try SMAppService.mainApp.register() }
+    func unregister() throws { try SMAppService.mainApp.unregister() }
+    func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
+}
+
 // MARK: - Pinned App Info
 
 struct PinnedAppInfo: Codable, Equatable {
@@ -37,7 +53,7 @@ nonisolated struct AppSettings: Codable, Equatable {
     var showAllDevices: Bool = false
 
     // Input Device Lock
-    var lockInputDevice: Bool = true          // Prevent auto-switching input device
+    var lockInputDevice: Bool = false         // Opt in to preventing input auto-switches
 
     // Notifications
     var showDeviceDisconnectAlerts: Bool = true
@@ -60,6 +76,8 @@ nonisolated struct AppSettings: Codable, Equatable {
     var hudPosition: HUDScreenPosition = .topTrailing  // Corner / edge where the volume HUD appears
     var mediaKeyControlEnabled: Bool = true        // Intercept F10/F11/F12 to drive the default output device
     var volumeHotkeyStep: VolumeHotkeyStep = .normal  // Slider-domain step per keypress; user-configurable
+    // nil disables linking; selected UIDs survive disconnects and reconnects.
+    var linkedVolumeDeviceUIDs: Set<String>? = nil
 
     // Global Hotkeys
     // Keyed by ShortcutAction.rawValue. Values mirror what KeyboardShortcuts persists in
@@ -72,6 +90,7 @@ nonisolated struct AppSettings: Codable, Equatable {
 
     // Popup
     var popupSize: MenuBarPopupSize = .comfortable  // Overall menu bar popup size and density
+    var popupPosition: MenuBarPopupPosition = .followIcon
 
     // Bottom Edge Scroll — uses volumeHotkeyStep for step size (same as media keys / hotkeys)
     var bottomEdgeScrollEnabled: Bool = false
@@ -84,7 +103,7 @@ nonisolated struct AppSettings: Codable, Equatable {
         menuBarIconStyle = try c.decodeIfPresent(MenuBarIconStyle.self, forKey: .menuBarIconStyle) ?? .default
         defaultNewAppVolume = try c.decodeIfPresent(Float.self, forKey: .defaultNewAppVolume) ?? 1.0
         autoSwitchToConnectedOutputDevice = try c.decodeIfPresent(Bool.self, forKey: .autoSwitchToConnectedOutputDevice) ?? false
-        lockInputDevice = try c.decodeIfPresent(Bool.self, forKey: .lockInputDevice) ?? true
+        lockInputDevice = try c.decodeIfPresent(Bool.self, forKey: .lockInputDevice) ?? false
         showDeviceDisconnectAlerts = try c.decodeIfPresent(Bool.self, forKey: .showDeviceDisconnectAlerts) ?? true
         loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false
         ddcVolumeControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .ddcVolumeControlEnabled) ?? true
@@ -92,10 +111,12 @@ nonisolated struct AppSettings: Codable, Equatable {
         hudPosition = try c.decodeIfPresent(HUDScreenPosition.self, forKey: .hudPosition) ?? .topTrailing
         mediaKeyControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaKeyControlEnabled) ?? true
         volumeHotkeyStep = try c.decodeIfPresent(VolumeHotkeyStep.self, forKey: .volumeHotkeyStep) ?? .normal
+        linkedVolumeDeviceUIDs = try c.decodeIfPresent(Set<String>.self, forKey: .linkedVolumeDeviceUIDs)
         customShortcuts = try c.decodeIfPresent([String: ShortcutCodable].self, forKey: .customShortcuts) ?? [:]
         appearance = try c.decodeIfPresent(AppearancePreference.self, forKey: .appearance) ?? .system
         languagePreference = try c.decodeIfPresent(AppLanguagePreference.self, forKey: .languagePreference) ?? .system
         popupSize = try c.decodeIfPresent(MenuBarPopupSize.self, forKey: .popupSize) ?? .comfortable
+        popupPosition = try c.decodeIfPresent(MenuBarPopupPosition.self, forKey: .popupPosition) ?? .followIcon
         bottomEdgeScrollEnabled = try c.decodeIfPresent(Bool.self, forKey: .bottomEdgeScrollEnabled) ?? false
         // Legacy bottomEdgeScrollStep (Float) is intentionally ignored; step is volumeHotkeyStep.
 
@@ -116,6 +137,9 @@ final class SettingsManager {
     private var settings: Settings
     private var saveTask: Task<Void, Never>?
     private let settingsURL: URL
+    private let launchAtLoginService: any LaunchAtLoginProviding
+    private(set) var launchAtLoginStatus: SMAppService.Status = .notRegistered
+    var launchAtLoginError: String?
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "SettingsManager")
 
     private var isSettingUp = false
@@ -125,7 +149,7 @@ final class SettingsManager {
             if appSettings.launchAtLogin != settings.appSettings.launchAtLogin {
                 setLaunchAtLogin(appSettings.launchAtLogin)
             }
-            if appSettings.languagePreference != settings.appSettings.languagePreference {
+            if appSettings.languagePreference != oldValue.languagePreference {
                 appSettings.languagePreference.apply()
             }
             settings.appSettings = appSettings
@@ -274,15 +298,17 @@ final class SettingsManager {
         }
     }
 
-    init(directory: URL? = nil) {
+    init(directory: URL? = nil, launchAtLoginService: any LaunchAtLoginProviding = SystemLaunchAtLoginService()) {
         let baseDir = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("FineTune")
         self.settingsURL = baseDir.appendingPathComponent("settings.json")
+        self.launchAtLoginService = launchAtLoginService
         self.settings = Settings()
         self.appSettings = AppSettings()
         self.isSettingUp = true
         loadFromDisk()
         self.appSettings = settings.appSettings
         self.isSettingUp = false
+        reconcileLaunchAtLogin()
     }
 
     func getVolume(for identifier: String) -> Float? {
@@ -1178,22 +1204,49 @@ final class SettingsManager {
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
+        launchAtLoginError = nil
         do {
             if enabled {
-                try SMAppService.mainApp.register()
+                // Pending approval is already registered; registering again cannot approve it.
+                if launchAtLoginService.status != .enabled && launchAtLoginService.status != .requiresApproval {
+                    try launchAtLoginService.register()
+                }
                 logger.info("Registered for launch at login")
             } else {
-                try SMAppService.mainApp.unregister()
+                try launchAtLoginService.unregister()
                 logger.info("Unregistered from launch at login")
             }
         } catch {
+            launchAtLoginError = error.localizedDescription
             logger.error("Failed to set launch at login: \(error.localizedDescription)")
         }
+        reconcileLaunchAtLogin()
+    }
+
+    /// Read macOS state without registering anything, including when returning from Login Items.
+    func reconcileLaunchAtLogin() {
+        launchAtLoginStatus = launchAtLoginService.status
+        let enabled = launchAtLoginStatus == .enabled
+        guard appSettings.launchAtLogin != enabled else { return }
+        let wasSettingUp = isSettingUp
+        isSettingUp = true
+        appSettings.launchAtLogin = enabled
+        isSettingUp = wasSettingUp
+        settings.appSettings = appSettings
+        scheduleSave()
+    }
+
+    func openLoginItems() {
+        launchAtLoginService.openLoginItems()
     }
 
     /// Returns the actual launch at login status from the system
     var isLaunchAtLoginEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
+        launchAtLoginService.status == .enabled
+    }
+
+    var launchAtLoginRequiresApproval: Bool {
+        launchAtLoginStatus == .requiresApproval
     }
 
     // MARK: - Reset All Settings
@@ -1253,7 +1306,11 @@ final class SettingsManager {
         settings.userEQPresets.removeAll()
 
         // Also unregister from launch at login
-        try? SMAppService.mainApp.unregister()
+        if launchAtLoginService.status == .enabled || launchAtLoginService.status == .requiresApproval {
+            setLaunchAtLogin(false)
+        } else {
+            reconcileLaunchAtLogin()
+        }
 
         scheduleSave()
         logger.info("Reset all settings to defaults")

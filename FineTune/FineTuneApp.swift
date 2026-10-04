@@ -14,12 +14,16 @@ extension Notification.Name {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     var audioEngine: AudioEngine?
+    var menuBarPopupController: MenuBarPopupController?
 
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let audioEngine = audioEngine else {
             return
         }
-        let urlHandler = URLHandler(audioEngine: audioEngine)
+        let urlHandler = URLHandler(
+            audioEngine: audioEngine,
+            popupController: menuBarPopupController ?? MenuBarPopupController()
+        )
 
         for url in urls {
             urlHandler.handleURL(url)
@@ -252,7 +256,7 @@ struct FineTuneApp: App {
         // permission required for the hotkey itself). Registry start() is deferred
         // to a SwiftUI `.task` on the popup content so the FluidMenuBarExtra
         // status item has been materialized before any hotkey can fire.
-        let popupController = MenuBarPopupController()
+        let popupController = MenuBarPopupController(settingsManager: settings)
         let resolver = TargetAppResolver(
             ownBundleID: Bundle.main.bundleIdentifier ?? "com.finetuneapp.FineTune"
         )
@@ -270,6 +274,7 @@ struct FineTuneApp: App {
 
         // Pass engine to AppDelegate
         _appDelegate.wrappedValue.audioEngine = engine
+        _appDelegate.wrappedValue.menuBarPopupController = popupController
 
         if permission.status == .unknown {
             permission.request()
@@ -294,10 +299,11 @@ struct FineTuneApp: App {
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
-        ) { [settings, engine, monitor, bottomEdgeScrollMonitor, accessibilityService, hud, coordinator] _ in
+        ) { [settings, engine, monitor, bottomEdgeScrollMonitor, accessibilityService, hud, coordinator, popupController] _ in
             MainActor.assumeIsolated {
                 engine.saveAllLiveAUState()
                 coordinator.stop()
+                popupController.stop()
                 monitor.stop()
                 bottomEdgeScrollMonitor.stop()
                 accessibilityService.stop()

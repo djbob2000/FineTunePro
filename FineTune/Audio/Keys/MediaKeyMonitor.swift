@@ -164,34 +164,64 @@ final class MediaKeyMonitor {
 
     // MARK: - Event handling
 
-    /// Applies a decoded `MediaKeyEvent` to the default output device.
-    func handle(_ event: MediaKeyEvent, shiftHeld: Bool = false, optionHeld: Bool = false) {
+    /// Applies a decoded key to the default output and any selected linked outputs.
+    /// Returns false when the default output is unavailable, so the tap can pass it through.
+    @discardableResult
+    func handle(_ event: MediaKeyEvent, shiftHeld: Bool = false, optionHeld: Bool = false) -> Bool {
         let volumeMonitor = audioEngine.deviceVolumeMonitor
         let deviceID = volumeMonitor.defaultDeviceID
-        guard deviceID.isValid else {
-            logger.debug("Ignoring media key: no valid default output device")
-            return
+        let devices = audioEngine.deviceMonitor.outputDevices
+        guard canHandleDefaultOutput,
+              let defaultDevice = devices.first(where: { $0.id == deviceID }) else {
+            logger.debug("Ignoring media key: no usable default output device")
+            return false
         }
-        let tier = volumeMonitor.outputVolumeBackend(for: deviceID)
-        let deviceName = audioEngine.deviceMonitor.outputDevices.first { $0.id == deviceID }?.name ?? ""
-        handleCore(
-            event: event,
-            deviceID: deviceID,
-            tier: tier,
-            deviceName: deviceName,
-            currentVolume: volumeMonitor.volumes[deviceID] ?? 0,
-            currentMute: volumeMonitor.muteStates[deviceID] ?? false,
-            setVolume: { id, vol in volumeMonitor.setVolume(for: id, to: vol) },
-            setMute:   { id, mute in volumeMonitor.setMute(for: id, to: mute) },
-            getVolume: { id in volumeMonitor.volumes[id] ?? 0 },
-            playFeedback: { gain in
-                self.feedbackPlayer?.requestFeedback(
-                    gain: gain,
-                    shiftHeld: shiftHeld,
-                    optionHeld: optionHeld
-                )
-            }
-        )
+        let linkedUIDs = settingsManager.appSettings.linkedVolumeDeviceUIDs ?? []
+        let targets = [defaultDevice] + devices.filter {
+            $0.id != deviceID && $0.id.isValid && linkedUIDs.contains($0.uid)
+                && volumeMonitor.volumes[$0.id]?.isFinite == true
+        }
+        let groupMute: Bool?
+        if case .muteToggle = event {
+            groupMute = targets.contains { !(volumeMonitor.muteStates[$0.id] ?? false) }
+        } else {
+            groupMute = nil
+        }
+        // Decide once per event so every linked DDC output receives an accepted repeat.
+        let isRepeat: Bool
+        switch event {
+        case .volumeUp(let repeatPress), .volumeDown(let repeatPress): isRepeat = repeatPress
+        case .muteToggle: isRepeat = false
+        }
+        let coalesced = isRepeat && targets.contains { volumeMonitor.outputVolumeBackend(for: $0.id) == .ddc }
+            && isDDCRepeatCoalesced()
+        for device in targets {
+            let tier = volumeMonitor.outputVolumeBackend(for: device.id)
+            if tier == .ddc && coalesced { continue }
+            handleCore(
+                event: event, deviceID: device.id, tier: tier, deviceName: device.name,
+                currentVolume: volumeMonitor.volumes[device.id] ?? 0,
+                currentMute: volumeMonitor.muteStates[device.id] ?? false,
+                setVolume: { id, vol in volumeMonitor.setVolume(for: id, to: vol) },
+                setMute: { id, mute in volumeMonitor.setMute(for: id, to: mute) },
+                getVolume: { id in volumeMonitor.volumes[id] ?? 0 },
+                playFeedback: { gain in
+                    self.feedbackPlayer?.requestFeedback(gain: gain, shiftHeld: shiftHeld, optionHeld: optionHeld)
+                },
+                presentsFeedback: device.id == deviceID,
+                coalescesDDCRepeats: false,
+                muteOverride: groupMute
+            )
+        }
+        return true
+    }
+
+    private var canHandleDefaultOutput: Bool {
+        let volumeMonitor = audioEngine.deviceVolumeMonitor
+        let id = volumeMonitor.defaultDeviceID
+        return id.isValid
+            && audioEngine.deviceMonitor.outputDevices.contains { $0.id == id }
+            && volumeMonitor.volumes[id]?.isFinite == true
     }
 
     /// `.ddc` tier coalesces repeats to an 80 ms floor; hardware/software pass them through.
@@ -207,15 +237,18 @@ final class MediaKeyMonitor {
         setVolume: (AudioDeviceID, Float) -> Void,
         setMute: (AudioDeviceID, Bool) -> Void,
         getVolume: ((AudioDeviceID) -> Float)? = nil,
-        playFeedback: (Float) -> Void = { _ in }
+        playFeedback: (Float) -> Void = { _ in },
+        presentsFeedback: Bool = true,
+        coalescesDDCRepeats: Bool = true,
+        muteOverride: Bool? = nil
     ) {
-        let shouldShowHUD = !popupVisibility.isVisible
+        let shouldShowHUD = presentsFeedback && !popupVisibility.isVisible
         let sliderDelta = settingsManager.appSettings.volumeHotkeyStep.sliderDelta
         let currentSlider = VolumeMapping.sliderFraction(forSystemGain: currentVolume, tier: tier)
 
         switch event {
         case .volumeUp(let isRepeat):
-            if isRepeat && tier == .ddc && isDDCRepeatCoalesced() {
+            if coalescesDDCRepeats && isRepeat && tier == .ddc && isDDCRepeatCoalesced() {
                 logger.debug("DDC repeat coalesced")
                 return
             }
@@ -226,14 +259,14 @@ final class MediaKeyMonitor {
                 setMute(deviceID, false)
             }
             setVolume(deviceID, newVolume)
-            playFeedback(VolumeFeedback.gain(tier: tier, sliderFraction: nextSlider))
+            if presentsFeedback { playFeedback(VolumeFeedback.gain(tier: tier, sliderFraction: nextSlider)) }
             if shouldShowHUD {
                 hudController.show(sliderFraction: nextSlider, mute: false, deviceName: deviceName)
             }
-            iconCoordinator?.flashDevice()
+            if presentsFeedback { iconCoordinator?.flashDevice() }
 
         case .volumeDown(let isRepeat):
-            if isRepeat && tier == .ddc && isDDCRepeatCoalesced() {
+            if coalescesDDCRepeats && isRepeat && tier == .ddc && isDDCRepeatCoalesced() {
                 logger.debug("DDC repeat coalesced")
                 return
             }
@@ -247,14 +280,14 @@ final class MediaKeyMonitor {
                 setMute(deviceID, true)
             }
             setVolume(deviceID, newVolume)
-            playFeedback(VolumeFeedback.gain(tier: tier, sliderFraction: nextSlider))
+            if presentsFeedback { playFeedback(VolumeFeedback.gain(tier: tier, sliderFraction: nextSlider)) }
             if shouldShowHUD {
                 hudController.show(sliderFraction: nextSlider, mute: willBeSilent, deviceName: deviceName)
             }
-            iconCoordinator?.flashDevice()
+            if presentsFeedback { iconCoordinator?.flashDevice() }
 
         case .muteToggle:
-            let newMute = !currentMute
+            let newMute = muteOverride ?? !currentMute
             setMute(deviceID, newMute)
             if shouldShowHUD {
                 // Software-tier mute zeroes the visible volume and unmute restores
@@ -268,7 +301,7 @@ final class MediaKeyMonitor {
                 }
                 hudController.show(sliderFraction: slider, mute: newMute, deviceName: deviceName)
             }
-            iconCoordinator?.flashDevice()
+            if presentsFeedback { iconCoordinator?.flashDevice() }
         }
     }
 
@@ -309,15 +342,17 @@ final class MediaKeyMonitor {
         let shiftHeld = cgEvent.flags.contains(.maskShift)
         let optionHeld = cgEvent.flags.contains(.maskAlternate)
 
-        Task { @MainActor in
-            hudController.swallowObserved()
-            handle(
-                mediaEvent,
-                shiftHeld: shiftHeld,
-                optionHeld: optionHeld
-            )
+        // The tap is installed on the main run loop. Check current output availability
+        // before swallowing, then keep audio writes and HUD work outside the tap callback.
+        guard Thread.isMainThread else { return false }
+        return MainActor.assumeIsolated {
+            guard canHandleDefaultOutput else { return false }
+            Task { @MainActor in
+                hudController.swallowObserved()
+                handle(mediaEvent, shiftHeld: shiftHeld, optionHeld: optionHeld)
+            }
+            return true
         }
-        return true
     }
 }
 

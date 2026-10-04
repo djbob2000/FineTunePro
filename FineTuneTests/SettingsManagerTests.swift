@@ -227,7 +227,7 @@ struct AppSettingsDefaultTests {
         #expect(settings.menuBarIconStyle == .default)
         #expect(settings.defaultNewAppVolume == 1.0)
         #expect(settings.autoSwitchToConnectedOutputDevice == false)
-        #expect(settings.lockInputDevice == true)
+        #expect(settings.lockInputDevice == false)
         #expect(settings.showDeviceDisconnectAlerts == true)
     }
 

@@ -22,10 +22,12 @@ protocol URLHandlerEngine {
 @MainActor
 final class URLHandler {
     private let audioEngine: any URLHandlerEngine
+    private let popupController: MenuBarPopupController
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "URLHandler")
 
-    init(audioEngine: any URLHandlerEngine) {
+    init(audioEngine: any URLHandlerEngine, popupController: MenuBarPopupController = MenuBarPopupController()) {
         self.audioEngine = audioEngine
+        self.popupController = popupController
     }
     
     func handleURL(_ url: URL) {
@@ -41,6 +43,13 @@ final class URLHandler {
         let queryItems = components?.queryItems ?? []
       
         switch host {
+        // Popup actions do not change audio state.
+        case "toggle-popup":
+            popupController.toggle()
+        case "open-popup":
+            popupController.open()
+        case "close-popup":
+            popupController.close()
         // Volume actions
         case "set-volumes":
             handleSetVolumes(queryItems: queryItems)
