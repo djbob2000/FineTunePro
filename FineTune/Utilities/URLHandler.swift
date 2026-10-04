@@ -105,8 +105,8 @@ final class URLHandler {
         }
 
         for (identifier, volumePercent) in pairs {
-            // Linear conversion: volume=100 → gain 1.0
-            let gain = Float(volumePercent) / 100.0
+            // URL percentages use the normal percentage scale, independent of dB display.
+            let gain = VolumeMapping.sliderToGain(Double(volumePercent) / 100.0)
 
             if let app = findApp(by: identifier) {
                 audioEngine.setVolume(for: app, to: gain)
@@ -154,7 +154,7 @@ final class URLHandler {
 
         let newGain = VolumeMapping.sliderToGain(sliderPosition, logScale: false)
         audioEngine.setVolume(for: app, to: newGain)
-        let newPercent = Int(round(newGain * 100))
+        let newPercent = Int(round(sliderPosition * 100))
         logger.info("Stepped volume \(direction) for \(app.name) to \(newPercent)%")
     }
 
