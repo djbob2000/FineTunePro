@@ -10,6 +10,7 @@ struct TapInitialState {
     var monoDownmix: Bool = false
     var eqSettings: EQSettings = .flat
     var autoEQProfile: AutoEQProfile? = nil
+    var autoEQProfilesByDevice: [String: AutoEQProfile] = [:]
     var autoEQPreampEnabled: Bool = false
     var loudnessVolume: Float = 1.0
     var loudnessCompensationEnabled: Bool = false

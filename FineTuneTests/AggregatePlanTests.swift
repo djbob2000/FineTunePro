@@ -75,7 +75,7 @@ struct AggregatePlanTests {
         #expect(plan.clockDeviceUID == "devA")
     }
 
-    @Test("Multi-device mirroring: stays stacked, order preserved")
+    @Test("Multi-device mirroring: independent output channels, order preserved")
     func multiDeviceMirroring() {
         let plan = ProcessTapController.planAggregate(
             outputUIDs: ["a", "b"],
@@ -83,11 +83,11 @@ struct AggregatePlanTests {
             outputStreamCount: { _ in 1 }
         )
         #expect(plan.subDeviceUIDs == ["a", "b"])
-        #expect(plan.isStacked == true)
+        #expect(plan.isStacked == false)
         #expect(plan.clockDeviceUID == "a")
     }
 
-    @Test("Mirroring that includes an aggregate: aggregate flattened but stays stacked (mirror)")
+    @Test("Mirroring includes flattened aggregate with independent output channels")
     func mirroringWithAggregate() {
         let plan = ProcessTapController.planAggregate(
             outputUIDs: ["agg", "speaker"],
@@ -95,7 +95,7 @@ struct AggregatePlanTests {
             outputStreamCount: { _ in 1 }
         )
         #expect(plan.subDeviceUIDs == ["scarlett", "speaker"])
-        #expect(plan.isStacked == true)
+        #expect(plan.isStacked == false)
         #expect(plan.clockDeviceUID == "scarlett")
     }
 
@@ -107,8 +107,8 @@ struct AggregatePlanTests {
             outputStreamCount: { _ in 1 }
         )
         #expect(plan.subDeviceUIDs == ["scarlett", "canton"])
-        // count > 1 user selection ⇒ mirroring ⇒ stacked
-        #expect(plan.isStacked == true)
+        // Mirrored routes expose individual channels for per-output correction.
+        #expect(plan.isStacked == false)
     }
 
     @Test("Empty aggregate sub-device list is treated as a plain device")

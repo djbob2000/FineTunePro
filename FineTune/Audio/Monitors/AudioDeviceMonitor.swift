@@ -70,12 +70,10 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
     /// Listeners for kAudioDevicePropertyDataSource changes on built-in devices (headphone jack detection)
     @ObservationIgnored private var dataSourceListeners: [AudioDeviceID: AudioObjectPropertyListenerBlock] = [:]
 
-    /// Called when a BT output device crosses the A2DP ↔ SCO/HFP sample-rate boundary (44.1 kHz).
-    /// Off-protocol (on the concrete monitor) — wired via the `as? AudioDeviceMonitor` cast, like the
-    /// priority-order closures; no-ops under a non-AudioDeviceMonitor provider.
-    var onBTDeviceSampleRateChanged: ((_ uid: String, _ newRate: Double) -> Void)?
+    /// All routed aggregates must follow their output's nominal rate, including USB and built-in devices.
+    var onOutputDeviceSampleRateChanged: ((_ uid: String, _ newRate: Double) -> Void)?
 
-    /// Listeners for kAudioDevicePropertyNominalSampleRate changes on BT output devices (A2DP↔SCO).
+    /// Listeners for kAudioDevicePropertyNominalSampleRate changes on all output devices.
     @ObservationIgnored private var sampleRateListeners: [AudioDeviceID: AudioObjectPropertyListenerBlock] = [:]
     @ObservationIgnored private var lastKnownSampleRates: [AudioDeviceID: Double] = [:]
     @ObservationIgnored private var sampleRateDebounce: [AudioDeviceID: Task<Void, Never>] = [:]
@@ -85,12 +83,12 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
     /// HAL proxy objects are mid-transition. 50ms lets the HAL stabilize before we enumerate.
     private var deviceListDebounceTask: Task<Void, Never>?
 
-    /// True when the BT output's nominal rate changed to a different valid rate, so each affected
+    /// True when the output's nominal rate changed to a different valid rate, so each affected
     /// tap's aggregate must be recreated to match. Pure, for testability. `newRate <= 0` is a transient/failed read
     /// (never act, and the caller must not store it as the baseline or the next real read looks like
     /// no change). Fires on ANY change (A2DP↔SCO and within-band) — the aggregate must always match.
     nonisolated static func isMeaningfulRateChange(oldRate: Double, newRate: Double) -> Bool {
-        newRate > 0 && newRate != oldRate
+        newRate.isFinite && newRate > 0 && newRate != oldRate
     }
 
     func start() {
@@ -246,8 +244,7 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
             inputDevicesByID = Dictionary(uniqueKeysWithValues: inputDevices.map { ($0.id, $0) })
 
             syncDataSourceListeners(outputDeviceIDs: outputDeviceList.map(\.id))
-            let btOutputIDs = Set(outputDeviceList.filter { $0.id.isBluetoothDevice() }.map(\.id))
-            syncSampleRateListeners(btOutputDeviceIDs: btOutputIDs)
+            syncSampleRateListeners(outputDeviceIDs: Set(outputDeviceList.map(\.id)))
 
         } catch {
             logger.error("Failed to refresh device list: \(error.localizedDescription)")
@@ -306,19 +303,17 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
         }
     }
 
-    // MARK: - Bluetooth Sample-Rate Listeners (A2DP ↔ SCO/HFP)
+    // MARK: - Output Sample-Rate Listeners
 
-    /// Installs/removes kAudioDevicePropertyNominalSampleRate listeners on BT output devices so
-    /// A2DP ↔ SCO/HFP mode switches (which keep the same AudioObjectID, only changing the nominal
-    /// rate) trigger tap re-evaluation.
-    private func syncSampleRateListeners(btOutputDeviceIDs: Set<AudioDeviceID>) {
+    /// Covers Bluetooth profile changes and rate changes made by other apps or Audio MIDI Setup.
+    private func syncSampleRateListeners(outputDeviceIDs: Set<AudioDeviceID>) {
         let currentIDs = Set(sampleRateListeners.keys)
 
-        for deviceID in currentIDs.subtracting(btOutputDeviceIDs) {
+        for deviceID in currentIDs.subtracting(outputDeviceIDs) {
             removeSampleRateListener(for: deviceID)
         }
 
-        for deviceID in btOutputDeviceIDs.subtracting(currentIDs) {
+        for deviceID in outputDeviceIDs.subtracting(currentIDs) {
             guard let uid = devicesByID[deviceID]?.uid else { continue }
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyNominalSampleRate,
@@ -335,7 +330,7 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
                 sampleRateListeners[deviceID] = block
                 lastKnownSampleRates[deviceID] = (try? deviceID.readNominalSampleRate()) ?? 0
             } else {
-                logger.warning("Failed to add sample rate listener for BT device \(deviceID): \(status)")
+                logger.warning("Failed to add sample rate listener for output device \(deviceID): \(status)")
             }
         }
     }
@@ -356,14 +351,14 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
         // Skip transient HAL failures BEFORE touching the baseline. Storing a transient 0 would make
         // the next real read (e.g. 24 kHz SCO) look like a cold start and miss the A2DP→call
         // transition — re-introducing the crackle this listener exists to prevent.
-        guard newRate > 0 else { return }
+        guard newRate.isFinite, newRate > 0 else { return }
 
         let oldRate = lastKnownSampleRates[deviceID] ?? 0
         guard Self.isMeaningfulRateChange(oldRate: oldRate, newRate: newRate) else { return }
         lastKnownSampleRates[deviceID] = newRate
 
-        logger.info("[RATE] BT device \(uid, privacy: .public) \(oldRate, format: .fixed(precision: 0)) → \(newRate, format: .fixed(precision: 0)) Hz (call mode: \(newRate < 44_100))")
-        onBTDeviceSampleRateChanged?(uid, newRate)
+        logger.info("[RATE] Output device \(uid, privacy: .public) \(oldRate, format: .fixed(precision: 0)) → \(newRate, format: .fixed(precision: 0)) Hz")
+        onOutputDeviceSampleRateChanged?(uid, newRate)
     }
 
     private func removeSampleRateListener(for deviceID: AudioDeviceID) {
@@ -379,7 +374,7 @@ final class AudioDeviceMonitor: AudioDeviceProviding {
         )
         let status = AudioObjectRemovePropertyListenerBlock(deviceID, &address, .main, block)
         if status != noErr && status != OSStatus(kAudioHardwareBadObjectError) {
-            logger.warning("Failed to remove sample rate listener for BT device \(deviceID): \(status)")
+            logger.warning("Failed to remove sample rate listener for output device \(deviceID): \(status)")
         }
     }
 
