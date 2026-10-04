@@ -63,6 +63,32 @@ struct LocalizationResourceTests {
         "vi",
     ]
 
+    // New upstream copy has verified Chinese/Portuguese translations. Other locales
+    // intentionally fall back to English until translated; prior coverage stays required.
+    private static let pendingTranslationKeys: Set<String> = [
+        "Apps",
+        "Change icon",
+        "Computers & Displays",
+        "Connection timed out",
+        "Connectors & Other",
+        "Couldn't connect",
+        "Device",
+        "Failed to fetch catalog",
+        "Headphones & Earbuds",
+        "In exclusive use by %@ (PID %@)",
+        "In exclusive use by PID %@",
+        "Invalid catalog data",
+        "Lower volume for the app playing audio",
+        "Microphones",
+        "Network error: %@",
+        "No matching icons",
+        "Restore Default",
+        "Search icons",
+        "Speakers",
+        "Suggested",
+        "Play this app in mono"
+    ]
+
     private struct StringCatalog: Decodable {
         struct Entry: Decodable {
             struct Localization: Decodable {
@@ -70,7 +96,13 @@ struct LocalizationResourceTests {
                     let value: String
                 }
 
-                let stringUnit: StringUnit
+                let stringUnit: StringUnit?
+                let variations: [String: [String: Localization]]?
+
+                var values: [String] {
+                    if let stringUnit { return [stringUnit.value] }
+                    return (variations ?? [:]).values.flatMap { $0.values.flatMap(\.values) }
+                }
             }
 
             let localizations: [String: Localization]?
@@ -103,14 +135,18 @@ struct LocalizationResourceTests {
             let actualLocaleIdentifiers = Set(catalog.strings.values.flatMap { entry in
                 Array((entry.localizations ?? [:]).keys)
             })
-            #expect(actualLocaleIdentifiers == expectedLocaleIdentifiers)
+            #expect(actualLocaleIdentifiers.subtracting(["en"]) == expectedLocaleIdentifiers)
 
             for (key, entry) in catalog.strings {
                 let localizations = entry.localizations ?? [:]
                 for localeIdentifier in Self.mainstreamLocaleIdentifiers {
-                    let value = localizations[localeIdentifier]?.stringUnit.value ?? ""
-                    #expect(!value.isEmpty)
-                    #expect(Self.formatSpecifiers(in: value) == Self.formatSpecifiers(in: key))
+                    if Self.pendingTranslationKeys.contains(key), !["zh-Hans", "pt-BR"].contains(localeIdentifier), localizations[localeIdentifier] == nil { continue }
+                    let values = localizations[localeIdentifier]?.values ?? []
+                    #expect(!values.isEmpty, "Missing translation for \(key) in \(localeIdentifier)")
+                    for value in values {
+                        #expect(!value.isEmpty)
+                        #expect(Self.formatSpecifiers(in: value) == Self.formatSpecifiers(in: key))
+                    }
                 }
             }
         }
@@ -128,11 +164,11 @@ struct LocalizationResourceTests {
         ]
 
         for localeIdentifier in Self.mainstreamLocaleIdentifiers {
-            let bundleName = catalog.strings["CFBundleName"]?.localizations?[localeIdentifier]?.stringUnit.value
+            let bundleName = catalog.strings["CFBundleName"]?.localizations?[localeIdentifier]?.stringUnit?.value
             #expect(bundleName == "FineTune")
 
             for key in permissionKeys {
-                let value = catalog.strings[key]?.localizations?[localeIdentifier]?.stringUnit.value ?? ""
+                let value = catalog.strings[key]?.localizations?[localeIdentifier]?.stringUnit?.value ?? ""
                 #expect(value != key)
                 #expect(value.contains("FineTune"))
             }
@@ -146,12 +182,25 @@ struct LocalizationResourceTests {
     }
 
     private static func formatSpecifiers(in string: String) -> [String] {
-        let pattern = #"%[@dfiouxX]|%l[du]|%ll[du]|%%"#
+        let pattern = #"%(?:[0-9]+\$)?(?:ll|l)?[@dfiouxX]|%%"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(string.startIndex..<string.endIndex, in: string)
         return regex.matches(in: string, range: range).map { match in
-            String(string[Range(match.range, in: string)!])
+            String(string[Range(match.range, in: string)!]).replacingOccurrences(of: #"[0-9]+\$"#, with: "", options: .regularExpression)
+        }.sorted()
+    }
+
+    @Test("Upstream additions localize runtime strings and mono help", arguments: ["zh-Hans", "pt-BR"])
+    func upstreamRuntimeStrings(locale: String) throws {
+        let path = try #require(Bundle.main.path(forResource: locale, ofType: "lproj"))
+        let bundle = try #require(Bundle(path: path))
+        for key in ["Connection timed out", "Couldn't connect", "Failed to fetch catalog", "Computers & Displays", "Play this app in mono"] {
+            #expect(L10n.string(key, bundle: bundle) != key)
         }
+        let hog = try #require(DeviceInspectorInfo.formatHogModeOwner(123456, processName: "Example", bundle: bundle))
+        #expect(hog.contains("Example"))
+        #expect(hog.contains("123456"))
+        #expect(!hog.hasPrefix("In exclusive use"))
     }
 
     @Test("Simplified Chinese resources localize core UI strings")

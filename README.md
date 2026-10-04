@@ -52,6 +52,7 @@ That's it. Adjust sliders, route audio, and explore EQ from the menu bar.
 
 ### 🎚 Volume Control
 - **Per-app volume** — Individual sliders and mute for each application
+- **Per-app mono** — Fold an app’s stereo source into both speakers without changing other apps. Saved for active and pinned inactive apps; one-sided stereo sources use the conventional average and become 6 dB quieter.
 - **Per-app volume boost** — 2x / 3x / 4x gain presets
 - **Pinned apps** — Keep apps visible in the menu bar even when they're not playing, so you can configure volume, EQ, and routing in advance
 - **Ignore apps** — Completely disengage FineTune from specific apps. Tears down the audio tap so the app returns to normal macOS audio

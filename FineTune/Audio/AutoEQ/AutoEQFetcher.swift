@@ -74,13 +74,13 @@ final class AutoEQFetcher {
             let (data, response) = try await URLSession.shared.data(from: Self.indexURL)
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                catalogState = .error("Failed to fetch catalog")
+                catalogState = .error(L10n.string("Failed to fetch catalog"))
                 logger.error("Catalog fetch returned non-200 status")
                 return
             }
 
             guard let text = String(data: data, encoding: .utf8) else {
-                catalogState = .error("Invalid catalog data")
+                catalogState = .error(L10n.string("Invalid catalog data"))
                 return
             }
 
@@ -95,7 +95,7 @@ final class AutoEQFetcher {
         } catch {
             // Keep existing cached catalog if we have one
             if catalog.isEmpty {
-                catalogState = .error("Network error: \(error.localizedDescription)")
+                catalogState = .error(L10n.format("Network error: %@", error.localizedDescription))
             }
             logger.error("Catalog fetch failed: \(error.localizedDescription)")
         }

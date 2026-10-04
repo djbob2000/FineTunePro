@@ -14,7 +14,11 @@ import os
 final class AUEffectChain: @unchecked Sendable {
 
     let entries: [AUEffectChainEntry]
-    let failedEntryIDs: Set<UUID>
+    private let initialFailedEntryIDs: Set<UUID>
+
+    var failedEntryIDs: Set<UUID> {
+        initialFailedEntryIDs.union(_hosts.filter { $0.renderFailed }.map(\.entryID))
+    }
 
     private let _hosts: [AUEffectHost]
     private let _hostCount: Int
@@ -54,9 +58,9 @@ final class AUEffectChain: @unchecked Sendable {
             )
             if host.instantiate() {
                 if let presetData = entry.presetData {
-                    _ = host.loadPreset(presetData)
+                    guard host.loadPreset(presetData) else { failed.insert(entry.id); continue }
                 } else if let presetIndex = entry.selectedFactoryPresetIndex {
-                    _ = host.selectFactoryPreset(index: presetIndex)
+                    guard host.selectFactoryPreset(index: presetIndex) else { failed.insert(entry.id); continue }
                 }
                 hosts.append(host)
             } else {
@@ -64,13 +68,10 @@ final class AUEffectChain: @unchecked Sendable {
                 logger.error("Failed to instantiate \(entry.pluginDescriptor.name), skipping")
             }
         }
-        self.failedEntryIDs = failed
+        self.initialFailedEntryIDs = failed
         self._hosts = hosts
         self._hostCount = hosts.count
 
-        for host in hosts {
-            CrashGuard.trackPlugin(host.descriptor.id)
-        }
 
         logger.info("Created AU effect chain with \(hosts.count)/\(entries.count) plugins at \(sampleRate)Hz")
     }

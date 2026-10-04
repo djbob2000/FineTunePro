@@ -59,6 +59,7 @@ final class ProcessTapController: ProcessTapControlling {
     private nonisolated(unsafe) var _forceSilence: Bool = false
     /// User-controlled mute - still tracks VU levels but outputs silence
     private nonisolated(unsafe) var _isMuted: Bool = false
+    private nonisolated(unsafe) var _monoDownmix = false
     // Device volume compensation removed — was dead code (always 1.0).
     // If implementing, ensure both primary and secondary callbacks disable
     // compensation during crossfade to avoid gain jumps (RT-013).
@@ -171,6 +172,12 @@ final class ProcessTapController: ProcessTapControlling {
     /// Current entries for rebuilding chains on crossfade
     private var _currentAUEntries: [AUEffectChainEntry] = []
     private var _currentDeviceAUEntries: [AUEffectChainEntry] = []
+    private var preparedDeviceAU: (deviceUID: String, configuration: DeviceAUEffectConfiguration)?
+    private var secondaryDeviceUID: String?
+
+    func prepareDeviceAUEffectChain(for deviceUID: String, configuration: DeviceAUEffectConfiguration) {
+        preparedDeviceAU = (deviceUID, configuration)
+    }
 
     // Target device UIDs for synchronized multi-output (first is clock source)
     private var targetDeviceUIDs: [String]
@@ -258,6 +265,8 @@ final class ProcessTapController: ProcessTapControlling {
         get { _isMuted }
         set { _isMuted = newValue }
     }
+
+    func setMonoDownmix(_ enabled: Bool) { _monoDownmix = enabled }
 
     // MARK: - Initialization
 
@@ -396,11 +405,18 @@ final class ProcessTapController: ProcessTapControlling {
 
     // MARK: - AU Effect Chain
 
+    private func invalidateAUEditors(_ chain: AUEffectChain?) {
+        guard let chain else { return }
+        AUPluginWindowManager.shared.invalidate(entryIDs: Set(chain.entries.map(\.id)))
+    }
+
     func updateAUEffectChain(_ entries: [AUEffectChainEntry]) {
         _currentAUEntries = entries
         let sampleRate = (try? primaryResources.aggregateDeviceID.readNominalSampleRate()) ?? 48000
         let newChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: sampleRate)
         let old = auEffectChain
+        invalidateAUEditors(old)
+        newChain?.setBypassed(old?.isBypassed ?? false)
         auEffectChain = newChain
         updateMaxTailTime()
         if let old {
@@ -409,6 +425,7 @@ final class ProcessTapController: ProcessTapControlling {
         if secondaryAUEffectChain != nil, let secRate = try? secondaryResources.aggregateDeviceID.readNominalSampleRate() {
             let oldSec = secondaryAUEffectChain
             secondaryAUEffectChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: secRate)
+            secondaryAUEffectChain?.setBypassed(newChain?.isBypassed ?? false)
             if let oldSec {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldSec }
             }
@@ -473,14 +490,17 @@ final class ProcessTapController: ProcessTapControlling {
         let sampleRate = (try? primaryResources.aggregateDeviceID.readNominalSampleRate()) ?? 48000
         let newChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: sampleRate)
         let old = deviceAUEffectChain
+        invalidateAUEditors(old)
+        newChain?.setBypassed(old?.isBypassed ?? false)
         deviceAUEffectChain = newChain
         updateMaxTailTime()
         if let old {
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = old }
         }
-        if secondaryDeviceAUEffectChain != nil, let secRate = try? secondaryResources.aggregateDeviceID.readNominalSampleRate() {
+        if secondaryDeviceUID == currentDeviceUID, secondaryDeviceAUEffectChain != nil, let secRate = try? secondaryResources.aggregateDeviceID.readNominalSampleRate() {
             let oldSec = secondaryDeviceAUEffectChain
             secondaryDeviceAUEffectChain = entries.isEmpty ? nil : AUEffectChain(entries: entries, sampleRate: secRate)
+            secondaryDeviceAUEffectChain?.setBypassed(newChain?.isBypassed ?? false)
             if let oldSec {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldSec }
             }
@@ -493,7 +513,7 @@ final class ProcessTapController: ProcessTapControlling {
 
     func setDeviceAUChainBypassed(_ bypassed: Bool) {
         deviceAUEffectChain?.setBypassed(bypassed)
-        secondaryDeviceAUEffectChain?.setBypassed(bypassed)
+        if secondaryDeviceUID == currentDeviceUID { secondaryDeviceAUEffectChain?.setBypassed(bypassed) }
         updateMaxTailTime()
     }
 
@@ -801,6 +821,7 @@ final class ProcessTapController: ProcessTapControlling {
     }
 
     func activate(initial: TapInitialState) throws {
+        _monoDownmix = initial.monoDownmix
         guard !activated else { return }
 
         logger.debug("Activating tap for \(self.app.name)")
@@ -890,6 +911,13 @@ final class ProcessTapController: ProcessTapControlling {
             bassExciterWet: Float(initial.loudnessBassExciterWet), bassLinearWet: Float(initial.loudnessBassLinearWet)
         )
         loudnessCompensator = makeLoudnessCompensator(sampleRate: sampleRate)
+        _currentAUEntries = initial.appAUEffectChain
+        _currentDeviceAUEntries = initial.deviceAUEffectChain
+        auEffectChain = initial.appAUEffectChain.isEmpty ? nil : AUEffectChain(entries: initial.appAUEffectChain, sampleRate: sampleRate)
+        deviceAUEffectChain = initial.deviceAUEffectChain.isEmpty ? nil : AUEffectChain(entries: initial.deviceAUEffectChain, sampleRate: sampleRate)
+        auEffectChain?.setBypassed(initial.appAUBypassed)
+        deviceAUEffectChain?.setBypassed(initial.deviceAUBypassed)
+        updateMaxTailTime()
 
         // Create IO proc with gain processing
         nextCallbackID += 1
@@ -950,6 +978,9 @@ final class ProcessTapController: ProcessTapControlling {
     func updateDevices(to newDeviceUIDs: [String], preferredTapSourceDeviceUID: String? = nil, sourceDeviceDead: Bool = false) async throws {
         precondition(!newDeviceUIDs.isEmpty, "Must have at least one target device")
         self.preferredTapSourceDeviceUID = preferredTapSourceDeviceUID
+        // Capture once so another routing request cannot change this transition's effects.
+        let destinationAU = preparedDeviceAU?.deviceUID == newDeviceUIDs[0] ? preparedDeviceAU?.configuration : nil
+        preparedDeviceAU = nil
 
         guard activated else {
             targetDeviceUIDs = newDeviceUIDs
@@ -971,11 +1002,11 @@ final class ProcessTapController: ProcessTapControlling {
             guard primaryResources.tapDescription != nil else {
                 throw CrossfadeError.noTapDescription
             }
-            try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, sourceAlreadySilent: true)
+            try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, sourceAlreadySilent: true, deviceAU: destinationAU)
         } else {
             crossfadeTask?.cancel()
             crossfadeTask = Task {
-                try await performCrossfadeSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs)
+                try await performCrossfadeSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, deviceAU: destinationAU)
             }
             do {
                 try await crossfadeTask!.value
@@ -987,7 +1018,7 @@ final class ProcessTapController: ProcessTapControlling {
                 guard primaryResources.tapDescription != nil else {
                     throw CrossfadeError.noTapDescription
                 }
-                try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs)
+                try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, deviceAU: destinationAU)
             }
             crossfadeTask = nil
         }
@@ -1075,6 +1106,8 @@ final class ProcessTapController: ProcessTapControlling {
     private func beginInvalidation() -> Bool {
         guard activated, !_invalidating else { return false }
         _invalidating = true
+        invalidateAUEditors(auEffectChain)
+        invalidateAUEditors(deviceAUEffectChain)
         activated = false
 
         _lastRenderHostTime = 0
@@ -1119,7 +1152,7 @@ final class ProcessTapController: ProcessTapControlling {
 
     // MARK: - Crossfade Operations
 
-    private func performCrossfadeSwitch(to primaryDeviceUID: String, allDeviceUIDs: [String]? = nil) async throws {
+    private func performCrossfadeSwitch(to primaryDeviceUID: String, allDeviceUIDs: [String]? = nil, deviceAU: DeviceAUEffectConfiguration? = nil) async throws {
         let deviceUIDs = allDeviceUIDs ?? [primaryDeviceUID]
 
         // Re-entrant guard (ORCH-001): if already switching, tear down in-progress secondary
@@ -1147,7 +1180,7 @@ final class ProcessTapController: ProcessTapControlling {
         crossfadeState.beginWarmup()
 
         logger.info("[CROSSFADE] Step 3: Creating secondary tap for \(deviceUIDs.count) device(s)")
-        try createSecondaryTap(for: deviceUIDs)
+        try createSecondaryTap(for: deviceUIDs, deviceAU: deviceAU)
 
         // LIFE-004/005: Ensure secondary tap is cleaned up if crossfade fails or is cancelled
         var crossfadeCompleted = false
@@ -1207,7 +1240,7 @@ final class ProcessTapController: ProcessTapControlling {
         logger.info("[CROSSFADE] Complete")
     }
 
-    private func createSecondaryTap(for outputUIDs: [String]) throws {
+    private func createSecondaryTap(for outputUIDs: [String], deviceAU: DeviceAUEffectConfiguration? = nil) throws {
         precondition(!outputUIDs.isEmpty, "Must have at least one output device")
 
         let (tapDesc, tapID) = try createProcessTap(preferredDeviceUID: preferredTapSourceDeviceUID)
@@ -1286,12 +1319,13 @@ final class ProcessTapController: ProcessTapControlling {
         let secLoudness = makeLoudnessCompensator(sampleRate: sampleRate)
         secondaryLoudnessCompensator = secLoudness
 
-        if !_currentAUEntries.isEmpty {
-            secondaryAUEffectChain = AUEffectChain(entries: _currentAUEntries, sampleRate: sampleRate)
-        }
-        if !_currentDeviceAUEntries.isEmpty {
-            secondaryDeviceAUEffectChain = AUEffectChain(entries: _currentDeviceAUEntries, sampleRate: sampleRate)
-        }
+        let appEntries = auEffectChainWithLiveState() ?? _currentAUEntries
+        secondaryAUEffectChain = appEntries.isEmpty ? nil : AUEffectChain(entries: appEntries, sampleRate: sampleRate)
+        secondaryAUEffectChain?.setBypassed(auEffectChain?.isBypassed ?? false)
+        let deviceEntries = deviceAU?.entries ?? deviceAUEffectChainWithLiveState() ?? _currentDeviceAUEntries
+        secondaryDeviceAUEffectChain = deviceEntries.isEmpty ? nil : AUEffectChain(entries: deviceEntries, sampleRate: sampleRate)
+        secondaryDeviceAUEffectChain?.setBypassed(deviceAU?.isBypassed ?? deviceAUEffectChain?.isBypassed ?? false)
+        secondaryDeviceUID = outputUIDs[0]
 
         nextCallbackID += 1
         _secondaryCallbackID = nextCallbackID
@@ -1341,6 +1375,7 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryLoudnessEqualizerProcessor = nil
         secondaryAUEffectChain = nil
         secondaryDeviceAUEffectChain = nil
+        secondaryDeviceUID = nil
     }
 
     private func promoteSecondaryToPrimary() {
@@ -1365,7 +1400,9 @@ final class ProcessTapController: ProcessTapControlling {
         let oldLoudnessEqualizer = loudnessEqualizerProcessor
         let oldPostAgcCompressor = postAgcCompressorProcessor
         let oldAUChain = auEffectChain
+        invalidateAUEditors(oldAUChain)
         let oldDeviceAUChain = deviceAUEffectChain
+        invalidateAUEditors(oldDeviceAUChain)
         eqProcessor = secondaryEQProcessor
         autoEQProcessor = secondaryAutoEQProcessor
         dynamicEqualizer = secondaryDynamicEqualizer
@@ -1374,6 +1411,9 @@ final class ProcessTapController: ProcessTapControlling {
         postAgcCompressorProcessor = secondaryPostAgcCompressorProcessor
         auEffectChain = secondaryAUEffectChain
         deviceAUEffectChain = secondaryDeviceAUEffectChain
+        _currentAUEntries = auEffectChain?.entries ?? []
+        _currentDeviceAUEntries = deviceAUEffectChain?.entries ?? []
+        updateMaxTailTime()
         secondaryEQProcessor = nil
         secondaryAutoEQProcessor = nil
         secondaryDynamicEqualizer = nil
@@ -1382,6 +1422,7 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryPostAgcCompressorProcessor = nil
         secondaryAUEffectChain = nil
         secondaryDeviceAUEffectChain = nil
+        secondaryDeviceUID = nil
 
         // Deferred cleanup: hold old processors alive briefly so any in-flight RT callback
         // that read the pointer before the swap finishes its buffer without accessing freed memory.
@@ -1418,7 +1459,7 @@ final class ProcessTapController: ProcessTapControlling {
     /// Performs a destructive (non-crossfade) device switch with silence padding.
     /// - Parameter sourceAlreadySilent: If true (e.g. source device disconnected), skips the
     ///   pre-switch silence wait and uses a shorter post-switch settle time.
-    private func performDestructiveDeviceSwitch(to primaryDeviceUID: String, allDeviceUIDs: [String]? = nil, sourceAlreadySilent: Bool = false) async throws {
+    private func performDestructiveDeviceSwitch(to primaryDeviceUID: String, allDeviceUIDs: [String]? = nil, sourceAlreadySilent: Bool = false, deviceAU: DeviceAUEffectConfiguration? = nil) async throws {
         let deviceUIDs = allDeviceUIDs ?? [primaryDeviceUID]
         let originalVolume = _volume
 
@@ -1433,7 +1474,7 @@ final class ProcessTapController: ProcessTapControlling {
             try await Task.sleep(for: .milliseconds(100))
         }
 
-        try performDeviceSwitch(to: deviceUIDs)
+        try performDeviceSwitch(to: deviceUIDs, deviceAU: deviceAU)
 
         _primaryCurrentVolume = 0
         _volume = 0
@@ -1452,7 +1493,7 @@ final class ProcessTapController: ProcessTapControlling {
         logger.info("[SWITCH-DESTROY] Complete")
     }
 
-    private func performDeviceSwitch(to outputUIDs: [String]) throws {
+    private func performDeviceSwitch(to outputUIDs: [String], deviceAU: DeviceAUEffectConfiguration? = nil) throws {
         precondition(!outputUIDs.isEmpty, "Must have at least one output device")
 
         var newResources = TapResources()
@@ -1525,51 +1566,55 @@ final class ProcessTapController: ProcessTapControlling {
         targetDeviceUIDs = outputUIDs
         currentDeviceUIDs = outputUIDs
 
-        if let deviceSampleRate = try? primaryResources.aggregateDeviceID.readNominalSampleRate() {
-            _primarySampleRate = deviceSampleRate
-            rampCoefficient = 1 - exp(-1 / (Float(deviceSampleRate) * 0.030))
-            eqProcessor?.updateSampleRate(deviceSampleRate)
-            autoEQProcessor?.updateSampleRate(deviceSampleRate)
-            dynamicEqualizer?.updateSampleRate(deviceSampleRate)
-            loudnessCompensator?.updateSampleRate(deviceSampleRate)
+        let deviceSampleRate = (try? primaryResources.aggregateDeviceID.readNominalSampleRate()) ?? 48_000
+        _primarySampleRate = deviceSampleRate
+        rampCoefficient = 1 - exp(-1 / (Float(deviceSampleRate) * 0.030))
+        eqProcessor?.updateSampleRate(deviceSampleRate)
+        autoEQProcessor?.updateSampleRate(deviceSampleRate)
+        dynamicEqualizer?.updateSampleRate(deviceSampleRate)
+        loudnessCompensator?.updateSampleRate(deviceSampleRate)
 
-            // LoudnessEqualizer is immutable — swap to new instance at new sample rate
-            if let oldLE = loudnessEqualizerProcessor {
-                let newLE = LoudnessEqualizer(
-                    settings: oldLE.currentSettings,
-                    sampleRate: Float(deviceSampleRate)
-                )
-                loudnessEqualizerProcessor = newLE
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldLE }
-            }
-
-            // Post AGC Compressor is also immutable — swap to new instance at new sample rate
-            if let oldPAC = postAgcCompressorProcessor {
-                let newPAC = PostAgcCompressor(
-                    settings: oldPAC.currentSettings,
-                    sampleRate: Float(deviceSampleRate)
-                )
-                postAgcCompressorProcessor = newPAC
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldPAC }
-            }
-
-            // AU chains are immutable — rebuild at new sample rate
-            if !_currentAUEntries.isEmpty {
-                let oldChain = auEffectChain
-                auEffectChain = AUEffectChain(entries: _currentAUEntries, sampleRate: deviceSampleRate)
-                if let oldChain {
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldChain }
-                }
-            }
-            if !_currentDeviceAUEntries.isEmpty {
-                let oldChain = deviceAUEffectChain
-                deviceAUEffectChain = AUEffectChain(entries: _currentDeviceAUEntries, sampleRate: deviceSampleRate)
-                if let oldChain {
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldChain }
-                }
-            }
-            updateMaxTailTime()
+        // LoudnessEqualizer is immutable — swap to new instance at new sample rate
+        if let oldLE = loudnessEqualizerProcessor {
+            let newLE = LoudnessEqualizer(
+                settings: oldLE.currentSettings,
+                sampleRate: Float(deviceSampleRate)
+            )
+            loudnessEqualizerProcessor = newLE
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldLE }
         }
+
+        // Post AGC Compressor is also immutable — swap to new instance at new sample rate
+        if let oldPAC = postAgcCompressorProcessor {
+            let newPAC = PostAgcCompressor(
+                settings: oldPAC.currentSettings,
+                sampleRate: Float(deviceSampleRate)
+            )
+            postAgcCompressorProcessor = newPAC
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldPAC }
+        }
+
+        // AU chains are immutable — rebuild at new sample rate
+        if !_currentAUEntries.isEmpty {
+            let oldChain = auEffectChain
+            invalidateAUEditors(oldChain)
+            _currentAUEntries = auEffectChainWithLiveState() ?? _currentAUEntries
+            auEffectChain = AUEffectChain(entries: _currentAUEntries, sampleRate: deviceSampleRate)
+            auEffectChain?.setBypassed(oldChain?.isBypassed ?? false)
+            if let oldChain {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldChain }
+            }
+        }
+        let oldDeviceChain = deviceAUEffectChain
+        let destinationEntries = deviceAU?.entries ?? deviceAUEffectChainWithLiveState() ?? _currentDeviceAUEntries
+        invalidateAUEditors(oldDeviceChain)
+        _currentDeviceAUEntries = destinationEntries
+        deviceAUEffectChain = destinationEntries.isEmpty ? nil : AUEffectChain(entries: destinationEntries, sampleRate: deviceSampleRate)
+        deviceAUEffectChain?.setBypassed(deviceAU?.isBypassed ?? oldDeviceChain?.isBypassed ?? false)
+        if let oldDeviceChain {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { _ = oldDeviceChain }
+        }
+        updateMaxTailTime()
     }
 
     private func cleanupPartialActivation() {
@@ -1631,6 +1676,32 @@ final class ProcessTapController: ProcessTapControlling {
         isPrimary ? primarySampleRate : secondarySampleRate
     }
 
+    /// Scan every channel; a silent left channel says nothing about the right.
+    @inline(__always)
+    nonisolated static func inputPeakAndFrameCount(_ buffers: UnsafeMutableAudioBufferListPointer) -> (peak: Float, frames: Int) {
+        var peak: Float = 0
+        var frames = 0
+        for buffer in buffers {
+            guard let data = buffer.mData else { continue }
+            let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
+            if frames == 0 { frames = count / max(1, Int(buffer.mNumberChannels)) }
+            let samples = data.assumingMemoryBound(to: Float.self)
+            for index in 0..<count { peak = max(peak, abs(samples[index])) }
+        }
+        return (min(peak, 1), frames)
+    }
+
+    @inline(__always)
+    nonisolated static func advanceAUTail(rawPeak: Float, tailSamples: UInt64, frameCount: Int, silentSamples: inout UInt64) -> Bool {
+        guard tailSamples > 0, rawPeak < outputGateSilenceThreshold else {
+            silentSamples = 0
+            return false
+        }
+        let next = silentSamples.addingReportingOverflow(UInt64(max(frameCount, 0)))
+        silentSamples = next.overflow ? UInt64.max : next.partialValue
+        return silentSamples <= tailSamples
+    }
+
     @inline(__always)
     nonisolated static func processMappedBuffers(
         inputBuffers: UnsafeMutableAudioBufferListPointer,
@@ -1653,11 +1724,23 @@ final class ProcessTapController: ProcessTapControlling {
         brickwallLimiter: BrickwallLimiter?,
         outputMeterChannelPeaks: UnsafeMutablePointer<(Float, Float)>? = nil,
         outputMeterChannelCount: UnsafeMutablePointer<Int>? = nil,
-        sampleRate: Double
+        sampleRate: Double,
+        renderAudioUnits: Bool = true,
+        monoDownmix: Bool = false
     ) -> (Float, Bool) {
         let inputBufferCount = inputBuffers.count
         let outputBufferCount = outputBuffers.count
         let totalOutputChannels = outputBuffers.reduce(0) { $0 + max(1, Int($1.mNumberChannels)) }
+        // A planar stereo source has separate one-channel buffers. Select the
+        // trailing process-tap pair, excluding any hardware-input buffers.
+        let monoPlanarPair = monoDownmix && inputBufferCount >= 2
+            && inputBuffers[inputBufferCount - 2].mNumberChannels == 1
+            && inputBuffers[inputBufferCount - 1].mNumberChannels == 1
+        let monoInputIndex = monoPlanarPair ? inputBufferCount - 2
+            : max(0, inputBufferCount - max(1, outputBufferCount))
+        let monoRightBuffer = monoPlanarPair ? inputBuffers[inputBufferCount - 1] : nil
+        let monoRightSamples = monoRightBuffer?.mData?.assumingMemoryBound(to: Float.self)
+        let monoRightFrameCount = monoRightBuffer.map { Int($0.mDataByteSize) / MemoryLayout<Float>.size } ?? 0
         var maxOutputPeak: Float = 0.0
         var leftOutputPeak: Float = 0.0
         var rightOutputPeak: Float = 0.0
@@ -1665,14 +1748,19 @@ final class ProcessTapController: ProcessTapControlling {
         var outputChannelOffset = 0
         var processFrameCount = 0
 
+        let initialVolume = currentVol
         for outputIndex in 0..<outputBufferCount {
+            // Mono outputs share one time-based ramp across all channel buffers.
+            if monoDownmix { currentVol = initialVolume }
             let outputBuffer = outputBuffers[outputIndex]
             let outputChannelsInBuffer = max(1, Int(outputBuffer.mNumberChannels))
             defer { outputChannelOffset += outputChannelsInBuffer }
             guard let outputData = outputBuffer.mData else { continue }
 
             let inputIndex: Int
-            if inputBufferCount > outputBufferCount {
+            if monoDownmix {
+                inputIndex = monoInputIndex
+            } else if inputBufferCount > outputBufferCount {
                 inputIndex = inputBufferCount - outputBufferCount + outputIndex
             } else {
                 inputIndex = outputIndex
@@ -1697,7 +1785,8 @@ final class ProcessTapController: ProcessTapControlling {
             let outputSampleCount = Int(outputBuffer.mDataByteSize) / MemoryLayout<Float>.size
             let inputFrameCount = inputSampleCount / inputChannels
             let outputFrameCount = outputSampleCount / outputChannels
-            let frameCount = min(inputFrameCount, outputFrameCount)
+            let sourceFrameCount = monoPlanarPair ? max(inputFrameCount, monoRightFrameCount) : inputFrameCount
+            let frameCount = min(sourceFrameCount, outputFrameCount)
 
             guard frameCount > 0 else {
                 memset(outputData, 0, Int(outputBuffer.mDataByteSize))
@@ -1708,9 +1797,30 @@ final class ProcessTapController: ProcessTapControlling {
             let safeRight = min(max(preferredStereoRight, 0), max(outputChannels - 1, 0))
 
             let eq = eqProc  // Parameter read — each callback passes its own processor
-            let eqCanProcessStereoInterleaved = (inputChannels == 2 && outputChannels == 2)
+            let eqCanProcessStereoInterleaved = (outputChannels == 2 && (inputChannels == 2 || monoDownmix))
 
-            if inputChannels == outputChannels {
+            if monoDownmix {
+                for frame in 0..<frameCount {
+                    let inBase = frame * inputChannels
+                    let mono: Float
+                    if monoPlanarPair {
+                        let left = frame < inputFrameCount ? inputSamples[frame] : 0
+                        let right = frame < monoRightFrameCount ? (monoRightSamples?[frame] ?? 0) : 0
+                        mono = (left + right) * 0.5
+                    } else {
+                        mono = inputChannels == 1 ? inputSamples[inBase]
+                            : (inputSamples[inBase] + inputSamples[inBase + 1]) * 0.5
+                    }
+                    let outBase = frame * outputChannels
+                    for channel in 0..<outputChannels { outputSamples[outBase + channel] = 0 }
+                    outputSamples[outBase + safeLeft] = mono
+                    outputSamples[outBase + safeRight] = mono
+                }
+                let written = frameCount * outputChannels
+                if written < outputSampleCount {
+                    memset(outputSamples.advanced(by: written), 0, (outputSampleCount - written) * MemoryLayout<Float>.size)
+                }
+            } else if inputChannels == outputChannels {
                 let sampleCount = frameCount * inputChannels
                 for frame in 0..<frameCount {
                     let base = frame * inputChannels
@@ -1797,12 +1907,12 @@ final class ProcessTapController: ProcessTapControlling {
             }
 
             // Per-app AU effect chain (after EQ/AutoEQ, before device AU chain)
-            if let appAUChain, eqCanProcessStereoInterleaved {
+            if renderAudioUnits, let appAUChain, eqCanProcessStereoInterleaved {
                 appAUChain.processInterleaved(samples: outputSamples, frameCount: frameCount)
             }
 
             // Per-device AU effect chain (after per-app AU, before volume/loudness)
-            if let deviceAUChain, eqCanProcessStereoInterleaved {
+            if renderAudioUnits, let deviceAUChain, eqCanProcessStereoInterleaved {
                 deviceAUChain.processInterleaved(samples: outputSamples, frameCount: frameCount)
             }
 
@@ -1906,23 +2016,9 @@ final class ProcessTapController: ProcessTapControlling {
             return
         }
 
-        // Track peak level for VU meter
-        var maxPeak: Float = 0.0
-        var totalSamplesThisBuffer: Int = 0
-        for inputBuffer in inputBuffers {
-            guard let inputData = inputBuffer.mData else { continue }
-            let inputSamples = inputData.assumingMemoryBound(to: Float.self)
-            let channels = max(1, Int(inputBuffer.mNumberChannels))
-            let sampleCount = Int(inputBuffer.mDataByteSize) / MemoryLayout<Float>.size
-            if totalSamplesThisBuffer == 0 {
-                totalSamplesThisBuffer = sampleCount / channels
-            }
-            for i in stride(from: 0, to: sampleCount, by: channels) {
-                let absSample = abs(inputSamples[i])
-                if absSample > maxPeak { maxPeak = absSample }
-            }
-        }
-        let rawPeak = min(maxPeak, 1.0)
+        let inputState = Self.inputPeakAndFrameCount(inputBuffers)
+        let rawPeak = inputState.peak
+        let totalSamplesThisBuffer = inputState.frames
 
         if isPrimary {
             _peakLevel = rawPeak >= _peakLevel ? rawPeak : _peakLevel + levelSmoothingFactor * (rawPeak - _peakLevel)
@@ -1932,24 +2028,12 @@ final class ProcessTapController: ProcessTapControlling {
             _ = crossfadeState.updateProgress(samples: totalSamplesThisBuffer)
         }
 
-        // AU tail time: track silent input to allow reverb/delay tails to fade naturally
-        let tailSamples = _maxTailSamples
-        if isPrimary && tailSamples > 0 {
-            let silenceThreshold: Float = 0.0001
-            if rawPeak < silenceThreshold {
-                _silentSampleCount += UInt64(totalSamplesThisBuffer)
-                if _silentSampleCount > tailSamples {
-                    // Tail has expired — zero output
-                    for buf in outputBuffers {
-                        if let data = buf.mData { memset(data, 0, Int(buf.mDataByteSize)) }
-                    }
-                    return
-                }
-                // Still in tail period — continue processing with silent input
-            } else {
-                _silentSampleCount = 0
-            }
-        }
+        let tailActive = isPrimary && Self.advanceAUTail(
+            rawPeak: rawPeak, tailSamples: _maxTailSamples,
+            frameCount: totalSamplesThisBuffer, silentSamples: &_silentSampleCount
+        )
+        // Only skip AU work; retain the fork's gain/gate/meter processing during silence.
+        let renderAudioUnits = !isPrimary || rawPeak >= Self.outputGateSilenceThreshold || tailActive
 
         // Advance the gate before the _isMuted early-return: feeding synthetic silence
         // while muted lets _outputGateSilentSamples accumulate and re-arm the gate after
@@ -1958,7 +2042,7 @@ final class ProcessTapController: ProcessTapControlling {
         // a fresh activate(initial:) and so resets gate state.
         let outputGateMultiplier: Float
         if isPrimary {
-            let gateInputPeak: Float = _isMuted ? 0.0 : rawPeak
+            let gateInputPeak: Float = _isMuted ? 0.0 : (tailActive ? Self.outputGateSilenceThreshold * 2 : rawPeak)
             outputGateMultiplier = Self.advanceOutputGate(
                 phase: &_outputGateRawPhase,
                 progress: &_outputGateProgress,
@@ -2057,7 +2141,9 @@ final class ProcessTapController: ProcessTapControlling {
                 isPrimary: isPrimary,
                 primarySampleRate: _primarySampleRate,
                 secondarySampleRate: _secondarySampleRate
-            )
+            ),
+            renderAudioUnits: renderAudioUnits,
+            monoDownmix: _monoDownmix
         )
 
         if isPrimary {

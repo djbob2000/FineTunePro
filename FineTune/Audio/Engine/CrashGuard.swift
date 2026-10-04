@@ -127,13 +127,16 @@ nonisolated enum CrashGuard {
         return hash
     }
 
+    private nonisolated(unsafe) static var pluginReferenceCounts: [UInt64: Int] = [:]
+
     static func trackPlugin(_ pluginID: String) {
         let hash = fnv1aHash(pluginID)
         os_unfair_lock_lock(&gPluginHashLock)
         defer { os_unfair_lock_unlock(&gPluginHashLock) }
         guard let slots = gPluginHashSlots else { return }
         let n = Int(gPluginHashCount)
-        // Deduplicate
+        pluginReferenceCounts[hash, default: 0] += 1
+        // Deduplicate descriptor hashes while retaining each live instance.
         for i in 0..<n {
             if slots[i] == hash { return }
         }
@@ -150,6 +153,9 @@ nonisolated enum CrashGuard {
         os_unfair_lock_lock(&gPluginHashLock)
         defer { os_unfair_lock_unlock(&gPluginHashLock) }
         guard let slots = gPluginHashSlots else { return }
+        let references = pluginReferenceCounts[hash, default: 0]
+        if references > 1 { pluginReferenceCounts[hash] = references - 1; return }
+        pluginReferenceCounts.removeValue(forKey: hash)
         let n = Int(gPluginHashCount)
         for i in 0..<n {
             if slots[i] == hash {

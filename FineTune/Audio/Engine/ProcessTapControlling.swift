@@ -22,6 +22,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func activate(initial: TapInitialState) throws
     func invalidate()
     func invalidateAsync() async
+    func setMonoDownmix(_ enabled: Bool)
     func updateEQSettings(_ settings: EQSettings)
     func updateAutoEQProfile(_ profile: AutoEQProfile?)
     func setAutoEQPreampEnabled(_ enabled: Bool)
@@ -38,6 +39,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func recreateForOutputRateChange() async throws
 
     // AU effect chains
+    func prepareDeviceAUEffectChain(for deviceUID: String, configuration: DeviceAUEffectConfiguration)
     func updateAUEffectChain(_ entries: [AUEffectChainEntry])
     func getAUEffectChainEntries() -> [AUEffectChainEntry]
     func setAUChainBypassed(_ bypassed: Bool)
@@ -49,6 +51,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
 }
 
 extension ProcessTapControlling {
+    func setMonoDownmix(_ enabled: Bool) {}
     func updateAggregateBufferFrameSize() {
         updateAggregateBufferFrameSize(targetUIDs: nil)
     }
@@ -82,6 +85,7 @@ extension ProcessTapControlling {
         // Default no-op for mocks that don't override
     }
 
+    func prepareDeviceAUEffectChain(for deviceUID: String, configuration: DeviceAUEffectConfiguration) {}
     func updateAUEffectChain(_ entries: [AUEffectChainEntry]) {}
     func getAUEffectChainEntries() -> [AUEffectChainEntry] { [] }
     func setAUChainBypassed(_ bypassed: Bool) {}

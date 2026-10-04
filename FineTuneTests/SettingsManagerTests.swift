@@ -489,3 +489,22 @@ struct MenuBarIconStyleTests {
         }
     }
 }
+
+@Suite("Mono playback persistence")
+@MainActor
+struct MonoPersistenceTests {
+    @Test("Mono-only preferences survive pruning, disk reload and reset")
+    func monoPersistence() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let settings = SettingsManager(directory: directory)
+        #expect(settings.getMonoDownmix(for: "app") == nil)
+        settings.setMonoDownmix(for: "app", to: true)
+        settings.pruneStaleSettings(keeping: [])
+        settings.flushSync()
+        let restored = SettingsManager(directory: directory)
+        #expect(restored.getMonoDownmix(for: "app") == true)
+        restored.resetAllSettings()
+        #expect(restored.getMonoDownmix(for: "app") == nil)
+    }
+}
