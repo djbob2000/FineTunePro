@@ -17,19 +17,21 @@ struct LoudnessVolumeCompensationTests {
         let settings: SettingsManager
         let deviceMonitor: MockAudioDeviceMonitor
         let deviceVolume: MockDeviceVolumeProviding
+        let productionVolume: DeviceVolumeMonitor?
         let device: AudioDevice
         let app: AudioApp
         let lastTap: () -> RecordingProcessTapController?
     }
     
-    private func makeFixture(backend: VolumeControlTier) -> Fixture {
+    private func makeFixture(backend: VolumeControlTier, useRealVolumeMonitor: Bool = false) -> Fixture {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         let settings = SettingsManager(directory: tempDir)
         
         let deviceMonitor = MockAudioDeviceMonitor()
         let device = AudioDevice(
-            id: AudioDeviceID(99),
+            // An absent HAL ID keeps these regressions independent of physical devices.
+            id: useRealVolumeMonitor ? AudioDeviceID(0xFFFF_FF00) : AudioDeviceID(99),
             uid: "uid-test-device",
             name: "Test Output Device",
             icon: nil,
@@ -40,6 +42,19 @@ struct LoudnessVolumeCompensationTests {
         let mockVolume = MockDeviceVolumeProviding(deviceMonitor: deviceMonitor)
         mockVolume.volumes[device.id] = 0.5
         mockVolume.overridesByUID[device.uid] = backend
+        let productionVolume: DeviceVolumeMonitor?
+        let volumeProvider: any DeviceVolumeProviding
+        if useRealVolumeMonitor {
+            settings.setDeviceVolumeTierOverride(for: device.uid, to: backend)
+            settings.setSoftwareDeviceVolume(for: device.uid, to: 0.5)
+            let monitor = DeviceVolumeMonitor(deviceMonitor: deviceMonitor, settingsManager: settings)
+            monitor.refreshOutputDeviceStates()
+            productionVolume = monitor
+            volumeProvider = monitor
+        } else {
+            productionVolume = nil
+            volumeProvider = mockVolume
+        }
         
         let permission = AudioRecordingPermission()
         permission.status = .authorized
@@ -63,7 +78,7 @@ struct LoudnessVolumeCompensationTests {
             autoEQProfileManager: AutoEQProfileManager(),
             deviceProvider: deviceMonitor,
             processMonitor: processMonitor,
-            deviceVolumeMonitor: mockVolume,
+            deviceVolumeMonitor: volumeProvider,
             tapFactory: { app, uids, _ in
                 let tap = RecordingProcessTapController(app: app, deviceUIDs: uids)
                 box.last = tap
@@ -77,12 +92,101 @@ struct LoudnessVolumeCompensationTests {
             settings: settings,
             deviceMonitor: deviceMonitor,
             deviceVolume: mockVolume,
+            productionVolume: productionVolume,
             device: device,
             app: app,
             lastTap: { box.last }
         )
     }
     
+    @Test("Boost changes refresh the loudness headroom without changing listening volume")
+    func boostRefreshesLoudnessHeadroom() throws {
+        let fix = makeFixture(backend: .hardware)
+        fix.settings.setLoudnessCompensationEnabled(for: fix.device.uid, to: true)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        tap.clearEvents()
+        fix.engine.setBoost(for: fix.app, to: .x2)
+        #expect(tap.volume == 2)
+        let updates = tap.events.compactMap { event -> Float? in
+            if case let .updateLoudnessCompensation(volume, true, _, _, _, _, _, _, _) = event { return volume }
+            return nil
+        }
+        #expect(updates.last == 0.5)
+    }
+
+    @Test("Software unmute refreshes headroom after the volume callback restores a muted gain")
+    func softwareUnmuteRefreshesHeadroom() throws {
+        let fix = makeFixture(backend: .software, useRealVolumeMonitor: true)
+        fix.settings.setLoudnessCompensationEnabled(for: fix.device.uid, to: true)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        let monitor = try #require(fix.productionVolume)
+        monitor.setMute(for: fix.device.id, to: true)
+        #expect(tap.volume == 0)
+        tap.clearEvents()
+        monitor.setMute(for: fix.device.id, to: false)
+
+        #expect(tap.volume == 0.5)
+        #expect(tap.lastLoudnessDigitalVolume == 0.5)
+        let updates = tap.events.compactMap { event -> Float? in
+            if case let .updateLoudnessCompensation(volume, true, _, _, _, _, _, _, _) = event { return volume }
+            return nil
+        }
+        #expect(updates.last == 0.5)
+    }
+
+    @Test("Backend overrides refresh active tap gain and loudness in both directions")
+    func backendOverridesRefreshTapState() throws {
+        let fix = makeFixture(backend: .hardware, useRealVolumeMonitor: true)
+        fix.settings.setLoudnessCompensationEnabled(for: fix.device.uid, to: true)
+        fix.settings.setSoftwareDeviceVolume(for: fix.device.uid, to: 0.25)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        let monitor = try #require(fix.productionVolume)
+        #expect(tap.volume == 1)
+
+        for backend in [VolumeControlTier.software, .hardware] {
+            tap.clearEvents()
+            // Match the detail sheet's real override entry point.
+            fix.settings.setDeviceVolumeTierOverride(for: fix.device.uid, to: backend)
+            monitor.applyTierOverrideChange(for: fix.device.id)
+            #expect(tap.volume == (backend == .software ? 0.25 : 1))
+            #expect(tap.lastLoudnessDigitalVolume == tap.volume)
+            #expect(tap.currentDeviceVolume == monitor.volumes[fix.device.id])
+            let updates = tap.events.compactMap { event -> Float? in
+                if case let .updateLoudnessCompensation(volume, true, _, _, _, _, _, _, _) = event { return volume }
+                return nil
+            }
+            #expect(updates.last == monitor.volumes[fix.device.id])
+        }
+    }
+
+    @Test("Backend overrides preserve mute while refreshing tap gain and loudness")
+    func mutedBackendOverridesRefreshTapState() throws {
+        let fix = makeFixture(backend: .software, useRealVolumeMonitor: true)
+        fix.settings.setLoudnessCompensationEnabled(for: fix.device.uid, to: true)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let tap = try #require(fix.lastTap())
+        let monitor = try #require(fix.productionVolume)
+        monitor.setMute(for: fix.device.id, to: true)
+
+        for backend in [VolumeControlTier.hardware, .software] {
+            tap.clearEvents()
+            fix.settings.setDeviceVolumeTierOverride(for: fix.device.uid, to: backend)
+            monitor.applyTierOverrideChange(for: fix.device.id)
+            #expect(tap.isDeviceMuted)
+            #expect(monitor.muteStates[fix.device.id] == true)
+            #expect(tap.volume == (backend == .software ? 0 : 1))
+            #expect(tap.lastLoudnessDigitalVolume == tap.volume)
+            let updates = tap.events.compactMap { event -> Float? in
+                if case let .updateLoudnessCompensation(volume, true, _, _, _, _, _, _, _) = event { return volume }
+                return nil
+            }
+            #expect(updates.last == 0)
+        }
+    }
+
     @Test("Toggling loudness on hardware device does NOT adjust hardware volume and updates filter gains instantly")
     func togglingLoudnessOnHardwareDeviceDoesNotAdjustHardwareVolume() async throws {
         let fix = makeFixture(backend: .hardware)

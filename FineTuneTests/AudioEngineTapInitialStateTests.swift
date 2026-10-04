@@ -34,6 +34,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         var loudnessVolume: Float
         var loudnessCompensationEnabled: Bool
         var loudnessReferencePhon: Double
+        var loudnessMaxDB: Double
         var loudnessEqualizerSettings: LoudnessEqualizerSettings
         var loudnessBassCrossover: Double
         var loudnessGainScale: Double
@@ -50,6 +51,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
             self.loudnessVolume = s.loudnessVolume
             self.loudnessCompensationEnabled = s.loudnessCompensationEnabled
             self.loudnessReferencePhon = s.loudnessReferencePhon
+            self.loudnessMaxDB = s.loudnessMaxDB
             self.loudnessEqualizerSettings = s.loudnessEqualizerSettings
             self.loudnessBassCrossover = s.loudnessBassCrossover
             self.loudnessGainScale = s.loudnessGainScale
@@ -62,6 +64,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
 
     let app: AudioApp
     private(set) var events: [Event] = []
+    private(set) var lastLoudnessDigitalVolume: Float?
 
     // Mutable surface — recorded as plain property writes (not events).
     var volume: Float = 1.0
@@ -83,6 +86,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
 
     func clearEvents() {
         events.removeAll()
+        lastLoudnessDigitalVolume = nil
     }
 
     func activate(initial: TapInitialState) throws {
@@ -106,6 +110,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
     }
 
     func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float) {
+        lastLoudnessDigitalVolume = self.volume
         events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, bassCrossover: bassCrossover, trebleCrossover: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet))
     }
 
@@ -237,6 +242,15 @@ private final class TapBox {
 struct AudioEngineTapInitialStateTests {
 
     // MARK: Single-knob derivation
+
+    @Test("The saved loudness threshold is applied before the first audio callback")
+    func loudnessMaxDBIsCarried() throws {
+        let fix = makeFixture()
+        fix.settings.setLoudnessMaxDB(for: fix.device.uid, to: -20)
+        fix.engine.setDevice(for: fix.app, deviceUID: fix.device.uid)
+        let initial = try #require(capturedInitial(fix))
+        #expect(initial.loudnessMaxDB == -20)
+    }
 
     @Test("EQ settings persisted for this app land in TapInitialState.eqSettings")
     func eqSettingsAreCarried() throws {

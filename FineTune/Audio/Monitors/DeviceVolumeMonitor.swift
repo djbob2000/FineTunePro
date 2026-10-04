@@ -65,7 +65,7 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
     /// Called when the default input device changes (newDeviceUID)
     var onDefaultInputDeviceChanged: ((String) -> Void)?
 
-    private let deviceMonitor: AudioDeviceMonitor
+    private let deviceMonitor: any AudioDeviceProviding
     private let settingsManager: SettingsManager
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "DeviceVolumeMonitor")
 
@@ -144,13 +144,13 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
     )
 
     #if !APP_STORE
-    init(deviceMonitor: AudioDeviceMonitor, settingsManager: SettingsManager, ddcController: DDCController? = nil) {
+    init(deviceMonitor: any AudioDeviceProviding, settingsManager: SettingsManager, ddcController: DDCController? = nil) {
         self.deviceMonitor = deviceMonitor
         self.settingsManager = settingsManager
         self.ddcController = ddcController
     }
     #else
-    init(deviceMonitor: AudioDeviceMonitor, settingsManager: SettingsManager) {
+    init(deviceMonitor: any AudioDeviceProviding, settingsManager: SettingsManager) {
         self.deviceMonitor = deviceMonitor
         self.settingsManager = settingsManager
     }
@@ -158,7 +158,7 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
 
     func outputVolumeBackend(for deviceID: AudioDeviceID) -> VolumeControlTier {
         guard deviceID.isValid else { return .software }
-        if let uid = deviceMonitor.device(for: deviceID)?.uid,
+        if let uid = deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid,
            let override = settingsManager.getDeviceVolumeTierOverride(for: uid) {
             return override
         }
@@ -1039,7 +1039,7 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
     /// Syncs mute authority across the tier boundary so the user's mute intent
     /// survives the transition in either direction without a user-visible jump.
     func applyTierOverrideChange(for deviceID: AudioDeviceID) {
-        guard let device = deviceMonitor.device(for: deviceID) else { return }
+        guard let device = deviceMonitor.outputDevices.first(where: { $0.id == deviceID }) else { return }
         let newBackend = outputVolumeBackend(for: deviceID)
         let previousMute = muteStates[deviceID] ?? false
         switch newBackend {
@@ -1068,10 +1068,15 @@ final class DeviceVolumeMonitor: DeviceVolumeProviding {
             }
         }
         readOneState(for: deviceID, device: device)
+        // A backend change can alter processing gain even if the visible volume
+        // is unchanged. Publish only after both caches contain the final state.
+        guard let volume = volumes[deviceID], let muted = muteStates[deviceID] else { return }
+        onVolumeChanged?(deviceID, volume)
+        onMuteChanged?(deviceID, muted)
     }
 
     private func outputDeviceUID(for deviceID: AudioDeviceID) -> String? {
-        deviceMonitor.device(for: deviceID)?.uid
+        deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid
     }
 
     /// Starts observing deviceMonitor.outputDevices for changes
