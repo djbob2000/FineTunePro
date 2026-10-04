@@ -1,14 +1,18 @@
 // FineTuneTests/SettingsManagerAppSettingsBindingTests.swift
 import Testing
+import Foundation
 @testable import FineTune
 
 @MainActor
 @Suite("SettingsManager.appSettings — direct binding setter")
 struct SettingsManagerAppSettingsBindingTests {
+    private func makeManager(service: FakeLaunchAtLoginService = FakeLaunchAtLoginService()) -> SettingsManager {
+        SettingsManager(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), launchAtLoginService: service)
+    }
 
     @Test("Direct assignment to appSettings persists the new value")
     func directAssignmentPersists() async {
-        let manager = SettingsManager()
+        let manager = makeManager()
         var newSettings = manager.appSettings
         newSettings.defaultNewAppVolume = 0.42
         newSettings.lockInputDevice = true
@@ -21,24 +25,23 @@ struct SettingsManagerAppSettingsBindingTests {
 
     @Test("Direct assignment forwards launch-at-login change to LaunchAtLoginService")
     func directAssignmentForwardsLaunchAtLogin() async {
-        let manager = SettingsManager()
+        let service = FakeLaunchAtLoginService()
+        let manager = makeManager(service: service)
         var newSettings = manager.appSettings
         let original = newSettings.launchAtLogin
         newSettings.launchAtLogin = !original
 
         manager.appSettings = newSettings
 
-        // Behavioral assertion: the setter ran updateAppSettings's full side-effect path.
-        // We verify by reading back the persisted toggle — the side-effect plumbing
-        // is covered by existing updateAppSettings tests, so we only need to confirm
-        // the new setter doesn't bypass it.
         #expect(manager.appSettings.launchAtLogin == !original)
+        #expect(service.registerCount == 1)
+        #expect(manager.isLaunchAtLoginEnabled)
     }
 
     @Test("Direct assignment is equivalent to updateAppSettings for the same input")
     func directAssignmentEquivalentToUpdate() async {
-        let managerA = SettingsManager()
-        let managerB = SettingsManager()
+        let managerA = makeManager()
+        let managerB = makeManager()
 
         var modified = managerA.appSettings
         modified.defaultNewAppVolume = 0.7

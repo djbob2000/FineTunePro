@@ -7,6 +7,15 @@ import os
 private struct AppFingerprint: Hashable {
     let pid: pid_t
     let objectIDs: [AudioObjectID]
+    let bundleID: String?
+    let name: String
+
+    init(_ app: AudioApp) {
+        pid = app.id
+        objectIDs = app.processObjectIDs
+        bundleID = app.bundleID
+        name = app.name
+    }
 }
 
 @Observable
@@ -14,6 +23,8 @@ private struct AppFingerprint: Hashable {
 final class AudioProcessMonitor: AudioProcessMonitoring {
     private(set) var activeApps: [AudioApp] = []
     var onAppsChanged: (([AudioApp]) -> Void)?
+    private(set) var capturableApps: [AudioApp] = []
+    var onCapturableAppsChanged: (([AudioApp]) -> Void)?
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "AudioProcessMonitor")
 
@@ -74,6 +85,14 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
         }
 
         return false
+    }
+
+    /// Airwave globally taps every process except itself. Capturing its final mix
+    /// feeds FineTune's output back into that global tap. Keep the final processor
+    /// outside our graph; ordinary source apps still receive their own controls.
+    /// See Airwave/AudioPipeline.swift and CoreAudioPlatformClient.swift upstream.
+    static func requiresCaptureBypass(bundleID: String?) -> Bool {
+        bundleID == "com.southneuhof.Airwave"
     }
 
     // Property listeners
@@ -202,6 +221,19 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
         }
     }
 
+    func refreshNow() {
+        refresh()
+    }
+
+    /// Wine and command-line clients may have neither an NSRunningApplication nor a bundle ID.
+    /// Their executable name gives each app a useful label and avoids a shared `name:Unknown` key.
+    private func processName(for pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
+        let length = proc_name(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
     private func refresh() {
         do {
             let processIDs = try AudioObjectID.readProcessList()
@@ -213,10 +245,10 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
             let myPID = ProcessInfo.processInfo.processIdentifier
 
             var appsByPID: [pid_t: AudioApp] = [:]
+            var streamingPIDs: Set<pid_t> = []
 
             for objectID in processIDs {
-                guard let pid = try? objectID.readProcessPID(), pid != myPID else { continue }
-                guard objectID.readProcessIsRunning() else { continue }
+                guard let pid = try? objectID.readProcessPID(), pid > 0, pid != myPID else { continue }
 
                 // Try to find the parent app (for helper processes like Safari Graphics and Media)
                 let directApp = runningAppsByPID[pid]
@@ -230,14 +262,19 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
                 // Use resolved app's info, fall back to Core Audio bundle ID
                 let name = resolvedApp?.localizedName
                     ?? objectID.readProcessBundleID()?.components(separatedBy: ".").last
-                    ?? "Unknown"
+                    ?? processName(for: pid)
+                    ?? "Unknown (\(pid))"
                 let icon = resolvedApp?.icon
                     ?? NSImage(systemSymbolName: "app.fill", accessibilityDescription: nil)
                     ?? NSImage()
                 let bundleID = resolvedApp?.bundleIdentifier ?? objectID.readProcessBundleID()
 
                 // Skip system daemons (siri, coreaudio, etc.) - they shouldn't appear in the apps list
-                if isSystemDaemon(bundleID: bundleID, name: name) { continue }
+                if isSystemDaemon(bundleID: bundleID, name: name) || Self.requiresCaptureBypass(bundleID: bundleID) { continue }
+
+                if objectID.readProcessIsRunning() {
+                    streamingPIDs.insert(parentPID)
+                }
 
                 // Merge helper process objectIDs into parent app entry
                 if let existing = appsByPID[parentPID] {
@@ -272,10 +309,19 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
             let sorted = appsByPID.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
             // Only fire callback if the app list actually changed (avoids churn from periodic refresh)
-            let oldSet = Set(activeApps.map { AppFingerprint(pid: $0.id, objectIDs: $0.processObjectIDs) })
-            let newSet = Set(sorted.map { AppFingerprint(pid: $0.id, objectIDs: $0.processObjectIDs) })
+            let oldCapturableSet = Set(capturableApps.map(AppFingerprint.init))
+            let newCapturableSet = Set(sorted.map(AppFingerprint.init))
+            let streaming = sorted.filter { streamingPIDs.contains($0.id) }
+            let oldSet = Set(activeApps.map(AppFingerprint.init))
+            let newSet = Set(streaming.map(AppFingerprint.init))
 
-            activeApps = sorted
+            // Publish both snapshots before either callback: engine reconciliation must see the
+            // newest helper object list even when a callback synchronously creates a tap.
+            capturableApps = sorted
+            activeApps = streaming
+            if oldCapturableSet != newCapturableSet {
+                onCapturableAppsChanged?(capturableApps)
+            }
             if oldSet != newSet {
                 onAppsChanged?(activeApps)
             }
@@ -295,7 +341,8 @@ final class AudioProcessMonitor: AudioProcessMonitoring {
         }
 
         // Add listeners for new processes
-        let added = currentSet.subtracting(monitoredProcesses)
+        // A failed listener installation must be retried on the next refresh.
+        let added = currentSet.subtracting(processListenerBlocks.keys)
         for objectID in added {
             addProcessListener(for: objectID)
         }

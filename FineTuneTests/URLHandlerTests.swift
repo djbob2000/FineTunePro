@@ -72,3 +72,119 @@ private final class RecordingURLEngine: URLHandlerEngine {
     func setMuteForInactive(identifier: String, to muted: Bool) { Issue.record("Unexpected mute write") }
     func getMuteForInactive(identifier: String) -> Bool { false }
 }
+
+@Suite("URL popup actions", .serialized)
+@MainActor
+struct URLPopupActionTests {
+    @Test("Toggle and open popup URLs deliver a click to the menu bar item when hidden",
+          arguments: ["toggle-popup", "open-popup"])
+    func showPopup(action: String) throws {
+        let fixture = PopupURLFixture()
+        defer { fixture.close() }
+        fixture.handler.handleURL(try #require(URL(string: "finetune://\(action)")))
+
+        let event = try #require(fixture.events.first)
+        #expect(fixture.events.count == 1)
+        #expect(event.windowNumber == fixture.statusItem.button?.window?.windowNumber)
+        #expect(event.type == .leftMouseDown)
+    }
+
+    @Test("Open popup URL leaves a visible popup open")
+    func openIsIdempotent() throws {
+        let fixture = PopupURLFixture()
+        defer { fixture.close() }
+        fixture.popup.orderFront(nil)
+        fixture.handler.handleURL(try #require(URL(string: "finetune://open-popup")))
+
+        #expect(fixture.events.isEmpty)
+        #expect(fixture.popup.isVisible)
+    }
+
+    @Test("Repeated open URLs enqueue one presentation while the first click is pending")
+    func pendingOpenIsIdempotent() throws {
+        let fixture = PopupURLFixture()
+        defer { fixture.close() }
+        let handler = fixture.handler
+        let url = try #require(URL(string: "finetune://open-popup"))
+        handler.handleURL(url)
+        handler.handleURL(url)
+
+        #expect(fixture.events.count == 1)
+    }
+
+    @Test("Close popup URL delivers a click only while the popup is visible")
+    func closeIsIdempotent() throws {
+        let fixture = PopupURLFixture()
+        defer { fixture.close() }
+        fixture.popup.orderFront(nil)
+        let handler = fixture.handler
+        let url = try #require(URL(string: "finetune://close-popup"))
+        handler.handleURL(url)
+        let event = try #require(fixture.events.first)
+        #expect(event.windowNumber == fixture.statusItem.button?.window?.windowNumber)
+
+        fixture.popup.orderOut(nil)
+        fixture.events.removeAll()
+        handler.handleURL(url)
+        #expect(fixture.events.isEmpty)
+    }
+
+    @Test("A cold-launch URL waits for the menu-bar scene without queuing duplicate clicks")
+    func coldLaunch() async throws {
+        let fixture = PopupURLFixture()
+        defer { fixture.close() }
+        fixture.statusItemReady = false
+        let url = try #require(URL(string: "finetune://open-popup"))
+        fixture.handler.handleURL(url)
+        fixture.handler.handleURL(url)
+        #expect(fixture.events.isEmpty)
+        fixture.statusItemReady = true
+        try await Task.sleep(for: .milliseconds(180))
+        #expect(fixture.events.count == 1)
+    }
+
+    @Test("A foreign URL scheme cannot open the popup")
+    func foreignScheme() throws {
+        let fixture = PopupURLFixture()
+        defer { fixture.close() }
+        fixture.handler.handleURL(try #require(URL(string: "other://toggle-popup")))
+        #expect(fixture.events.isEmpty)
+    }
+}
+
+/// Capture the OS event boundary while using a real isolated popup and status item.
+@MainActor
+private final class PopupURLFixture {
+    let title = "FineTuneTest-URL-\(UUID().uuidString)"
+    let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    let popup = FluidMenuBarExtraURLTestPanel(
+        contentRect: NSRect(x: 10, y: 10, width: 100, height: 100),
+        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
+    )
+    var events: [NSEvent] = []
+    var statusItemReady = true
+    lazy var controller = MenuBarPopupController(
+        accessibilityTitle: title,
+        postEvent: { [weak self] in self?.events.append($0) },
+        windows: { [weak self] in
+            guard let self else { return [] }
+            return [popup] + (statusItemReady ? [statusItem.button?.window].compactMap { $0 } : [])
+        }
+    )
+    var handler: URLHandler { URLHandler(audioEngine: RecordingURLEngine(), popupController: controller) }
+
+    init() {
+        statusItem.button?.setAccessibilityTitle(title)
+        _ = statusItem.button?.window?.windowNumber
+        popup.title = title
+        popup.isReleasedWhenClosed = false
+    }
+
+    func close() {
+        controller.stop()
+        popup.close()
+        NSStatusBar.system.removeStatusItem(statusItem)
+    }
+}
+
+private final class FluidMenuBarExtraURLTestPanel: NSPanel {}

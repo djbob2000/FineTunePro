@@ -9,6 +9,7 @@ struct GeneralTab: View {
 
     @State private var showResetConfirmation = false
     @State private var showLanguageRestartPrompt = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -22,6 +23,13 @@ struct GeneralTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.never)
+        .onAppear { settings.reconcileLaunchAtLogin() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { settings.reconcileLaunchAtLogin() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            settings.reconcileLaunchAtLogin()
+        }
         .confirmationDialog(
             "Reset all settings?",
             isPresented: $showResetConfirmation,
@@ -48,12 +56,28 @@ struct GeneralTab: View {
         SettingsSection("General") {
             SettingsRow(
                 "Launch at Login",
-                description: "Start FineTune when you log in"
+                description: settings.launchAtLoginRequiresApproval
+                    ? "Allow FineTune in macOS Login Items to start when you log in"
+                    : "Start FineTune when you log in"
             ) {
                 Toggle("", isOn: $settings.appSettings.launchAtLogin)
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .labelsHidden()
+            }
+            if settings.launchAtLoginRequiresApproval {
+                SettingsRowDivider()
+                SettingsRow("Approval Required", description: "macOS has not approved launch at login") {
+                    Button("Open Login Items") { settings.openLoginItems() }
+                }
+            }
+            if let error = settings.launchAtLoginError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .accessibilityLabel("Launch at login failed: \(error)")
             }
             SettingsRowDivider()
             SettingsRow(
@@ -108,6 +132,20 @@ struct GeneralTab: View {
                 description: "Smaller fits more on screen; larger leaves more breathing room."
             ) {
                 PopupSizeTilePicker(selection: $settings.appSettings.popupSize)
+            }
+            SettingsRowDivider()
+            SettingsRow(
+                "Popup Position",
+                description: "Follow the menu bar icon or keep the mixer in a screen corner"
+            ) {
+                Picker("", selection: $settings.appSettings.popupPosition) {
+                    ForEach(MenuBarPopupPosition.allCases) { position in
+                        Text(position.description).tag(position)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: DesignTokens.Dimensions.settingsPickerWidth)
             }
         }
     }

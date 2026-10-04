@@ -29,6 +29,26 @@ Common apps that may need to be ignored:
 - Some VoIP/conferencing tools with custom audio engines
 - FaceTime, WhatsApp, and other calling apps (tapping can break echo cancellation, causing volume ducking)
 
+## Silence after startup, wake, or a sample-rate change
+
+FineTune prepares registered audio clients before playback, retains their taps while paused, and rebuilds taps after wake or output sample-rate changes. A streaming client that stops delivering callbacks is retried after repeated health-check failures; cooldowns prevent repeated teardown loops. A newly created CoreAudio client can still start before macOS reports it, so these changes do not promise zero delay for every app.
+
+For Wine/Scotch, check both the launcher and the actual game's executable in edit mode. If the problem persists, ignore the affected executable to return it to native routing and include its name, output device, and reproduction steps in a report.
+
+## Using Airwave or BlackHole
+
+FineTune uses native CoreAudio process taps and does not install or require BlackHole. An existing BlackHole installation does not block FineTune installation. Virtual-device routing can still create a loop if an output is routed back to its own source.
+
+Airwave processes a global mix that includes FineTune's output. FineTune automatically bypasses capture of Airwave itself (`com.southneuhof.Airwave`) to keep its processed output out of a feedback loop. Other source apps retain their controls. This prevents that specific graph cycle; simultaneous mute ownership, device changes, and real playback with Airwave still require compatibility testing. If sound remains unstable, quit one audio processor while diagnosing the route.
+
+## Changing the microphone in System Settings
+
+**Lock Input Device** is off by default. When enabled, it protects against input changes during a newly connected device's short auto-switch window. A later selection in System Settings becomes the new preferred and locked input instead of being immediately rolled back.
+
+## Popup position
+
+Choose **Settings → General → Popup Position** to follow the menu-bar icon or keep the mixer in the top-left or top-right corner of the menu-bar display. The anchor is reapplied when the popup opens, resizes, or changes display. URL commands to open, close, and toggle the popup are documented in [URL schemes](url-schemes.md).
+
 ## Volume slider not working
 
 There are two cases.
@@ -75,17 +95,23 @@ FineTune's input device monitoring requires separate microphone permission.
 
 ## Media keys don't control FineTune
 
-Media keys (F10 / F11 / F12) are opt-in and require the **Accessibility** permission so FineTune can observe the keystrokes.
+Media keys (F10 / F11 / F12) require the **Accessibility** permission so FineTune can observe the keystrokes.
 
 1. Open **System Settings** → **Privacy & Security** → **Accessibility**
 2. Enable FineTune in the list. If it's already on, toggle it off and back on to clear a rare permission-bootstrap race.
-3. Open FineTune Settings → **Media Keys & HUD**, turn on **Control volume with media keys**, and pick a HUD style (Tahoe or Classic) or disable the HUD
+3. Open FineTune Settings → **Shortcuts** → **Media Keys**, turn on **Media Keys Control**, and pick a HUD style.
 
-If the keys still don't work right after launch, a WindowServer handoff can briefly swallow the first keypress. Try once more; subsequent presses are reliable.
+FineTune passes the key through to macOS when the default output is unavailable or its volume has not been read yet. If the media-key connection goes offline, use **Retry** in the Shortcuts tab.
+
+To control several outputs together, open Settings → **Audio** → **Linked Output Volume**, enable **Link Volume Keys**, and select the additional outputs. The default output is always controlled. Each selected output moves by the configured slider step from its own current level; mute silences the whole group if any member is unmuted, and unmutes the group when all are muted. Disconnected selections remain saved for the next connection. The HUD and feedback reflect the default output.
+
+## Launch at login does not match System Settings
+
+FineTune reads the actual macOS login-item status when it launches and when you return to its settings. If macOS requires approval, use **Open Login Items** under Settings → **General**, then allow FineTune in System Settings. A failed registration or removal leaves the toggle at its actual system state and shows the error below it.
 
 ## Volume HUD not appearing
 
-- Check Settings → **Media Keys & HUD**. The HUD is off by default and has to be enabled separately from the media-key toggle.
+- Check Settings → **Shortcuts** → **Media Keys** and enable **Media Keys Control**. The HUD is suppressed while the popup is open.
 - Switch HUD styles if one isn't rendering. Tahoe uses macOS 26's system HUD look; Classic matches the older translucent rounded-rect style.
 
 ## EQ not applying / sounds the same

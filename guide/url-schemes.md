@@ -12,6 +12,9 @@ Control FineTune from Terminal, shell scripts, [Shortcuts](https://support.apple
 | Toggle mute | `finetune://toggle-mute?app=BUNDLE_ID` | Toggle mute state |
 | Set device | `finetune://set-device?app=BUNDLE_ID&device=DEVICE_UID` | Route an app to a specific output |
 | Reset | `finetune://reset` | Reset all apps to 100% and unmuted |
+| Toggle popup | `finetune://toggle-popup` | Open the mixer popup, or dismiss it if it is already open |
+| Open popup | `finetune://open-popup` | Open the mixer popup; repeated requests leave it open |
+| Close popup | `finetune://close-popup` | Dismiss the mixer popup; does nothing when it is already closed |
 
 ## Examples
 
@@ -33,7 +36,22 @@ open "finetune://set-device?app=com.spotify.client&device=YOUR_DEVICE_UID"
 
 # Reset everything
 open "finetune://reset"
+
+# Show the mixer from a launcher or a script
+open "finetune://open-popup"
+
+# Use a single launcher action to show or hide the mixer
+open "finetune://toggle-popup"
 ```
+
+## Popup placement
+
+Choose **Settings → General → Menu Bar → Popup Position** to keep the mixer at
+**Top Left** or **Top Right** of the display that contains the FineTune menu-bar
+icon. **Follow Icon** is the default and opens the mixer under that icon. Corner
+placement stays anchored when the popup expands, and applies equally to menu-bar
+clicks, keyboard shortcuts, and the popup URLs above. This setting is independent
+of the volume HUD position.
 
 ## Use Cases
 

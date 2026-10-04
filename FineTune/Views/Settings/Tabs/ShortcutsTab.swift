@@ -95,7 +95,7 @@ struct ShortcutsTab: View {
         SettingsSection("Media Keys") {
             SettingsRow(
                 "Media Keys Control",
-                description: "Use F11/F12 (or volume keys) to control FineTune"
+                description: "Use volume and mute keys to control the default output. Select additional linked outputs in Audio settings."
             ) {
                 Toggle("", isOn: $settings.appSettings.mediaKeyControlEnabled)
                     .toggleStyle(.switch)

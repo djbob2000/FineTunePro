@@ -45,6 +45,7 @@ struct MediaKeyMonitorHandlerTests {
         
         let mockVolume = MockDeviceVolumeProviding(deviceMonitor: deviceMonitor)
         mockVolume.defaultDeviceID = 1
+        mockVolume.volumes[1] = 0.5
         
         let engine = AudioEngine(
             permission: AudioRecordingPermission(),
@@ -154,6 +155,22 @@ struct MediaKeyMonitorHandlerTests {
     }
 
     // MARK: - Repeat handling (AC #6, #7, #8, #10)
+
+    @Test("Extra-Fine software steps preserve sub-one-percent gain through real storage normalization")
+    func extraFineSoftwareStorageDoesNotTrapLowVolume() {
+        let (monitor, _, _, settings) = makeMonitor()
+        settings.appSettings.volumeHotkeyStep = .extraFine
+        var gain: Float = 0
+        for _ in 0..<4 {
+            monitor.handleCore(
+                event: .volumeUp(isRepeat: true), deviceID: 1, tier: .software,
+                deviceName: "Software", currentVolume: gain, currentMute: false,
+                setVolume: { _, value in gain = DeviceVolumeMonitor.storedVolume(value, tier: .software) },
+                setMute: { _, _ in }
+            )
+        }
+        #expect(gain == 0.00390625)
+    }
 
     @Test("volumeUp(isRepeat: true) from 0.5 steps volume to 0.5625 (AC #7 companion)")
     func volumeUpRepeatStepsVolume() {
@@ -641,7 +658,7 @@ struct MediaKeyMonitorHandlerTests {
         #expect(feedbackCalls == 1)
     }
 
-    @Test("processSystemDefined swallows media key event and triggers HUD asynchronously")
+    @Test("processSystemDefined swallows a usable output's key and triggers its HUD")
     func processSystemDefinedSwallowsAndTriggersHUD() async throws {
         let decoder = StubMediaKeyDecoder()
         let (monitor, hud, _, _) = makeMonitor(popupVisible: false, decoder: decoder)
@@ -667,13 +684,10 @@ struct MediaKeyMonitorHandlerTests {
         
         let shouldSwallow = monitor.processSystemDefined(cgEvent)
         #expect(shouldSwallow == true)
-        
-        // Wait up to 1 second for the asynchronous MainActor Task to complete
         for _ in 0..<100 {
             if hud.showCallCount > 0 { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        
         #expect(hud.showCallCount == 1)
     }
 }

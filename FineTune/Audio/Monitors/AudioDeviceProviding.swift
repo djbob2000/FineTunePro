@@ -9,10 +9,18 @@ protocol AudioDeviceProviding: AnyObject {
     var onDeviceConnected: ((_ uid: String, _ name: String) -> Void)? { get set }
     var onInputDeviceDisconnected: ((_ uid: String, _ name: String) -> Void)? { get set }
     var onInputDeviceConnected: ((_ uid: String, _ name: String) -> Void)? { get set }
+    var onOutputDeviceSampleRateChanged: ((_ uid: String, _ newRate: Double) -> Void)? { get set }
 
     func device(for uid: String) -> AudioDevice?
     func inputDevice(for uid: String) -> AudioDevice?
 
     func start()
     func stop()
+}
+
+extension AudioDeviceProviding {
+    var onOutputDeviceSampleRateChanged: ((_ uid: String, _ newRate: Double) -> Void)? {
+        get { nil }
+        set {}
+    }
 }

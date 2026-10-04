@@ -15,6 +15,7 @@ struct AudioTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 volumeSection
+                linkedVolumeSection
                 devicesSection
             }
             .padding(.horizontal, 20)
@@ -68,6 +69,48 @@ struct AudioTab: View {
     }
 
     // MARK: - Devices
+
+    private var linkedVolumeSection: some View {
+        SettingsSection("Linked Output Volume") {
+            SettingsRow(
+                "Link Volume Keys",
+                description: "Volume and mute keys control the default output and selected devices together. Each device keeps its own volume level."
+            ) {
+                Toggle("", isOn: Binding(
+                    get: { settings.appSettings.linkedVolumeDeviceUIDs != nil },
+                    set: { settings.appSettings.linkedVolumeDeviceUIDs = $0 ? [] : nil }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+            }
+            if let selectedUIDs = settings.appSettings.linkedVolumeDeviceUIDs {
+                ForEach(sortedOutputDevices, id: \.uid) { device in
+                    SettingsRowDivider()
+                    SettingsRow(device.name, description: device.id == deviceVolumeMonitor.defaultDeviceID ? "Current default output is always controlled" : nil) {
+                        Toggle("", isOn: Binding(
+                            get: { settings.appSettings.linkedVolumeDeviceUIDs?.contains(device.uid) == true },
+                            set: { selected in
+                                var uids = settings.appSettings.linkedVolumeDeviceUIDs ?? []
+                                if selected { uids.insert(device.uid) } else { uids.remove(device.uid) }
+                                settings.appSettings.linkedVolumeDeviceUIDs = uids
+                            }
+                        ))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
+                    }
+                }
+                let disconnectedUIDs = selectedUIDs.subtracting(sortedOutputDevices.map(\.uid)).sorted()
+                ForEach(disconnectedUIDs, id: \.self) { uid in
+                    SettingsRowDivider()
+                    SettingsRow(uid, description: "Disconnected — reconnect to control this output again") {
+                        Button("Remove") { settings.appSettings.linkedVolumeDeviceUIDs?.remove(uid) }
+                    }
+                }
+            }
+        }
+    }
 
     private var devicesSection: some View {
         SettingsSection("Devices") {

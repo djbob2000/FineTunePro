@@ -135,6 +135,11 @@ final class ProcessTapController: ProcessTapControlling {
     private nonisolated(unsafe) var secondaryRampCoefficient: Float = 0.0007
     private nonisolated(unsafe) var eqProcessor: EQProcessor?
     private nonisolated(unsafe) var autoEQProcessor: AutoEQProcessor?
+    private nonisolated(unsafe) var mirroredRenderer: MirroredAudioRenderer?
+    private var autoEQProfilesByDevice: [String: AutoEQProfile] = [:]
+    private var autoEQPreampEnabled = false
+    private var mirroredGains: [String: Float] = [:]
+    private var mirroredMutes: Set<String> = []
     private nonisolated(unsafe) var dynamicEqualizer: DynamicEqualizer?
     private nonisolated(unsafe) var loudnessCompensator: LoudnessCompensator?
     private nonisolated(unsafe) var loudnessEqualizerProcessor: LoudnessEqualizer?
@@ -197,7 +202,7 @@ final class ProcessTapController: ProcessTapControlling {
     /// Guard against re-entrant crossfade (ORCH-001)
     private var isSwitching = false
     /// Cancellable crossfade task — cancelled when a new switch starts
-    private var crossfadeTask: Task<Void, Error>?
+    private let transitions = TapTransitionCoordinator()
     private var didLogEQBypassForMultichannel = false
 
     // MARK: - Public Properties
@@ -237,9 +242,10 @@ final class ProcessTapController: ProcessTapControlling {
         return deltaNanos <= (seconds * 1_000_000_000.0)
     }
 
-    /// Health checks should only run after activation has settled and at least one callback occurred.
+    /// Allow recovery even when activation never received its first callback. Paused clients are
+    /// excluded by the engine's separate streaming check, and device switches are transitional.
     func isHealthCheckEligible(minActiveSeconds: Double) -> Bool {
-        guard _hasRenderedAudio else { return false }
+        guard activated, !_invalidating, !isSwitching else { return false }
         let started = _activationHostTime
         guard started != 0 else { return false }
         let deltaNanos = Double(mach_absolute_time() &- started) * Self.hostTimeNanosScale
@@ -321,7 +327,21 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryAutoEQProcessor?.updateProfile(profile)
     }
 
+    func updateAutoEQProfile(_ profile: AutoEQProfile?, for deviceUID: String) {
+        autoEQProfilesByDevice[deviceUID] = profile
+        mirroredRenderer?.updateProfile(profile, for: deviceUID)
+        if currentDeviceUID == deviceUID { updateAutoEQProfile(profile) }
+    }
+
+    func updateMirroredOutputGain(_ gain: Float, muted: Bool, for deviceUID: String) {
+        mirroredGains[deviceUID] = gain
+        if muted { mirroredMutes.insert(deviceUID) } else { mirroredMutes.remove(deviceUID) }
+        mirroredRenderer?.setOutputGain(gain, muted: muted, for: deviceUID)
+    }
+
     func setAutoEQPreampEnabled(_ enabled: Bool) {
+        autoEQPreampEnabled = enabled
+        mirroredRenderer?.setPreampEnabled(enabled)
         autoEQProcessor?.setPreampEnabled(enabled)
         secondaryAutoEQProcessor?.setPreampEnabled(enabled)
     }
@@ -584,7 +604,7 @@ final class ProcessTapController: ProcessTapControlling {
 
         let isMirroring = outputUIDs.count > 1
         let isSingleFlatten = didFlatten && !isMirroring && flatUIDs.count == 1
-        let isStacked = !(isSingleFlatten && outputStreamCount(flatUIDs[0]) == 1)
+        let isStacked = !isMirroring && !(isSingleFlatten && outputStreamCount(flatUIDs[0]) == 1)
 
         return AggregatePlan(
             subDeviceUIDs: flatUIDs,
@@ -639,8 +659,8 @@ final class ProcessTapController: ProcessTapControlling {
             kAudioAggregateDeviceMainSubDeviceKey: plan.clockDeviceUID,
             kAudioAggregateDeviceClockDeviceKey: plan.clockDeviceUID,
             kAudioAggregateDeviceIsPrivateKey: true,
-            // Stacked mirrors the same audio to every sub-device (needed for multi-device output);
-            // a single flattened aggregate stays non-stacked so all its channels stay addressable.
+            // Mirroring exposes distinct channels for each output's correction chain.
+            // Single-target stacked aggregates retain the HAL's legacy broadcast behavior.
             kAudioAggregateDeviceIsStackedKey: plan.isStacked,
             kAudioAggregateDeviceTapAutoStartKey: true,
             kAudioAggregateDeviceSubDeviceListKey: subDevices,
@@ -651,6 +671,31 @@ final class ProcessTapController: ProcessTapControlling {
                 ]
             ]
         ]
+    }
+
+    private func makeMirroredRenderer(outputUIDs: [String], sampleRate: Double) -> MirroredAudioRenderer? {
+        guard outputUIDs.count > 1 else { return nil }
+        var outputs: [MirroredAudioRenderer.Output] = []
+        var seen = Set<String>()
+        for uid in outputUIDs {
+            let physicalUIDs = audioDeviceID(for: uid)?.aggregateSubDeviceUIDs() ?? [uid]
+            for physicalUID in physicalUIDs.isEmpty ? [uid] : physicalUIDs {
+                guard seen.insert(physicalUID).inserted else { continue }
+                let deviceID = audioDeviceID(for: physicalUID)
+                let channels = max(1, deviceID?.outputChannelCount() ?? 2)
+                let stereo = deviceID?.preferredStereoChannelIndices() ?? (left: 0, right: 1)
+                // Explicit hardware selections own their correction even if an aggregate
+                // earlier in the route also contains the same sub-device.
+                let owner = outputUIDs.contains(physicalUID) ? physicalUID : uid
+                outputs.append(.init(uid: owner, channelCount: channels, left: stereo.left, right: stereo.right))
+            }
+        }
+        let renderer = MirroredAudioRenderer(outputs: outputs, sampleRate: sampleRate,
+            profiles: autoEQProfilesByDevice, preampEnabled: autoEQPreampEnabled)
+        for uid in outputUIDs {
+            renderer.setOutputGain(mirroredGains[uid] ?? 1, muted: mirroredMutes.contains(uid), for: uid, seed: true)
+        }
+        return renderer
     }
 
     private func isTapSourceVirtual() -> Bool {
@@ -667,10 +712,15 @@ final class ProcessTapController: ProcessTapControlling {
     /// brief clean dip rather than a crackle. The switch can't be fully gapless: the BT link itself
     /// renegotiates across the profile change.
     func recreateForOutputRateChange() async throws {
+        await transitions.waitForPending()
         guard activated, let primaryUID = currentDeviceUIDs.first else { return }
         guard primaryResources.tapDescription != nil else { throw CrossfadeError.noTapDescription }
         logger.info("[RATE] \(self.app.name): recreating aggregate at new rate")
-        try await performDestructiveDeviceSwitch(to: primaryUID, allDeviceUIDs: currentDeviceUIDs, sourceAlreadySilent: true)
+        let uids = currentDeviceUIDs
+        _ = try await transitions.perform { [self] in
+            guard activated else { throw CancellationError() }
+            try await performDestructiveDeviceSwitch(to: primaryUID, allDeviceUIDs: uids, sourceAlreadySilent: true)
+        }
     }
 
     private func preferredStereoChannels(for deviceUID: String?) -> (left: Int, right: Int) {
@@ -698,12 +748,12 @@ final class ProcessTapController: ProcessTapControlling {
     /// The audio callback only reads the trailing tap stream(s), so the map cannot change
     /// the audio it produces. No-op for plain output devices and the stacked path;
     /// failures are non-fatal — audio still works, the prompt may appear.
-    private func disableHardwareInputStreams(aggregateID: AudioObjectID, procID: AudioDeviceIOProcID?) {
+    private func disableHardwareInputStreams(aggregateID: AudioObjectID, procID: AudioDeviceIOProcID?, stereoMixdown: Bool = false) {
         guard let procID else { return }
 
         let inputCount = aggregateID.streamCount(scope: kAudioObjectPropertyScopeInput)
         let outputCount = aggregateID.streamCount(scope: kAudioObjectPropertyScopeOutput)
-        guard let flagsArray = Self.inputStreamUsageFlags(inputCount: inputCount, outputCount: outputCount) else { return }
+        guard let flagsArray = Self.inputStreamUsageFlags(inputCount: inputCount, outputCount: stereoMixdown ? 1 : outputCount) else { return }
         let usedInputStreams = flagsArray.reduce(0) { $0 + Int($1) }
 
         // AudioHardwareIOProcStreamUsage is a variable-length C struct:
@@ -768,10 +818,10 @@ final class ProcessTapController: ProcessTapControlling {
 
     /// Creates a process tap, preferring a device-stream tap to preserve multichannel routing for single-stream devices.
     /// For multi-stream devices (>1 streams), uses a process-wide tap so audio routed to channels 3-16+ is captured.
-    private func createProcessTap(preferredDeviceUID: String?) throws -> (description: CATapDescription, tapID: AudioObjectID) {
+    private func createProcessTap(preferredDeviceUID: String?, stereoMixdown: Bool = false) throws -> (description: CATapDescription, tapID: AudioObjectID) {
         var lastError: OSStatus = noErr
 
-        if let deviceUID = preferredDeviceUID {
+        if !stereoMixdown, let deviceUID = preferredDeviceUID {
             let streamCount = audioDeviceID(for: deviceUID)?.streamCount(scope: kAudioObjectPropertyScopeOutput) ?? 0
             if streamCount <= 1, let outputStream = outputStreamIndex(for: deviceUID) {
                 let streamTap = CATapDescription(processes: app.processObjectIDs, deviceUID: deviceUID, stream: outputStream)
@@ -822,6 +872,11 @@ final class ProcessTapController: ProcessTapControlling {
 
     func activate(initial: TapInitialState) throws {
         _monoDownmix = initial.monoDownmix
+        autoEQProfilesByDevice = initial.autoEQProfilesByDevice
+        if let uid = targetDeviceUIDs.first, let profile = initial.autoEQProfile {
+            autoEQProfilesByDevice[uid] = profile
+        }
+        autoEQPreampEnabled = initial.autoEQPreampEnabled
         guard !activated else { return }
 
         logger.debug("Activating tap for \(self.app.name)")
@@ -833,7 +888,7 @@ final class ProcessTapController: ProcessTapControlling {
 
         // Create process tap. Prefer stream-specific tap for multichannel devices to avoid
         // stereo matrix attenuation on interfaces with many output channels.
-        let (tapDesc, tapID) = try createProcessTap(preferredDeviceUID: preferredTapSourceDeviceUID)
+        let (tapDesc, tapID) = try createProcessTap(preferredDeviceUID: preferredTapSourceDeviceUID, stereoMixdown: targetDeviceUIDs.count > 1)
         primaryResources.tapDescription = tapDesc
         let preferred = preferredStereoChannels(for: targetDeviceUIDs.first)
         _primaryPreferredStereoLeftChannel = preferred.left
@@ -939,11 +994,12 @@ final class ProcessTapController: ProcessTapControlling {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(err), userInfo: [NSLocalizedDescriptionKey: "Failed to create IO proc: \(err)"])
         }
 
-        disableHardwareInputStreams(aggregateID: primaryResources.aggregateDeviceID, procID: primaryResources.deviceProcID)
+        disableHardwareInputStreams(aggregateID: primaryResources.aggregateDeviceID, procID: primaryResources.deviceProcID, stereoMixdown: targetDeviceUIDs.count > 1)
 
         // Seed the ramp target before AudioDeviceStart so the first IOProc callback
         // ramps from userVolume→userVolume (no-op) instead of 1.0→userVolume.
         _primaryCurrentVolume = _volume
+        mirroredRenderer = makeMirroredRenderer(outputUIDs: targetDeviceUIDs, sampleRate: sampleRate)
 
         // Reset output gate to armed; size the ramp/hold windows from device sample rate.
         _outputGateRawPhase = 0
@@ -996,32 +1052,26 @@ final class ProcessTapController: ProcessTapControlling {
         // All devices in the aggregate will be included
         let primaryDeviceUID = newDeviceUIDs[0]
 
-        if sourceDeviceDead {
-            // Source device is disconnected — no audio to crossfade from.
-            // Go straight to destructive switch with shortened settle time.
-            guard primaryResources.tapDescription != nil else {
-                throw CrossfadeError.noTapDescription
-            }
-            try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, sourceAlreadySilent: true, deviceAU: destinationAU)
-        } else {
-            crossfadeTask?.cancel()
-            crossfadeTask = Task {
-                try await performCrossfadeSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, deviceAU: destinationAU)
-            }
-            do {
-                try await crossfadeTask!.value
-            } catch is CancellationError {
-                logger.info("[UPDATE] Crossfade cancelled by invalidate()")
-                return
-            } catch {
-                logger.warning("[UPDATE] Crossfade failed: \(error.localizedDescription), using fallback")
-                guard primaryResources.tapDescription != nil else {
-                    throw CrossfadeError.noTapDescription
+        let switched = try await transitions.perform { [self] in
+            guard activated else { throw CancellationError() }
+            self.preferredTapSourceDeviceUID = preferredTapSourceDeviceUID
+            if sourceDeviceDead || newDeviceUIDs.count > 1 || currentDeviceUIDs.count > 1 {
+                guard primaryResources.tapDescription != nil else { throw CrossfadeError.noTapDescription }
+                try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs,
+                    sourceAlreadySilent: true, deviceAU: destinationAU)
+            } else {
+                do {
+                    try await performCrossfadeSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, deviceAU: destinationAU)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    logger.warning("[UPDATE] Crossfade failed: \(error.localizedDescription), using fallback")
+                    guard activated, primaryResources.tapDescription != nil else { throw CrossfadeError.noTapDescription }
+                    try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, deviceAU: destinationAU)
                 }
-                try await performDestructiveDeviceSwitch(to: primaryDeviceUID, allDeviceUIDs: newDeviceUIDs, deviceAU: destinationAU)
             }
-            crossfadeTask = nil
         }
+        guard switched, activated else { return }
 
         targetDeviceUIDs = newDeviceUIDs
         currentDeviceUIDs = newDeviceUIDs
@@ -1034,6 +1084,7 @@ final class ProcessTapController: ProcessTapControlling {
     /// the output device. Used when the system default changes and an explicitly-routed app's
     /// stream-specific tap becomes stale (captures silence on the old default's stream).
     func refreshTapSource(_ preferredDeviceUID: String?) async throws {
+        await transitions.waitForPending()
         let oldPreferred = self.preferredTapSourceDeviceUID
         self.preferredTapSourceDeviceUID = preferredDeviceUID
         guard activated, let primaryUID = currentDeviceUIDs.first else { return }
@@ -1042,23 +1093,23 @@ final class ProcessTapController: ProcessTapControlling {
         let allUIDs = currentDeviceUIDs
         logger.info("[REFRESH] Tap source changing for \(self.app.name): \(oldPreferred ?? "mixdown") → \(preferredDeviceUID ?? "mixdown")")
 
-        crossfadeTask?.cancel()
-        crossfadeTask = Task {
-            try await performCrossfadeSwitch(to: primaryUID, allDeviceUIDs: allUIDs)
-        }
-        do {
-            try await crossfadeTask!.value
-        } catch is CancellationError {
-            logger.info("[REFRESH] Tap source refresh cancelled")
-            return
-        } catch {
-            logger.warning("[REFRESH] Crossfade failed, using destructive switch: \(error.localizedDescription)")
-            guard primaryResources.tapDescription != nil else {
-                throw CrossfadeError.noTapDescription
+        _ = try await transitions.perform { [self] in
+            guard activated else { throw CancellationError() }
+            self.preferredTapSourceDeviceUID = preferredDeviceUID
+            if allUIDs.count > 1 {
+                try await performDestructiveDeviceSwitch(to: primaryUID, allDeviceUIDs: allUIDs)
+            } else {
+                do {
+                    try await performCrossfadeSwitch(to: primaryUID, allDeviceUIDs: allUIDs)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    logger.warning("[REFRESH] Crossfade failed, using destructive switch: \(error.localizedDescription)")
+                    guard activated, primaryResources.tapDescription != nil else { throw CrossfadeError.noTapDescription }
+                    try await performDestructiveDeviceSwitch(to: primaryUID, allDeviceUIDs: allUIDs)
+                }
             }
-            try await performDestructiveDeviceSwitch(to: primaryUID, allDeviceUIDs: allUIDs)
         }
-        crossfadeTask = nil
 
         logger.info("[REFRESH] Tap source refresh complete for \(self.app.name)")
     }
@@ -1114,8 +1165,7 @@ final class ProcessTapController: ProcessTapControlling {
         _activationHostTime = 0
         _hasRenderedAudio = false
 
-        crossfadeTask?.cancel()
-        crossfadeTask = nil
+        transitions.cancel()
 
         logger.debug("Invalidating tap for \(self.app.name)")
 
@@ -1461,7 +1511,8 @@ final class ProcessTapController: ProcessTapControlling {
     ///   pre-switch silence wait and uses a shorter post-switch settle time.
     private func performDestructiveDeviceSwitch(to primaryDeviceUID: String, allDeviceUIDs: [String]? = nil, sourceAlreadySilent: Bool = false, deviceAU: DeviceAUEffectConfiguration? = nil) async throws {
         let deviceUIDs = allDeviceUIDs ?? [primaryDeviceUID]
-        let originalVolume = _volume
+        isSwitching = true
+        defer { isSwitching = false }
 
         _forceSilence = true
         OSMemoryBarrier()
@@ -1474,21 +1525,21 @@ final class ProcessTapController: ProcessTapControlling {
             try await Task.sleep(for: .milliseconds(100))
         }
 
+        try Task.checkCancellation()
+        guard activated else { throw CancellationError() }
         try performDeviceSwitch(to: deviceUIDs, deviceAU: deviceAU)
 
         _primaryCurrentVolume = 0
-        _volume = 0
 
         // Post-switch settle: shorter when source was already silent (no old audio to drain)
         let settleMs = sourceAlreadySilent ? 80 : 150
         try await Task.sleep(for: .milliseconds(settleMs))
 
+        guard activated else { throw CancellationError() }
         _forceSilence = false
 
-        for i in 1...10 {
-            _volume = originalVolume * Float(i) / 10.0
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        // The normal RT gain ramp fades from zero to the latest requested volume.
+        // Keep _volume intact so cancellation or a user adjustment cannot lose it.
 
         logger.info("[SWITCH-DESTROY] Complete")
     }
@@ -1497,8 +1548,10 @@ final class ProcessTapController: ProcessTapControlling {
         precondition(!outputUIDs.isEmpty, "Must have at least one output device")
 
         var newResources = TapResources()
+        var adopted = false
+        defer { if !adopted { newResources.destroy() } }
 
-        let (newTapDesc, tapID) = try createProcessTap(preferredDeviceUID: preferredTapSourceDeviceUID)
+        let (newTapDesc, tapID) = try createProcessTap(preferredDeviceUID: preferredTapSourceDeviceUID, stereoMixdown: outputUIDs.count > 1)
         newResources.tapDescription = newTapDesc
         // SAFETY: _forceSilence must be true before reaching here (set by performDestructiveDeviceSwitch).
         // The old IO proc is still running until primaryResources.destroy() below, but both
@@ -1533,6 +1586,8 @@ final class ProcessTapController: ProcessTapControlling {
             throw CrossfadeError.deviceNotReady
         }
 
+        try Task.checkCancellation()
+        guard activated else { throw CancellationError() }
         nextCallbackID += 1
         _primaryCallbackID = nextCallbackID
         let switchCallbackID = nextCallbackID
@@ -1552,7 +1607,7 @@ final class ProcessTapController: ProcessTapControlling {
             throw CrossfadeError.tapCreationFailed(err)
         }
 
-        disableHardwareInputStreams(aggregateID: newResources.aggregateDeviceID, procID: newResources.deviceProcID)
+        disableHardwareInputStreams(aggregateID: newResources.aggregateDeviceID, procID: newResources.deviceProcID, stereoMixdown: outputUIDs.count > 1)
 
         err = AudioDeviceStart(newResources.aggregateDeviceID, newResources.deviceProcID)
         guard err == noErr else {
@@ -1563,10 +1618,16 @@ final class ProcessTapController: ProcessTapControlling {
         // Destroy old resources, adopt new
         primaryResources.destroy()
         primaryResources = newResources
+        adopted = true
         targetDeviceUIDs = outputUIDs
         currentDeviceUIDs = outputUIDs
 
         let deviceSampleRate = (try? primaryResources.aggregateDeviceID.readNominalSampleRate()) ?? 48_000
+        let oldRenderer = mirroredRenderer
+        mirroredRenderer = makeMirroredRenderer(outputUIDs: outputUIDs, sampleRate: deviceSampleRate)
+        if let oldRenderer {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { withExtendedLifetime(oldRenderer) {} }
+        }
         _primarySampleRate = deviceSampleRate
         rampCoefficient = 1 - exp(-1 / (Float(deviceSampleRate) * 0.030))
         eqProcessor?.updateSampleRate(deviceSampleRate)
@@ -2116,25 +2177,28 @@ final class ProcessTapController: ProcessTapControlling {
 
         var outputChannelPeaks: (Float, Float) = (0, 0)
         var outputMeterChannelCount = 1
-        let (outputPeak, limiterTriggered) = Self.processMappedBuffers(
-            inputBuffers: inputBuffers,
-            outputBuffers: outputBuffers,
+        let mirror = isPrimary ? mirroredRenderer : nil
+        let processingInputs = mirror?.prepareInput(inputBuffers, frameCount: totalSamplesThisBuffer) ?? inputBuffers
+        let processingOutputs = mirror?.commonOutput(frameCount: totalSamplesThisBuffer) ?? outputBuffers
+        var (outputPeak, limiterTriggered) = Self.processMappedBuffers(
+            inputBuffers: processingInputs,
+            outputBuffers: processingOutputs,
             targetVol: targetVol,
             crossfadeMultiplier: crossfadeMultiplier,
             outputGateMultiplier: outputGateMultiplier,
             rampCoefficient: rampCoeff,
-            preferredStereoLeft: stereoLeft,
-            preferredStereoRight: stereoRight,
+            preferredStereoLeft: mirror == nil ? stereoLeft : 0,
+            preferredStereoRight: mirror == nil ? stereoRight : 1,
             currentVol: &currentVol,
             eqProc: eqProc,
-            autoEQProc: autoEQProc,
+            autoEQProc: mirror == nil ? autoEQProc : nil,
             dynamicEqualizerProc: dynamicEqualizerProc,
             appAUChain: appAUChain,
             deviceAUChain: devAUChain,
             loudnessEqualizerProc: loudnessEqualizerProc,
             postAgcCompressorProc: postAgcCompressorProc,
             loudnessCompensatorProc: loudnessCompensatorProc,
-            brickwallLimiter: isPrimary ? _primaryBrickwallLimiter : _secondaryBrickwallLimiter,
+            brickwallLimiter: mirror == nil ? (isPrimary ? _primaryBrickwallLimiter : _secondaryBrickwallLimiter) : nil,
             outputMeterChannelPeaks: &outputChannelPeaks,
             outputMeterChannelCount: &outputMeterChannelCount,
             sampleRate: Self.limiterSampleRate(
@@ -2145,6 +2209,11 @@ final class ProcessTapController: ProcessTapControlling {
             renderAudioUnits: renderAudioUnits,
             monoDownmix: _monoDownmix
         )
+        if let mirror {
+            (outputPeak, limiterTriggered) = mirror.renderProcessedCommon(outputBuffers: outputBuffers, frameCount: totalSamplesThisBuffer)
+            outputChannelPeaks = (outputPeak, outputPeak)
+            outputMeterChannelCount = 1
+        }
 
         if isPrimary {
             _primaryCurrentVolume = currentVol

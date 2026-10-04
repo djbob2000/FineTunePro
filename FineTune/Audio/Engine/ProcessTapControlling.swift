@@ -25,6 +25,8 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func setMonoDownmix(_ enabled: Bool)
     func updateEQSettings(_ settings: EQSettings)
     func updateAutoEQProfile(_ profile: AutoEQProfile?)
+    func updateAutoEQProfile(_ profile: AutoEQProfile?, for deviceUID: String)
+    func updateMirroredOutputGain(_ gain: Float, muted: Bool, for deviceUID: String)
     func setAutoEQPreampEnabled(_ enabled: Bool)
     func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float)
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings)
@@ -51,6 +53,10 @@ protocol ProcessTapControlling: AnyObject, Sendable {
 }
 
 extension ProcessTapControlling {
+    func updateAutoEQProfile(_ profile: AutoEQProfile?, for deviceUID: String) {
+        if currentDeviceUID == deviceUID { updateAutoEQProfile(profile) }
+    }
+    func updateMirroredOutputGain(_ gain: Float, muted: Bool, for deviceUID: String) {}
     func setMonoDownmix(_ enabled: Bool) {}
     func updateAggregateBufferFrameSize() {
         updateAggregateBufferFrameSize(targetUIDs: nil)
