@@ -106,3 +106,4 @@ This reduces unnecessary master attenuation by ~10–15 dB compared to the legac
    * **Headroom Sanity Test:** Verify `_preampGain` remains $\ge 0.75$ (-2.5 dB) at standard listening levels.
 2. **Build and Test Verification:**
    * Execute full test suite via `swift test`.
+
