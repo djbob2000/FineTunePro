@@ -79,6 +79,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Cached gain budget; digital-volume-only updates need no coefficient rebuild.
     private var _peakGainDB: Double = 0.0
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
+    private nonisolated(unsafe) var _bassEnvelope: Float = 0.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
 
@@ -332,12 +333,23 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
             let effectiveHighWet = highWet * sibilantDucking
             
-            // Bass Big Bottom Synthesis:
-            // 1. Input drive (2.0x) raises sub-bass & bass body into non-linear sweet spot without clipping
-            let sLowL = smoothCompress(lowL * 2.0)
-            let sLowR = smoothCompress(lowR * 2.0)
-            let harmLowL = generateBassHarmonics(sLowL)
-            let harmLowR = generateBassHarmonics(sLowR)
+            // Aphex Big Bottom Optical Compressor / Dynamics Controller:
+            // 1. Envelope follower on low-frequency band (< 110 Hz):
+            //    Attack ~8 ms (preserves initial transient/punch), Release ~70 ms (sustains decaying bass body)
+            let bassInstant = max(abs(lowL), abs(lowR))
+            if bassInstant > _bassEnvelope {
+                _bassEnvelope = _bassEnvelope * 0.997 + bassInstant * 0.003
+            } else {
+                _bassEnvelope = _bassEnvelope * 0.9997
+            }
+            
+            // 2. Optical dynamic gain: brings up quiet bass notes/sustain without clipping loud kicks
+            let optoGain = 1.30 / sqrt(1.0 + _bassEnvelope * _bassEnvelope * 3.0)
+            let drivenLowL = lowL * optoGain
+            let drivenLowR = lowR * optoGain
+            
+            let harmLowL = generateBassHarmonics(drivenLowL)
+            let harmLowR = generateBassHarmonics(drivenLowR)
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
@@ -386,6 +398,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _lowPostHPFR.reset()
         _lowPostLPFL.reset()
         _lowPostLPFR.reset()
+        _hfEnvelope = 0.0
+        _bassEnvelope = 0.0
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
@@ -424,13 +438,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
-        // Aphex Big Bottom / Renaissance Bass shaper:
-        // Retains fundamental (s) with smooth soft-saturation and sustain,
-        // adds 2nd harmonic warmth (0.35 s^2) and 3rd harmonic definition (-0.15 s^3)
-        // for massive body, weight, and punch in headphones and speakers.
+        // Aphex Big Bottom warm harmonic shaper:
+        // Retains fundamental (s), adds musical 2nd harmonic warmth (0.08 s^2)
+        // and 3rd harmonic definition (-0.12 s^3) while maintaining wave symmetry
+        // and preventing overload/flapping distortion.
         let s2 = s * s
         let s3 = s2 * s
-        return s + 0.35 * s2 - 0.15 * s3
+        return s + 0.08 * s2 - 0.12 * s3
     }
 
     @inline(__always)
