@@ -630,7 +630,7 @@ struct LoudnessCompensatorHybridTests {
         #expect(meanDC < 1e-4, "Expected mean DC offset to be near zero, got \(meanDC)")
     }
 
-    @Test("Aphex Optical Big Bottom retains fundamental and generates musical harmonic overtones")
+    @Test("Bass exciter retains fundamental and generates musical harmonic overtones without compression")
     func aphexBigBottomHarmonicGeneration() {
         let sampleRate = 48_000.0
         let frameCount = 48_000
@@ -658,19 +658,19 @@ struct LoudnessCompensatorHybridTests {
         #expect(magH2 > magH3, "Expected H2 > H3, got H2=\(magH2) H3=\(magH3)")
     }
 
-    @Test("Aphex Optical Big Bottom preserves healthy preamp headroom when digital attenuation is available")
+    @Test("Bass exciter preserves healthy preamp headroom when digital attenuation is available")
     func aphexBigBottomHeadroomPreservation() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
         // At max loudness compensation with typical digital volume attenuation at low volume (digitalVolume = 0.15):
         processor.updateForVolume(0.0, digitalVolume: 0.15)
 
-        // Preamp gain should be 1.0 because the bounded Big Bottom wet budget (peakGainDB ~ 13.8 dB)
+        // Preamp gain should be 1.0 because the bounded wet budget (peakGainDB ~ 13.8 dB)
         // fits completely within the 16.5 dB digital attenuation headroom.
         #expect(processor.testPreampGain == 1.0,
                 "Expected preamp gain to be 1.0 when digital headroom is available, got \(processor.testPreampGain)")
     }
 
-    @Test("Aphex Optical Big Bottom optical compressor prevents output from exceeding 0 dBFS under full-scale input")
+    @Test("Preamp headroom management prevents output from exceeding 0 dBFS under full-scale input")
     func aphexBigBottomPreventsClippingUnderFullScaleInput() {
         let sampleRate = 48_000.0
         let frameCount = 48_000
@@ -735,6 +735,44 @@ struct LoudnessCompensatorHybridTests {
         let peakRatio = maxPositive / maxNegative
         #expect(peakRatio >= 0.85 && peakRatio <= 1.15,
                 "Peak ratio should stay bounded within 15%, got positive=\(maxPositive), negative=\(maxNegative), ratio=\(peakRatio)")
+    }
+
+    @Test("Bass exciter is purely instantaneous and exhibits zero time-domain envelope pumping on note tails")
+    func bassExciterHasZeroTimeDomainPumping() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0)
+
+        // 50 Hz steady-state sine wave with constant low-amplitude (tail level)
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.2 * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        // Compare peak amplitude in earlier cycle vs later cycle to ensure gain does not drift/pump over time
+        let cycleSamples = Int(sampleRate / 50.0) // 960 samples
+        let earlyCycleStart = cycleSamples * 10
+        let lateCycleStart = cycleSamples * 40
+
+        var earlyPeak: Float = 0.0
+        for i in earlyCycleStart..<(earlyCycleStart + cycleSamples) {
+            earlyPeak = max(earlyPeak, abs(output[i * 2]))
+        }
+
+        var latePeak: Float = 0.0
+        for i in lateCycleStart..<(lateCycleStart + cycleSamples) {
+            latePeak = max(latePeak, abs(output[i * 2]))
+        }
+
+        #expect(earlyPeak > 0.0)
+        let driftRatio = abs(latePeak - earlyPeak) / earlyPeak
+        #expect(driftRatio < 0.001, "Expected zero gain pumping across cycles, got drift ratio \(driftRatio)")
     }
 
     @Test("Measure low exciter bass contribution")

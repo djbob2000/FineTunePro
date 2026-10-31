@@ -79,7 +79,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Cached gain budget; digital-volume-only updates need no coefficient rebuild.
     private var _peakGainDB: Double = 0.0
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
-    private nonisolated(unsafe) var _bassEnvelope: Float = 0.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
 
@@ -333,20 +332,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
             let effectiveHighWet = highWet * sibilantDucking
             
-            // Low-band dynamics controller (optical-style ballistics):
-            // 1. Envelope follower on low-frequency band (< 110 Hz):
-            //    Attack ~8 ms (preserves initial transient/punch), Release ~70 ms (sustains decaying bass body)
-            let bassInstant = max(abs(lowL), abs(lowR))
-            if bassInstant > _bassEnvelope {
-                _bassEnvelope = _bassEnvelope * 0.997 + bassInstant * 0.003
-            } else {
-                _bassEnvelope = _bassEnvelope * 0.9997
-            }
-            
-            // 2. Optical dynamic gain: brings up quiet bass notes/sustain without clipping loud kicks
-            let optoGain = 1.25 / sqrt(1.0 + _bassEnvelope * _bassEnvelope * 3.0)
-            let drivenLowL = smoothCompress(lowL * optoGain)
-            let drivenLowR = smoothCompress(lowR * optoGain)
+            // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
+            // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
+            // Soft-knee provides transparent peak conditioning above 0.8.
+            let drivenLowL = softKnee(lowL)
+            let drivenLowR = softKnee(lowR)
             
             let harmLowL = generateBassHarmonics(drivenLowL)
             let harmLowR = generateBassHarmonics(drivenLowR)
@@ -399,7 +389,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _lowPostLPFL.reset()
         _lowPostLPFR.reset()
         _hfEnvelope = 0.0
-        _bassEnvelope = 0.0
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
@@ -432,17 +421,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func smoothCompress(_ x: Float) -> Float {
-        x / sqrt(1.0 + x * x)
-    }
-
-    @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
-        // Aphex Optical Big Bottom low-end transfer function:
-        // - Linear fundamental term 's' preserves the full sub-bass body and optical sustain pump.
+        // Musical bass harmonic saturation:
+        // - Linear fundamental term 's' preserves the full natural sub-bass body and punch.
         // - Even term '+0.15 * s^2' adds warm 2nd harmonic overtones (octave up) for punch and small-speaker audibility;
         //   the resulting DC bias is blocked by _lowPostHPF (20 Hz).
-        // - Odd term '-0.05 * s^3' provides gentle soft saturation and peak rounding.
+        // - Odd term '-0.05 * s^3' provides gentle soft saturation and peak rounding without dynamic time-domain compression.
         let s2 = s * s
         let s3 = s2 * s
         return s + 0.15 * s2 - 0.05 * s3

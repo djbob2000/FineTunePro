@@ -24,3 +24,8 @@
 | Task 20 | Full Test Suite Verification | done |
 | Task 21 | Release Binary Build & Codesign | done |
 | Task 22 | Push to GitHub & Verification Report | done |
+| Task 23 | Remove bass optical compressor & sustain leveler in `LoudnessCompensator.swift` (eliminate `_bassEnvelope` & `optoGain`, retain EQ + instant saturation/exciter) | done |
+| Task 24 | Update DSP unit tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
+| Task 25 | Full Test Suite Verification | done |
+| Task 26 | Rebuild Release `.app` bundle, codesign & verify | done |
+| Task 27 | Commit & Push to GitHub | done |
