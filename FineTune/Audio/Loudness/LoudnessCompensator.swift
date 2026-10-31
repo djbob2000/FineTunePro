@@ -183,7 +183,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassAmount = amount * bassScale * linearWet
         _bassEQ0DB = 10 * bassAmount
 
-        // Aphex Big Bottom bass wet mix (0.50 / -6 dB parallel mix at max loudness compensation).
+        // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
         _lowExciterWet = harmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
         let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
@@ -197,9 +197,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             .filter { $0.0 < sampleRate / 2 }
             .map { $0.1 }.max() ?? 0
 
-        // Bass shelf and Big Bottom exciter both operate in the low band (< 280 Hz).
-        // Since Big Bottom retains and enriches the fundamental in parallel with the shelf,
-        // headroom reserves their combined coherent peak.
+        // Bass shelf and low exciter both operate in the low band (< 280 Hz).
+        // The sidechain injects additional energy in this band, so headroom reserves their
+        // combined coherent peak to prevent clipping.
         let bassWetMultiplier = 1.0 + Double(_lowExciterWet) * 1.35
         let bassPeakDB = max(0.0, peak) + 20.0 * log10(bassWetMultiplier)
 
@@ -333,7 +333,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
             let effectiveHighWet = highWet * sibilantDucking
             
-            // Aphex Big Bottom Optical Compressor / Dynamics Controller:
+            // Low-band dynamics controller (optical-style ballistics):
             // 1. Envelope follower on low-frequency band (< 110 Hz):
             //    Attack ~8 ms (preserves initial transient/punch), Release ~70 ms (sustains decaying bass body)
             let bassInstant = max(abs(lowL), abs(lowR))
@@ -438,13 +438,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
-        // Waves MaxxBass / Aphex Big Bottom pure harmonic expansion:
-        // Generates overtones without fundamental (s) to prevent intermodulation,
-        // DC shift, and asymmetrical waveform warping.
-        // 2nd harmonic (s^2, 0.35) - deep octave warmth and chest punch
-        // 3rd harmonic (s^3, 0.12) - clear pitch definition and articulation
-        // 4th harmonic (s^4, 0.04) - upper bass presence for small drivers
-        // 5th harmonic (s^5, 0.01) - subtle psychoacoustic edge
+        // Polynomial overtone generation in the low-frequency sidechain:
+        // - Even terms (s^2, s^4) synthesize octave overtones (H2, H4) with a DC offset
+        //   that is subsequently eliminated by _lowPostHPF (20 Hz).
+        // - Odd terms (s^3, s^5) synthesize higher odd harmonics (H3, H5) while contributing
+        //   a modest fundamental component via trigonometric identity (e.g. sin^3(t) = 3/4 sin(t) - 1/4 sin(3t)).
+        // - Coefficients provide natural acoustic decay: H2 (0.35) > H3 (0.12) > H4 (0.04) > H5 (0.01).
         let s2 = s * s
         let s3 = s2 * s
         let s4 = s3 * s

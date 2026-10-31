@@ -18,3 +18,4 @@
 | Task 14 | Set optimal lowWet to 0.50 (-6 dB parallel mix), update test suite, rebuild & push | done |
 | Task 15 | Implement Aphex Big Bottom optical compressor and symmetrical saturator | done |
 | Task 16 | Refactor bass exciter to true Waves MaxxBass / Aphex Big Bottom pure harmonic sidechain architecture | done |
+| Task 17 | Clarify DSP documentation & mathematical accuracy in `LoudnessCompensator.swift` and tests | done |
