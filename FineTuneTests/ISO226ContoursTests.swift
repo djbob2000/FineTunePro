@@ -583,13 +583,13 @@ struct LoudnessCompensatorHybridTests {
                 "Expected low exciter wet to be 0.50 at maximum compensation, got \(processor.testLowExciterWet)")
     }
 
-    @Test("Soft bass variant uses 20 dB low EQ at maximum compensation as per ISO 226")
+    @Test("Soft bass variant uses 10 dB low EQ at maximum compensation")
     func softBassVariantUsesTenDBLowEQ() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
         processor.updateForVolume(0.0)
 
-        #expect(abs(processor.testBassEQ0DB - 20.0) < 0.0001)
+        #expect(abs(processor.testBassEQ0DB - 10.0) < 0.0001)
     }
 
     @Test("Bass exciter wet zero bypasses loudness harmonics")

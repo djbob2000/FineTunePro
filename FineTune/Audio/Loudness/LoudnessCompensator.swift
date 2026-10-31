@@ -79,22 +79,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Cached gain budget; digital-volume-only updates need no coefficient rebuild.
     private var _peakGainDB: Double = 0.0
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
-    private nonisolated(unsafe) var _bassEnvelope: Float = 0.0
-    private nonisolated(unsafe) var _bassAttackCoeff: Float = 0.70
-    private nonisolated(unsafe) var _bassReleaseCoeff: Float = 0.99986
-    
-    // RT-safe scratch buffer for preserving clean input during in-place processing
-    private let _scratchCapacity: Int = 65536 * 2
-    private let _cleanInputScratch: UnsafeMutablePointer<Float>
-    
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
 
     // MARK: - Init
 
     init(sampleRate: Double) {
-        _cleanInputScratch = .allocate(capacity: _scratchCapacity)
-        _cleanInputScratch.initialize(repeating: 0, count: _scratchCapacity)
         super.init(
             sampleRate: sampleRate,
             maxSections: Self.bandCount,
@@ -102,10 +92,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             initiallyEnabled: false
         )
         updateCrossoverCoefficients()
-    }
-
-    deinit {
-        _cleanInputScratch.deallocate()
     }
 
     // MARK: - Volume Update
@@ -194,8 +180,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassScale = max(0, Double(_currentGainScale))
         let linearWet = max(0, min(1, Double(_currentBassLinearWet)))
         let bassAmount = amount * bassScale * linearWet
-        // ISO 226 equal-loudness target: low-frequency boost up to +20 dB at low listening phon levels.
-        _bassEQ0DB = 20 * bassAmount
+        _bassEQ0DB = 10 * bassAmount
 
         // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
@@ -302,25 +287,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     override func process(input: UnsafePointer<Float>, output: UnsafeMutablePointer<Float>, frameCount: Int) {
-        // Preserve clean input when processing in-place (input == output) so dynamic EQ and exciters
-        // always measure and scale relative to pristine input rather than biquad-overwritten output.
-        let inPtr: UnsafePointer<Float>
-        let totalSamples = frameCount * 2
-        if input == UnsafePointer(output) {
-            let copyCount = min(totalSamples, _scratchCapacity)
-            memcpy(_cleanInputScratch, input, copyCount * MemoryLayout<Float>.size)
-            inPtr = UnsafePointer(_cleanInputScratch)
-        } else {
-            inPtr = input
-        }
-
         // 1. Process linear loudness biquad filters first
         super.process(input: input, output: output, frameCount: frameCount)
         
         let lowWet = _lowExciterWet
         let highWet = _highExciterWet
-        let gMax = Float(pow(10.0, _bassEQ0DB / 20.0))
-        let maxBoostMinusOne = max(0.01, gMax - 1.0)
         
         guard isEnabled else { return }
 
@@ -329,8 +300,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let idxL = frame * 2
             let idxR = frame * 2 + 1
             
-            let inL = inPtr[idxL]
-            let inR = inPtr[idxR]
+            let inL = input[idxL]
+            let inR = input[idxR]
             let xL = output[idxL]
             let xR = output[idxR]
             
@@ -338,27 +309,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             // downstream shelf boost from distorting the harmonic exciter.
             let lowL = _lpL.process(inL)
             let lowR = _lpR.process(inR)
-            
-            // True Dynamic EQ Level Detector:
-            // Fast attack (~2 ms), smooth musical release (~150 ms) to track musical envelope without waveform distortion
-            let instantBass = max(abs(lowL), abs(lowR))
-            if instantBass > _bassEnvelope {
-                _bassEnvelope = _bassEnvelope * _bassAttackCoeff + instantBass * (1.0 - _bassAttackCoeff)
-            } else {
-                _bassEnvelope = _bassEnvelope * _bassReleaseCoeff
-            }
-            
-            // True Dynamic EQ Scaling Factor (k):
-            // On quiet passages (<= -20 dBFS), k = 1.0 (full ISO 226 low-shelf boost).
-            // As bass amplitude increases, k smoothly scales down so total low-frequency peak
-            // stays bounded within 0.80 (-1.9 dBFS) headroom without clipping or squaring the wave.
-            let boostAllowed = (0.80 / max(1e-4, _bassEnvelope)) - 1.0
-            let k = max(0.0, min(1.0, boostAllowed / maxBoostMinusOne))
-            
-            // Reconstruct dynamically scaled low shelf:
-            // boost = (x - in). When k=1, dyn = x (full shelf). When k=0, dyn = in (clean unity).
-            let dynL = inL + k * (xL - inL)
-            let dynR = inR + k * (xR - inR)
             
             let highL = _hpL.process(inL)
             let highR = _hpR.process(inR)
@@ -375,7 +325,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             // Smoothly duck high exciter wet gain on sharp sibilant bursts ('S', 'TS', 'SH') above 0.25 peak
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
             let effectiveHighWet = highWet * sibilantDucking
-            let effectiveLowWet = lowWet
             
             // Bass Harmonic Exciter (Waves Renaissance Bass R-Bass topology: 2f0, 3f0, 4f0, 5f0):
             // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
@@ -396,12 +345,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
             
-            // Sum dynamic low shelf, exciter harmonics, and treble; midrange remains at 100% unity gain (0 dB).
-            let outL = dynL + (filteredSatLowL * effectiveLowWet) + (filteredSatHighL * effectiveHighWet)
-            let outR = dynR + (filteredSatLowR * effectiveLowWet) + (filteredSatHighR * effectiveHighWet)
+            // Sum dry and wet; midrange remains at 100% unity gain (0 dB).
+            let outL = xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)
+            let outR = xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)
             
-            // Final Safety Limiter Guard:
-            // Stays dormant during normal operation (<0.85); transparently protects against unexpected peaks.
+            // Path 2 Dynamic Soft-Limiter:
+            // Linearly preserves full dynamics and harmonics below threshold (0.85 / -1.4 dBFS).
+            // Smoothly compresses extreme bass transients towards 1.0 (0 dBFS), preventing digital overload.
             output[idxL] = softLimitOutput(outL)
             output[idxR] = softLimitOutput(outR)
         }
@@ -436,9 +386,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _lowPostLPFL.reset()
         _lowPostLPFR.reset()
         _hfEnvelope = 0.0
-        _bassEnvelope = 0.0
-        _bassReleaseCoeff = Float(exp(-1.0 / (0.150 * sampleRate)))
-        _bassAttackCoeff = Float(exp(-1.0 / (0.002 * sampleRate)))
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
