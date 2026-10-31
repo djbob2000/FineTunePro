@@ -182,9 +182,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassAmount = amount * bassScale * linearWet
         _bassEQ0DB = 10 * bassAmount
 
-        // Target ~ +6 dB harmonic boost at max compensation (70% bass harmonic wet mix).
+        // Experimental heavy harmonic boost (300% wet mix) for user auditioning.
         let harmonicsEnabled = _currentBassExciterWet > 0
-        _lowExciterWet = harmonicsEnabled ? 0.70 * Float(amount * bassScale) : 0
+        _lowExciterWet = harmonicsEnabled ? 3.0 * Float(amount * bassScale) : 0
         let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
         _highExciterWet = harmonicsEnabled ? Float(pow(10, highBoostDB / 20) - 1) : 0
         return [Float(_bassEQ0DB)]
