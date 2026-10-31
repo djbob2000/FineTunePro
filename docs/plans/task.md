@@ -29,3 +29,8 @@
 | Task 25 | Full Test Suite Verification | done |
 | Task 26 | Rebuild Release `.app` bundle, codesign & verify | done |
 | Task 27 | Commit & Push to GitHub | done |
+| Task 28 | Remove exciter contribution from headroom calculation in `FineTune/Audio/Loudness/LoudnessCompensator.swift` | done |
+| Task 29 | Update unit tests in `FineTuneTests/ISO226ContoursTests.swift` and verify tests | done |
+| Task 30 | Full Test Suite Verification | done |
+| Task 31 | Rebuild Release `.app` bundle, codesign & verify | done |
+| Task 32 | Commit & Push to GitHub | in-progress |

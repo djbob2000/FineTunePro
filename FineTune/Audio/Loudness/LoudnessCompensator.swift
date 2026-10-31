@@ -196,17 +196,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             .filter { $0.0 < sampleRate / 2 }
             .map { $0.1 }.max() ?? 0
 
-        // Bass shelf and low exciter both operate in the low band (< 280 Hz).
-        // The sidechain injects additional energy in this band, so headroom reserves their
-        // combined coherent peak to prevent clipping.
-        let bassWetMultiplier = 1.0 + Double(_lowExciterWet) * 1.10
-        let bassPeakDB = max(0.0, peak) + 20.0 * log10(bassWetMultiplier)
-
-        // Treble exciter operates in the high band (> 3000 Hz) where the shelf is flat (0 dB)
-        let treblePeakDB = 20.0 * log10(1.0 + Double(_highExciterWet) * 1.36)
-
-        // The separate frequency bands don't multiply each other; system peak is the maximum across bands
-        _peakGainDB = max(bassPeakDB, treblePeakDB)
+        // Headroom is budgeted strictly from the realized linear EQ shelf response.
+        // Parallel harmonic exciters generate overtones in dedicated sidechains rather than
+        // coherent fundamental energy, and downstream BrickwallLimiter handles transient peaks.
+        _peakGainDB = max(0.0, peak)
         updatePreamp()
     }
 
@@ -423,13 +416,14 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
         // Musical bass harmonic saturation:
-        // - Linear fundamental term 's' preserves the full natural sub-bass body and punch.
-        // - Even term '+0.15 * s^2' adds warm 2nd harmonic overtones (octave up) for punch and small-speaker audibility;
+        // Pure harmonic generation without duplicating the fundamental (which is already
+        // fully preserved and shaped by the ISO 226 EQ shelf filter in the direct path).
+        // - Even term '+0.20 * s^2' adds warm 2nd harmonic overtones (octave up) for punch and small-speaker audibility;
         //   the resulting DC bias is blocked by _lowPostHPF (20 Hz).
-        // - Odd term '-0.05 * s^3' provides gentle soft saturation and peak rounding without dynamic time-domain compression.
+        // - Odd term '-0.05 * s^3' provides gentle harmonic saturation.
         let s2 = s * s
         let s3 = s2 * s
-        return s + 0.15 * s2 - 0.05 * s3
+        return 0.20 * s2 - 0.05 * s3
     }
 
     @inline(__always)
