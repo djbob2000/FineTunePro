@@ -195,13 +195,17 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let peak = zip(Self.fitGridFrequencies(), response)
             .filter { $0.0 < sampleRate / 2 }
             .map { $0.1 }.max() ?? 0
-        // The bass harmonic generator polynomial has bounded peak gain:
-        // sum(|w_i|) = 0.35 + 0.12 + 0.04 + 0.01 = 0.52 for |s| <= 1.0.
-        // It produces only higher harmonics without duplicating the fundamental.
-        let harmonicMaxGain = 0.52
-        let wetGain = 1 + Double(_lowExciterWet) * harmonicMaxGain
-            + Double(_highExciterWet) * 1.36
-        _peakGainDB = max(0, peak) + 20 * log10(wetGain)
+
+        // Bass shelf and synthesized harmonics operate in the low band (< 280 Hz)
+        let bassLinearPeak = pow(10.0, max(0.0, peak) / 20.0)
+        let bassHarmonicBudget = Double(_lowExciterWet) * 0.52
+        let bassPeakDB = 20.0 * log10(bassLinearPeak + bassHarmonicBudget)
+
+        // Treble exciter operates in the high band (> 3000 Hz) where the shelf is flat (0 dB)
+        let treblePeakDB = 20.0 * log10(1.0 + Double(_highExciterWet) * 1.36)
+
+        // The separate frequency bands don't multiply each other; system peak is the maximum across bands
+        _peakGainDB = max(bassPeakDB, treblePeakDB)
         updatePreamp()
     }
 
