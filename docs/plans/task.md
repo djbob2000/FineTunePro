@@ -34,3 +34,8 @@
 | Task 30 | Full Test Suite Verification | done |
 | Task 31 | Rebuild Release `.app` bundle, codesign & verify | done |
 | Task 32 | Commit & Push to GitHub | done |
+| Task 33 | Implement Waves Renaissance Bass multi-harmonic polynomial (2f0, 3f0, 4f0, 5f0) in `LoudnessCompensator.swift` | done |
+| Task 34 | Update & Run Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` and `LoudnessHeadroomRegressionTests.swift` | done |
+| Task 35 | Full Test Suite Verification | done |
+| Task 36 | Rebuild Release `.app` bundle, codesign & verify | done |
+| Task 37 | Commit & Push to GitHub | done |
