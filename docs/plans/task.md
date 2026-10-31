@@ -47,4 +47,4 @@
 | Task 43 | Implement True Dynamic EQ in `LoudnessCompensator.swift` | done |
 | Task 44 | Test Suite Verification (`LoudnessHeadroomRegressionTests`, `ISO226ContoursTests`) | done |
 | Task 45 | Release Build, Codesign & Verify | done |
-| Task 46 | Commit & Push to GitHub | in_progress |
+| Task 46 | Commit & Push to GitHub | done |
