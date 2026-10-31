@@ -2,9 +2,7 @@
 
 | Task ID | Description | Status |
 |---|---|---|
-| Task 1 | Explore project context & existing exciter DSP | done |
-| Task 2 | Propose approaches & clarify key design decisions | done |
-| Task 3 | Present design sections and get user approval | done |
-| Task 4 | Write design doc (`docs/plans/2026-10-31-pure-harmonic-bass-exciter-design.md`) | done |
-| Task 5 | Create implementation plan (`writing-plans`) | in_progress |
-| Task 6 | Implement & Verify with Tests | pending |
+| Task 1 | Update DSP State & Post-Filters in `LoudnessCompensator.swift` | done |
+| Task 2 | Implement Smooth Sigmoid, Pure Harmonic Generator & Audio Process Loop | done |
+| Task 3 | Unit Tests for Harmonic Purity & Regression Safety | done |
+| Task 4 | Full Suite Verification & Final Commit | done |

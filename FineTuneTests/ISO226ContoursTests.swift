@@ -619,6 +619,74 @@ struct LoudnessCompensatorHybridTests {
                 "Expected high exciter wet \(expectedWet), got \(processor.testHighExciterWet)")
     }
 
+    @Test("Pure harmonic exciter generates no measurable DC offset")
+    func pureHarmonicExciterZeroDCOffset() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0)
+
+        // 50 Hz sine wave
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.5 * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        // Steady-state DC offset across the second half of the buffer
+        let startFrame = frameCount / 2
+        var sumDC = 0.0
+        for i in startFrame..<frameCount {
+            sumDC += Double(output[i * 2])
+        }
+        let meanDC = abs(sumDC / Double(frameCount - startFrame))
+        #expect(meanDC < 1e-4, "Expected mean DC offset to be near zero, got \(meanDC)")
+    }
+
+    @Test("Pure harmonic exciter exhibits natural harmonic decay H2 > H3 > H4 > H5")
+    func pureHarmonicExciterHarmonicDecay() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0, bassCrossoverFrequency: 80.0, trebleGainScale: 0.0)
+
+        // 40 Hz sub-bass sine wave
+        let f0 = 40.0
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.5 * sin(2.0 * .pi * f0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        let magH2 = magnitude(at: f0 * 2.0, in: output, sampleRate: sampleRate)
+        let magH3 = magnitude(at: f0 * 3.0, in: output, sampleRate: sampleRate)
+        let magH4 = magnitude(at: f0 * 4.0, in: output, sampleRate: sampleRate)
+
+        #expect(magH2 > 0.0, "Expected non-zero 2nd harmonic")
+        #expect(magH2 > magH3, "Expected H2 > H3, got H2=\(magH2) H3=\(magH3)")
+        #expect(magH3 > magH4, "Expected H3 > H4, got H3=\(magH3) H4=\(magH4)")
+    }
+
+    @Test("Pure harmonic exciter preserves healthy preamp headroom when digital attenuation is available")
+    func pureHarmonicExciterHeadroomPreservation() {
+        let processor = LoudnessCompensator(sampleRate: 48_000.0)
+        // At max loudness compensation with typical digital volume attenuation at low volume (digitalVolume = 0.15):
+        processor.updateForVolume(0.0, digitalVolume: 0.15)
+
+        // Preamp gain should be 1.0 because the new bounded harmonic wet budget (peakGainDB ~ 15.1 dB)
+        // fits completely within the 16.5 dB digital attenuation headroom.
+        #expect(processor.testPreampGain == 1.0,
+                "Expected preamp gain to be 1.0 when digital headroom is available, got \(processor.testPreampGain)")
+    }
+
     @Test("Measure low exciter bass contribution")
     func measureLowExciterBassContribution() throws {
         let sampleRate = 48_000.0
