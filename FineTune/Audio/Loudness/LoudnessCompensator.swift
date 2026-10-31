@@ -182,9 +182,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassAmount = amount * bassScale * linearWet
         _bassEQ0DB = 10 * bassAmount
 
-        // Aphex Big Bottom bass wet mix (0.70 at max loudness compensation).
+        // Aphex Big Bottom bass wet mix (0.50 / -6 dB parallel mix at max loudness compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
-        _lowExciterWet = harmonicsEnabled ? 0.70 * Float(amount * bassScale) : 0
+        _lowExciterWet = harmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
         let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
         _highExciterWet = harmonicsEnabled ? Float(pow(10, highBoostDB / 20) - 1) : 0
         return [Float(_bassEQ0DB)]

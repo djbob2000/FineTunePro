@@ -15,3 +15,4 @@
 | Task 11 | Update Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
 | Task 12 | Verification, Release `.app` Build & Codesign | done |
 | Task 13 | Commit & Push to GitHub | done |
+| Task 14 | Set optimal lowWet to 0.50 (-6 dB parallel mix), update test suite, rebuild & push | done |
