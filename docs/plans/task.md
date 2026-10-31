@@ -10,4 +10,4 @@
 | Task 6 | Set max lowWet to 0.70 (+6 dB harmonic boost at max compensation) | done |
 | Task 7 | Smooth treble exciter input with C2 soft-knee (`softKnee`) in both HF processors | done |
 | Task 8 | Recalibrate headroom budget (independent band maximums, restoring ~5 dB volume) | done |
-| Task 9 | Rebuild Release `.app` bundle, commit & push to GitHub | in_progress |
+| Task 9 | Rebuild Release `.app` bundle, commit & push to GitHub | done |
