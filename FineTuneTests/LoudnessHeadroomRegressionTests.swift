@@ -58,8 +58,8 @@ struct LoudnessHeadroomRegressionTests {
 
     @Test("Digital attenuation is consumed before additional preamp attenuation")
     func existingDigitalHeadroomIsUsed() {
-        #expect(abs(gain(at: 1_000, digital: 0.1) - 0.133) < 0.05)
-        #expect(abs(gain(at: 1_000, digital: 1) - (-9.87)) < 0.1)
+        #expect(abs(gain(at: 1_000, digital: 0.1)) < 0.05)
+        #expect(abs(gain(at: 1_000, digital: 1) - (-10.0)) < 0.1)
     }
 
     @Test("A small digital gain change refreshes headroom at the same listening volume")

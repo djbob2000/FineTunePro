@@ -17,11 +17,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     // MARK: - Configuration
 
     /// Four-section topology chosen to approximate the ISO-derived loudness target with
-    /// minimal runtime DSP cost: low shelf, low-mid bell, upper-mid bell, high shelf.
+    /// Fixed low-shelf filter topology for loudness compensation.
     private enum LoudnessFilterKind {
         case lowShelf
-        case peaking
-        case highShelf
     }
 
     private struct LoudnessFilterDefinition {
@@ -31,10 +29,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     private static let filterDefinitions: [LoudnessFilterDefinition] = [
-        .init(kind: .lowShelf, frequency: 80, q: 0.707),
-        .init(kind: .peaking, frequency: 180, q: 0.7),
-        .init(kind: .peaking, frequency: 3200, q: 0.7),
-        .init(kind: .highShelf, frequency: 10000, q: 0.85),
+        .init(kind: .lowShelf, frequency: 80, q: 0.707)
     ]
     static let bandFrequencies = filterDefinitions.map(\.frequency)
     static let bandCount = filterDefinitions.count
@@ -187,12 +182,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassAmount = amount * bassScale * linearWet
         _bassEQ0DB = 10 * bassAmount
 
-        // Preserve the existing harmonic character and its default 35% bass wet mix.
+        // Target ~ +6 dB harmonic boost at max compensation (70% bass harmonic wet mix).
         let harmonicsEnabled = _currentBassExciterWet > 0
-        _lowExciterWet = harmonicsEnabled ? 0.35 * Float(amount * bassScale) : 0
+        _lowExciterWet = harmonicsEnabled ? 0.70 * Float(amount * bassScale) : 0
         let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
         _highExciterWet = harmonicsEnabled ? Float(pow(10, highBoostDB / 20) - 1) : 0
-        return [Float(_bassEQ0DB), Float(2 * bassAmount), 0, 0]
+        return [Float(_bassEQ0DB)]
     }
 
     private func updateHeadroom(gains: [Float]) {
@@ -205,7 +200,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // It produces only higher harmonics without duplicating the fundamental.
         let harmonicMaxGain = 0.52
         let wetGain = 1 + Double(_lowExciterWet) * harmonicMaxGain
-            + Double(_highExciterWet) * 1.1 * 1.36
+            + Double(_highExciterWet) * 1.36
         _peakGainDB = max(0, peak) + 20 * log10(wetGain)
         updatePreamp()
     }
@@ -261,20 +256,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             switch filter.kind {
             case .lowShelf:
                 coeffs = BiquadMath.lowShelfCoefficients(
-                    frequency: filter.frequency,
-                    gainDB: gains[index],
-                    q: filter.q,
-                    sampleRate: sampleRate
-                )
-            case .peaking:
-                coeffs = BiquadMath.peakingEQCoefficients(
-                    frequency: filter.frequency,
-                    gainDB: gains[index],
-                    q: filter.q,
-                    sampleRate: sampleRate
-                )
-            case .highShelf:
-                coeffs = BiquadMath.highShelfCoefficients(
                     frequency: filter.frequency,
                     gainDB: gains[index],
                     q: filter.q,
@@ -450,11 +431,24 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
+    private func softKnee(_ u: Float) -> Float {
+        let a = abs(u)
+        if a <= 0.8 {
+            return u
+        }
+
+        let v = (a - 0.8) / 0.2
+        let shaped = 0.8 + 0.2 * v / sqrt(1.0 + v * v)
+        return u < 0 ? -shaped : shaped
+    }
+
+    @inline(__always)
     private func softClipHigh(_ x: Float) -> Float {
         // Multi-harmonic HF exciter (2nd, 3rd, 4th, and 5th harmonics)
         // Even harmonics (2nd, 4th) add silky warmth and air; odd harmonics (3rd, 5th) are
         // heavily attenuated to prevent harsh sibilance ("зиканье/песок").
-        let c = max(-1.0, min(1.0, x * 1.1))
+        // C² soft knee above |u| > 0.8 eliminates hard clipping corners without altering low levels.
+        let c = softKnee(x * 1.1)
         let c2 = c * c
         let c3 = c2 * c
         let c4 = c3 * c
@@ -469,20 +463,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             switch filter.kind {
             case .lowShelf:
                 coefficients = BiquadMath.lowShelfCoefficients(
-                    frequency: filter.frequency,
-                    gainDB: 1.0,
-                    q: filter.q,
-                    sampleRate: sampleRate
-                )
-            case .peaking:
-                coefficients = BiquadMath.peakingEQCoefficients(
-                    frequency: filter.frequency,
-                    gainDB: 1.0,
-                    q: filter.q,
-                    sampleRate: sampleRate
-                )
-            case .highShelf:
-                coefficients = BiquadMath.highShelfCoefficients(
                     frequency: filter.frequency,
                     gainDB: 1.0,
                     q: filter.q,

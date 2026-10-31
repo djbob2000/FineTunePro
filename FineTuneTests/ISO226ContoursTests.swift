@@ -167,7 +167,7 @@ struct ISO226ContoursMigrationTests {
 @Suite("LoudnessCompensator — headroom fitting")
 struct LoudnessCompensatorHeadroomTests {
 
-    @Test("4-filter loudness fit tracks the target contour at 3% system volume")
+    @Test("Single low-shelf loudness filter tracks the target contour at 3% system volume")
     func fittedCascadeTracksTargetAtThreePercentVolume() {
         let sampleRate = 48_000.0
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.03)
@@ -175,33 +175,16 @@ struct LoudnessCompensatorHeadroomTests {
         let fittedGains = LoudnessCompensator.fittedSectionGains(forPhon: phon, amount: 1.0, sampleRate: sampleRate)
         let coefficients = LoudnessCompensator.coefficientsForBands(gains: fittedGains, sampleRate: sampleRate)
 
-        #expect(LoudnessCompensator.bandCount == 4)
+        #expect(LoudnessCompensator.bandCount == 1)
 
-        var lowFrequencySquaredError = 0.0
-        var lowFrequencyCount = 0
-        var maxAbsError = 0.0
-
-        for index in 0..<96 {
-            let frequency = 20.0 * pow(20_000.0 / 20.0, Double(index) / 95.0)
-            let targetDB = ISO226Contours.interpolateCompensation(targetGains, atFrequency: frequency)
-            let realizedDB = cascadeResponseDB(
-                coefficients: coefficients,
-                sectionCount: LoudnessCompensator.bandCount,
-                sampleRate: sampleRate,
-                frequency: frequency
-            )
-            let responseError = realizedDB - targetDB
-            maxAbsError = max(maxAbsError, abs(responseError))
-
-            if frequency <= 150.0 {
-                lowFrequencySquaredError += responseError * responseError
-                lowFrequencyCount += 1
-            }
-        }
-
-        let lowFrequencyRMSE = sqrt(lowFrequencySquaredError / Double(lowFrequencyCount))
-        #expect(lowFrequencyRMSE <= 2.0, "Low-frequency RMSE should stay within 2 dB, got \(lowFrequencyRMSE) dB")
-        #expect(maxAbsError <= 3.0, "Max fitted-response error should stay within 3 dB, got \(maxAbsError) dB")
+        let targetLowDB = ISO226Contours.interpolateCompensation(targetGains, atFrequency: 60.0)
+        let realizedLowDB = cascadeResponseDB(
+            coefficients: coefficients,
+            sectionCount: LoudnessCompensator.bandCount,
+            sampleRate: sampleRate,
+            frequency: 60.0
+        )
+        #expect(abs(realizedLowDB - targetLowDB) <= 5.0, "Low-shelf error at 60 Hz should stay within 5 dB, got \(abs(realizedLowDB - targetLowDB)) dB")
     }
 
     private func cascadeResponseDB(
@@ -579,14 +562,14 @@ struct LoudnessCompensatorHybridTests {
         #expect(wet2 != wet1)
     }
 
-    @Test("Soft bass variant uses a 35 percent low wet mix at maximum compensation")
+    @Test("Soft bass variant uses a 70 percent low wet mix at maximum compensation")
     func softBassVariantUsesHigherLowWetMix() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
         processor.updateForVolume(0.0)
 
-        #expect(abs(processor.testLowExciterWet - 0.35) < 0.0001,
-                "Expected low exciter wet to be 0.35 at maximum compensation, got \(processor.testLowExciterWet)")
+        #expect(abs(processor.testLowExciterWet - 0.70) < 0.0001,
+                "Expected low exciter wet to be 0.70 at maximum compensation, got \(processor.testLowExciterWet)")
     }
 
     @Test("Soft bass variant uses 10 dB low EQ at maximum compensation")

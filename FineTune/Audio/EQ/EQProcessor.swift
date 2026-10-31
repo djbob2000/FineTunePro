@@ -140,9 +140,21 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
+    private func softKnee(_ u: Float) -> Float {
+        let a = abs(u)
+        if a <= 0.8 {
+            return u
+        }
+
+        let v = (a - 0.8) / 0.2
+        let shaped = 0.8 + 0.2 * v / sqrt(1.0 + v * v)
+        return u < 0 ? -shaped : shaped
+    }
+
+    @inline(__always)
     private func softClipHigh(_ x: Float) -> Float {
         // Multi-harmonic HF exciter (2nd, 3rd, 4th, and 5th harmonics)
-        let c = max(-1.0, min(1.0, x * 1.1))
+        let c = softKnee(x * 1.1)
         let c2 = c * c
         let c3 = c2 * c
         let c4 = c3 * c
