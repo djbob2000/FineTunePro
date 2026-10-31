@@ -105,3 +105,4 @@ This guarantees $0$ dBFS ceiling compliance across all system volume settings.
 4. **DC Elimination:** Verify that mean DC offset after `_lowPostHPF` remains below $10^{-4}$.
 5. **Full Unit Test Suite:** Run `FineTuneTests` via `xcodebuild test` and ensure 0 failures.
 6. **Binary Release Build:** Archive and codesign `FineTune.app`.
+

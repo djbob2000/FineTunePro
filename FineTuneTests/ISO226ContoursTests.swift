@@ -630,8 +630,8 @@ struct LoudnessCompensatorHybridTests {
         #expect(meanDC < 1e-4, "Expected mean DC offset to be near zero, got \(meanDC)")
     }
 
-    @Test("Pure harmonic exciter exhibits natural harmonic decay H2 > H3 > H4 > H5")
-    func pureHarmonicExciterHarmonicDecay() {
+    @Test("Aphex Optical Big Bottom retains fundamental and generates musical harmonic overtones")
+    func aphexBigBottomHarmonicGeneration() {
         let sampleRate = 48_000.0
         let frameCount = 48_000
         let processor = LoudnessCompensator(sampleRate: sampleRate)
@@ -649,25 +649,57 @@ struct LoudnessCompensatorHybridTests {
         var output = [Float](repeating: 0.0, count: frameCount * 2)
         processor.process(input: input, output: &output, frameCount: frameCount)
 
+        let magF0 = magnitude(at: f0, in: output, sampleRate: sampleRate)
         let magH2 = magnitude(at: f0 * 2.0, in: output, sampleRate: sampleRate)
         let magH3 = magnitude(at: f0 * 3.0, in: output, sampleRate: sampleRate)
-        let magH4 = magnitude(at: f0 * 4.0, in: output, sampleRate: sampleRate)
 
+        #expect(magF0 > 0.0, "Expected strong fundamental retention")
         #expect(magH2 > 0.0, "Expected non-zero 2nd harmonic")
         #expect(magH2 > magH3, "Expected H2 > H3, got H2=\(magH2) H3=\(magH3)")
-        #expect(magH3 > magH4, "Expected H3 > H4, got H3=\(magH3) H4=\(magH4)")
     }
 
-    @Test("Pure harmonic exciter preserves healthy preamp headroom when digital attenuation is available")
-    func pureHarmonicExciterHeadroomPreservation() {
+    @Test("Aphex Optical Big Bottom preserves healthy preamp headroom when digital attenuation is available")
+    func aphexBigBottomHeadroomPreservation() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
         // At max loudness compensation with typical digital volume attenuation at low volume (digitalVolume = 0.15):
         processor.updateForVolume(0.0, digitalVolume: 0.15)
 
-        // Preamp gain should be 1.0 because the new bounded harmonic wet budget (peakGainDB ~ 15.1 dB)
+        // Preamp gain should be 1.0 because the bounded Big Bottom wet budget (peakGainDB ~ 13.8 dB)
         // fits completely within the 16.5 dB digital attenuation headroom.
         #expect(processor.testPreampGain == 1.0,
                 "Expected preamp gain to be 1.0 when digital headroom is available, got \(processor.testPreampGain)")
+    }
+
+    @Test("Aphex Optical Big Bottom optical compressor prevents output from exceeding 0 dBFS under full-scale input")
+    func aphexBigBottomPreventsClippingUnderFullScaleInput() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+
+        // In ProcessTapController, loudness compensation runs after the volume slider,
+        // so a 0 dBFS full-scale track arrives at the compensator scaled by digitalVolume.
+        for volume in [Float(1.0), Float(0.50), Float(0.35), Float(0.25), Float(0.10)] {
+            processor.updateForVolume(volume, digitalVolume: volume)
+
+            // 0 dBFS 50 Hz sine wave scaled by the upstream volume slider
+            var input = [Float](repeating: 0.0, count: frameCount * 2)
+            for i in 0..<frameCount {
+                let sample = Float(Double(volume) * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+                input[i * 2] = sample
+                input[i * 2 + 1] = sample
+            }
+
+            var output = [Float](repeating: 0.0, count: frameCount * 2)
+            processor.process(input: input, output: &output, frameCount: frameCount)
+
+            var maxPeak: Float = 0.0
+            for i in 0..<frameCount {
+                let peak = max(abs(output[i * 2]), abs(output[i * 2 + 1]))
+                if peak > maxPeak { maxPeak = peak }
+            }
+
+            #expect(maxPeak <= 1.0001, "Expected peak output to stay at or below 0 dBFS (1.0), got \(maxPeak) at volume \(volume)")
+        }
     }
 
     @Test("Bass exciter maintains bounded peak ratio without severe asymmetrical overload")

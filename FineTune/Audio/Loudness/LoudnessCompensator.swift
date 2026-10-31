@@ -200,7 +200,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // Bass shelf and low exciter both operate in the low band (< 280 Hz).
         // The sidechain injects additional energy in this band, so headroom reserves their
         // combined coherent peak to prevent clipping.
-        let bassWetMultiplier = 1.0 + Double(_lowExciterWet) * 1.35
+        let bassWetMultiplier = 1.0 + Double(_lowExciterWet) * 1.10
         let bassPeakDB = max(0.0, peak) + 20.0 * log10(bassWetMultiplier)
 
         // Treble exciter operates in the high band (> 3000 Hz) where the shelf is flat (0 dB)
@@ -344,7 +344,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             }
             
             // 2. Optical dynamic gain: brings up quiet bass notes/sustain without clipping loud kicks
-            let optoGain = 1.30 / sqrt(1.0 + _bassEnvelope * _bassEnvelope * 3.0)
+            let optoGain = 1.25 / sqrt(1.0 + _bassEnvelope * _bassEnvelope * 3.0)
             let drivenLowL = smoothCompress(lowL * optoGain)
             let drivenLowR = smoothCompress(lowR * optoGain)
             
@@ -438,17 +438,14 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
-        // Polynomial overtone generation in the low-frequency sidechain:
-        // - Even terms (s^2, s^4) synthesize octave overtones (H2, H4) with a DC offset
-        //   that is subsequently eliminated by _lowPostHPF (20 Hz).
-        // - Odd terms (s^3, s^5) synthesize higher odd harmonics (H3, H5) while contributing
-        //   a modest fundamental component via trigonometric identity (e.g. sin^3(t) = 3/4 sin(t) - 1/4 sin(3t)).
-        // - Coefficients provide natural acoustic decay: H2 (0.35) > H3 (0.12) > H4 (0.04) > H5 (0.01).
+        // Aphex Optical Big Bottom low-end transfer function:
+        // - Linear fundamental term 's' preserves the full sub-bass body and optical sustain pump.
+        // - Even term '+0.15 * s^2' adds warm 2nd harmonic overtones (octave up) for punch and small-speaker audibility;
+        //   the resulting DC bias is blocked by _lowPostHPF (20 Hz).
+        // - Odd term '-0.05 * s^3' provides gentle soft saturation and peak rounding.
         let s2 = s * s
         let s3 = s2 * s
-        let s4 = s3 * s
-        let s5 = s4 * s
-        return 0.35 * s2 + 0.12 * s3 + 0.04 * s4 + 0.01 * s5
+        return s + 0.15 * s2 - 0.05 * s3
     }
 
     @inline(__always)
