@@ -670,6 +670,41 @@ struct LoudnessCompensatorHybridTests {
                 "Expected preamp gain to be 1.0 when digital headroom is available, got \(processor.testPreampGain)")
     }
 
+    @Test("Bass exciter preserves waveform symmetry without lopsided distortion")
+    func bassExciterPreservesWaveformSymmetry() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0)
+
+        // 50 Hz sine wave with typical bass amplitude 0.6
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.6 * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        // Measure steady-state peaks in the second half of the buffer
+        let startFrame = frameCount / 2
+        var maxPositive: Float = 0.0
+        var maxNegative: Float = 0.0
+        for i in startFrame..<frameCount {
+            let sample = output[i * 2]
+            if sample > maxPositive { maxPositive = sample }
+            if -sample > maxNegative { maxNegative = -sample }
+        }
+
+        #expect(maxPositive > 0.0)
+        #expect(maxNegative > 0.0)
+        let symmetryRatio = maxPositive / maxNegative
+        #expect(symmetryRatio >= 0.90 && symmetryRatio <= 1.10,
+                "Waveform should be symmetrical within 10%, got positive=\(maxPositive), negative=\(maxNegative), ratio=\(symmetryRatio)")
+    }
+
     @Test("Measure low exciter bass contribution")
     func measureLowExciterBassContribution() throws {
         let sampleRate = 48_000.0

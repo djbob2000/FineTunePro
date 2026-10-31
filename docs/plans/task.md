@@ -17,3 +17,4 @@
 | Task 13 | Commit & Push to GitHub | done |
 | Task 14 | Set optimal lowWet to 0.50 (-6 dB parallel mix), update test suite, rebuild & push | done |
 | Task 15 | Implement Aphex Big Bottom optical compressor and symmetrical saturator | done |
+| Task 16 | Refactor bass exciter to true Waves MaxxBass / Aphex Big Bottom pure harmonic sidechain architecture | done |

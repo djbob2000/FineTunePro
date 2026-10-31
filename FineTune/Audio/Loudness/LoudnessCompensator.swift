@@ -345,8 +345,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             
             // 2. Optical dynamic gain: brings up quiet bass notes/sustain without clipping loud kicks
             let optoGain = 1.30 / sqrt(1.0 + _bassEnvelope * _bassEnvelope * 3.0)
-            let drivenLowL = lowL * optoGain
-            let drivenLowR = lowR * optoGain
+            let drivenLowL = smoothCompress(lowL * optoGain)
+            let drivenLowR = smoothCompress(lowR * optoGain)
             
             let harmLowL = generateBassHarmonics(drivenLowL)
             let harmLowR = generateBassHarmonics(drivenLowR)
@@ -438,13 +438,18 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
-        // Aphex Big Bottom warm harmonic shaper:
-        // Retains fundamental (s), adds musical 2nd harmonic warmth (0.08 s^2)
-        // and 3rd harmonic definition (-0.12 s^3) while maintaining wave symmetry
-        // and preventing overload/flapping distortion.
+        // Waves MaxxBass / Aphex Big Bottom pure harmonic expansion:
+        // Generates overtones without fundamental (s) to prevent intermodulation,
+        // DC shift, and asymmetrical waveform warping.
+        // 2nd harmonic (s^2, 0.35) - deep octave warmth and chest punch
+        // 3rd harmonic (s^3, 0.12) - clear pitch definition and articulation
+        // 4th harmonic (s^4, 0.04) - upper bass presence for small drivers
+        // 5th harmonic (s^5, 0.01) - subtle psychoacoustic edge
         let s2 = s * s
         let s3 = s2 * s
-        return s + 0.08 * s2 - 0.12 * s3
+        let s4 = s3 * s
+        let s5 = s4 * s
+        return 0.35 * s2 + 0.12 * s3 + 0.04 * s4 + 0.01 * s5
     }
 
     @inline(__always)
