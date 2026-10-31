@@ -11,3 +11,7 @@
 | Task 7 | Smooth treble exciter input with C2 soft-knee (`softKnee`) in both HF processors | done |
 | Task 8 | Recalibrate headroom budget (independent band maximums, restoring ~5 dB volume) | done |
 | Task 9 | Rebuild Release `.app` bundle, commit & push to GitHub | done |
+| Task 10 | Implement Aphex Big Bottom bass exciter architecture in `LoudnessCompensator.swift` | done |
+| Task 11 | Update Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
+| Task 12 | Verification, Release `.app` Build & Codesign | done |
+| Task 13 | Commit & Push to GitHub | done |

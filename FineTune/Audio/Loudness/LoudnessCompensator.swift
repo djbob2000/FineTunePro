@@ -48,7 +48,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Gain scale used for the last coefficient computation.
     private var _currentGainScale: Float = 1.0
     /// Crossover frequency for low-frequency band (Hz).
-    private var _bassCrossoverFrequency: Double = 67.0
+    private var _bassCrossoverFrequency: Double = 110.0
     /// Crossover frequency for high-frequency band (Hz).
     private var _trebleCrossoverFrequency: Double = 3000.0
     /// Treble gain scale (amount) for the exciter.
@@ -105,7 +105,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 180.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -182,9 +182,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassAmount = amount * bassScale * linearWet
         _bassEQ0DB = 10 * bassAmount
 
-        // Experimental heavy harmonic boost (300% wet mix) for user auditioning.
+        // Aphex Big Bottom bass wet mix (0.70 at max loudness compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
-        _lowExciterWet = harmonicsEnabled ? 3.0 * Float(amount * bassScale) : 0
+        _lowExciterWet = harmonicsEnabled ? 0.70 * Float(amount * bassScale) : 0
         let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
         _highExciterWet = harmonicsEnabled ? Float(pow(10, highBoostDB / 20) - 1) : 0
         return [Float(_bassEQ0DB)]
@@ -196,10 +196,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             .filter { $0.0 < sampleRate / 2 }
             .map { $0.1 }.max() ?? 0
 
-        // Bass shelf and synthesized harmonics operate in the low band (< 280 Hz)
-        let bassLinearPeak = pow(10.0, max(0.0, peak) / 20.0)
-        let bassHarmonicBudget = Double(_lowExciterWet) * 0.52
-        let bassPeakDB = 20.0 * log10(bassLinearPeak + bassHarmonicBudget)
+        // Bass shelf and Big Bottom exciter both operate in the low band (< 280 Hz).
+        // Since Big Bottom retains and enriches the fundamental in parallel with the shelf,
+        // headroom reserves their combined coherent peak.
+        let bassWetMultiplier = 1.0 + Double(_lowExciterWet) * 1.35
+        let bassPeakDB = max(0.0, peak) + 20.0 * log10(bassWetMultiplier)
 
         // Treble exciter operates in the high band (> 3000 Hz) where the shelf is flat (0 dB)
         let treblePeakDB = 20.0 * log10(1.0 + Double(_highExciterWet) * 1.36)
@@ -331,9 +332,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
             let effectiveHighWet = highWet * sibilantDucking
             
-            // Bass Harmonic Synthesis: smooth compression, pure harmonics, bandpass [fc ... 280 Hz]
-            let sLowL = smoothCompress(lowL)
-            let sLowR = smoothCompress(lowR)
+            // Bass Big Bottom Synthesis:
+            // 1. Input drive (2.0x) raises sub-bass & bass body into non-linear sweet spot without clipping
+            let sLowL = smoothCompress(lowL * 2.0)
+            let sLowR = smoothCompress(lowR * 2.0)
             let harmLowL = generateBassHarmonics(sLowL)
             let harmLowR = generateBassHarmonics(sLowR)
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
@@ -359,7 +361,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private func updateCrossoverCoefficients() {
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
-        let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
+        let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
         let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: 280.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
@@ -422,16 +424,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateBassHarmonics(_ s: Float) -> Float {
-        // Pure harmonic expansion with steep decay (no linear s term):
-        // 2nd (s^2, 0.35) - body and warm octave punch
-        // 3rd (s^3, 0.12) - articulation and definition
-        // 4th (s^4, 0.04) - small speaker/MacBook driver support
-        // 5th (s^5, 0.01) - subtle presence, zero musical dissonance
+        // Aphex Big Bottom / Renaissance Bass shaper:
+        // Retains fundamental (s) with smooth soft-saturation and sustain,
+        // adds 2nd harmonic warmth (0.35 s^2) and 3rd harmonic definition (-0.15 s^3)
+        // for massive body, weight, and punch in headphones and speakers.
         let s2 = s * s
         let s3 = s2 * s
-        let s4 = s3 * s
-        let s5 = s4 * s
-        return 0.35 * s2 + 0.12 * s3 + 0.04 * s4 + 0.01 * s5
+        return s + 0.35 * s2 - 0.15 * s3
     }
 
     @inline(__always)
