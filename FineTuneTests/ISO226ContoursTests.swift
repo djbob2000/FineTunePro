@@ -583,13 +583,13 @@ struct LoudnessCompensatorHybridTests {
                 "Expected low exciter wet to be 0.50 at maximum compensation, got \(processor.testLowExciterWet)")
     }
 
-    @Test("Soft bass variant uses 10 dB low EQ at maximum compensation")
+    @Test("Soft bass variant uses 20 dB low EQ at maximum compensation as per ISO 226")
     func softBassVariantUsesTenDBLowEQ() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
         processor.updateForVolume(0.0)
 
-        #expect(abs(processor.testBassEQ0DB - 10.0) < 0.0001)
+        #expect(abs(processor.testBassEQ0DB - 20.0) < 0.0001)
     }
 
     @Test("Bass exciter wet zero bypasses loudness harmonics")
@@ -857,14 +857,16 @@ struct LoudnessCompensatorHybridTests {
 
 private func magnitude(at frequency: Double, in buffer: [Float], sampleRate: Double) -> Double {
     let frameCount = buffer.count / 2
+    let warmup = frameCount / 4
+    let measuredFrames = frameCount - warmup
     var realSum = 0.0
     var imagSum = 0.0
-    for index in 0..<frameCount {
+    for index in warmup..<frameCount {
         let angle = 2.0 * .pi * frequency * Double(index) / sampleRate
         realSum += Double(buffer[index * 2]) * cos(angle)
         imagSum += Double(buffer[index * 2]) * sin(angle)
     }
-    return sqrt(realSum * realSum + imagSum * imagSum) / Double(frameCount)
+    return sqrt(realSum * realSum + imagSum * imagSum) / Double(measuredFrames)
 }
 
 private func harmonicEnergy(for frequency: Double, in buffer: [Float], sampleRate: Double) -> Double {

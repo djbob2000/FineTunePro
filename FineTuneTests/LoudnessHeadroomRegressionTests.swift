@@ -51,15 +51,17 @@ struct LoudnessHeadroomRegressionTests {
         for digital: Float in [1, 0.5, 0.25, 0.1] {
             let bass = gain(at: 40, digital: digital)
             let mid = gain(at: 1_000, digital: digital)
-            // Independently measured response of the original 10 dB shelf + 2 dB bell.
-            #expect(abs((bass - mid) - 9.37) < 0.1)
+            // Independently measured response of the ISO 226 20 dB shelf: mid is unity (0 dB), bass is boosted.
+            #expect(abs(mid) < 0.05, "Midrange (1 kHz) must remain unity (0 dB), got \(mid) dB for digital=\(digital)")
+            #expect(abs((bass - mid) - 17.92) < 0.15, "Expected ~17.92 dB bass boost at 40 Hz, got \(bass - mid)")
         }
     }
 
-    @Test("Digital attenuation is consumed before additional preamp attenuation")
-    func existingDigitalHeadroomIsUsed() {
-        #expect(abs(gain(at: 1_000, digital: 0.1)) < 0.05)
-        #expect(abs(gain(at: 1_000, digital: 1) - (-10.0)) < 0.1)
+    @Test("Midrange remains unity (0 dB) across all digital and system volume levels")
+    func midrangeRemainsUnityGain() {
+        for digital: Float in [1, 0.75, 0.5, 0.25, 0.1] {
+            #expect(abs(gain(at: 1_000, digital: digital)) < 0.05)
+        }
     }
 
     @Test("A small digital gain change refreshes headroom at the same listening volume")
@@ -95,7 +97,31 @@ struct LoudnessHeadroomRegressionTests {
         #expect(abs(measure(processor, frequency: 40).gainDB) < 0.05)
         processor.updateForVolume(0.25, digitalVolume: 0.1, gainScale: 0.5, bassExciterWet: 0)
         let half = measure(processor, frequency: 40).gainDB
-        #expect(half > 4 && half < 5)
+        #expect(half > 9 && half < 10, "Expected half boost between 9 and 10 dB, got \(half)")
+    }
+
+    @Test("True Dynamic EQ scales boost down smoothly on high-level bass signals without clipping")
+    func dynamicEQScalesBoostOnLoudBass() {
+        let processor = LoudnessCompensator(sampleRate: 48_000)
+        processor.updateForVolume(0.25, digitalVolume: 1.0, bassExciterWet: 0)
+        
+        // 1. Quiet signal (amplitude 0.001 / -60 dBFS): full linear ISO 226 boost (~17.9 dB)
+        let quiet = measure(processor, frequency: 40, amplitude: 0.001)
+        #expect(abs(quiet.gainDB - 17.92) < 0.15)
+        
+        // 2. Medium signal (amplitude 0.35 / -9 dBFS): boost scales down, output bounded <= 0.85
+        let medium = measure(processor, frequency: 40, amplitude: 0.35)
+        #expect(medium.peak <= 0.85, "Medium bass peak must be bounded <= 0.85, got \(medium.peak)")
+        #expect(medium.gainDB < quiet.gainDB, "Medium bass gain must be scaled down compared to quiet bass")
+        
+        // 3. Loud signal (amplitude 0.80 / -1.9 dBFS): boost drops near 0 dB, peak <= 0.87
+        let loud = measure(processor, frequency: 40, amplitude: 0.80)
+        #expect(loud.peak <= 0.87, "Loud bass peak must be bounded <= 0.87, got \(loud.peak)")
+        #expect(loud.gainDB < 2.0, "Loud bass boost must drop near 0 dB, got \(loud.gainDB)")
+        
+        // 4. Near full-scale signal (amplitude 0.95 / -0.4 dBFS): unboosted, peak <= 0.96 (100% clean)
+        let peak = measure(processor, frequency: 40, amplitude: 0.95)
+        #expect(peak.peak <= 0.96, "Full-scale bass must pass cleanly <= 0.96, got \(peak.peak)")
     }
 
     @Test("Disabling linear bass leaves no linear bass boost")

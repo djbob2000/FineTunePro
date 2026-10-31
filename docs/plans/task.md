@@ -39,3 +39,12 @@
 | Task 35 | Full Test Suite Verification | done |
 | Task 36 | Rebuild Release `.app` bundle, codesign & verify | done |
 | Task 37 | Commit & Push to GitHub | done |
+| Task 38 | Update Test Suite for Path 2 (Unity Midrange & Band-Limited Bass Safety) in `LoudnessHeadroomRegressionTests.swift` | done |
+| Task 39 | Implement Low-Band Dynamic Limiter & Eliminate Global Preamp Cut in `LoudnessCompensator.swift` | done |
+| Task 40 | Full Test Suite Verification (`ISO226ContoursTests`, `LoudnessHeadroomRegressionTests`) | done |
+| Task 41 | Design True Dynamic EQ architecture | done |
+| Task 42 | Add Unit Tests for True Dynamic EQ level-dependent bass boost | done |
+| Task 43 | Implement True Dynamic EQ in `LoudnessCompensator.swift` | done |
+| Task 44 | Test Suite Verification (`LoudnessHeadroomRegressionTests`, `ISO226ContoursTests`) | done |
+| Task 45 | Release Build, Codesign & Verify | done |
+| Task 46 | Commit & Push to GitHub | in_progress |
