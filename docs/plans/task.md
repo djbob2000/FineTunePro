@@ -33,4 +33,4 @@
 | Task 29 | Update unit tests in `FineTuneTests/ISO226ContoursTests.swift` and verify tests | done |
 | Task 30 | Full Test Suite Verification | done |
 | Task 31 | Rebuild Release `.app` bundle, codesign & verify | done |
-| Task 32 | Commit & Push to GitHub | in-progress |
+| Task 32 | Commit & Push to GitHub | done |
