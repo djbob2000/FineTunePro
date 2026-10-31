@@ -51,17 +51,15 @@ struct LoudnessHeadroomRegressionTests {
         for digital: Float in [1, 0.5, 0.25, 0.1] {
             let bass = gain(at: 40, digital: digital)
             let mid = gain(at: 1_000, digital: digital)
-            // Independently measured response of the 10 dB shelf: mid is unity (0 dB), bass is boosted.
-            #expect(abs(mid) < 0.05, "Midrange (1 kHz) must remain unity (0 dB), got \(mid) dB for digital=\(digital)")
+            // Independently measured response of the original 10 dB shelf + 2 dB bell.
             #expect(abs((bass - mid) - 9.37) < 0.1)
         }
     }
 
-    @Test("Midrange remains unity (0 dB) across all digital and system volume levels")
-    func midrangeRemainsUnityGain() {
-        for digital: Float in [1, 0.75, 0.5, 0.25, 0.1] {
-            #expect(abs(gain(at: 1_000, digital: digital)) < 0.05)
-        }
+    @Test("Digital attenuation is consumed before additional preamp attenuation")
+    func existingDigitalHeadroomIsUsed() {
+        #expect(abs(gain(at: 1_000, digital: 0.1)) < 0.05)
+        #expect(abs(gain(at: 1_000, digital: 1) - (-10.0)) < 0.1)
     }
 
     @Test("A small digital gain change refreshes headroom at the same listening volume")

@@ -48,3 +48,4 @@
 | Task 44 | Test Suite Verification (`LoudnessHeadroomRegressionTests`, `ISO226ContoursTests`) | done |
 | Task 45 | Release Build, Codesign & Verify | done |
 | Task 46 | Commit & Push to GitHub | done |
+| Task 47 | Restore clean audio baseline from ef4ec50 (decoupled exciter headroom, pure harmonics, no soft-limiter distortion) | done |
