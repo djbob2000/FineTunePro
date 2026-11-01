@@ -17,9 +17,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     // MARK: - Configuration
 
     /// Four-section topology chosen to approximate the ISO-derived loudness target with
-    /// Fixed low-shelf filter topology for loudness compensation.
+    /// Fixed shelf filter topology for loudness compensation.
     private enum LoudnessFilterKind {
         case lowShelf
+        case highShelf
     }
 
     private struct LoudnessFilterDefinition {
@@ -29,7 +30,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     private static let filterDefinitions: [LoudnessFilterDefinition] = [
-        .init(kind: .lowShelf, frequency: 80, q: 0.707)
+        .init(kind: .lowShelf, frequency: 80, q: 0.707),
+        .init(kind: .highShelf, frequency: 3000, q: 0.707)
     ]
     static let bandFrequencies = filterDefinitions.map(\.frequency)
     static let bandCount = filterDefinitions.count
@@ -49,9 +51,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _currentGainScale: Float = 1.0
     /// Crossover frequency for low-frequency band (Hz).
     private var _bassCrossoverFrequency: Double = 110.0
-    /// Crossover frequency for high-frequency band (Hz).
-    private var _trebleCrossoverFrequency: Double = 1500.0
-    /// Treble gain scale (amount) for the exciter.
+    /// Corner frequency for high-frequency shelf (Hz).
+    private var _trebleCrossoverFrequency: Double = 3000.0
+    /// Treble gain scale (amount) for high-shelf boost.
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
     private var _currentMaxDB: Double = -30.0
@@ -63,10 +65,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     // Crossover Filter States (RT-Safe)
     private nonisolated(unsafe) var _lpL = BiquadState()
     private nonisolated(unsafe) var _lpR = BiquadState()
-    private nonisolated(unsafe) var _hpL = BiquadState()
-    private nonisolated(unsafe) var _hpR = BiquadState()
-    private nonisolated(unsafe) var _hpPostL = BiquadState()
-    private nonisolated(unsafe) var _hpPostR = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFL = BiquadState()
     private nonisolated(unsafe) var _lowPostHPFR = BiquadState()
     private nonisolated(unsafe) var _lowPostLPFL = BiquadState()
@@ -78,7 +76,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _preampGain: Float = 1.0
     /// Cached gain budget; digital-volume-only updates need no coefficient rebuild.
     private var _peakGainDB: Double = 0.0
-    private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
 
@@ -144,7 +141,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         updateHeadroom(gains: gains)
 
         // Bypass when all gains are negligible (near reference level) and exciter is off
-        let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
+        let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0
         if allNegligible {
             setEnabled(false)
             swapSetup(nil)
@@ -153,7 +150,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             return
         }
 
-        let coefficients = Self.coefficientsForBands(gains: gains, sampleRate: sampleRate)
+        let coefficients = Self.coefficientsForBands(gains: gains, trebleFrequency: _trebleCrossoverFrequency, sampleRate: sampleRate)
         let newSetup = coefficients.withUnsafeBufferPointer { ptr in
             vDSP_biquad_CreateSetup(ptr.baseAddress!, vDSP_Length(Self.bandCount))
         }
@@ -185,23 +182,24 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
         let bassHarmonicsEnabled = _currentBassExciterWet > 0
         _lowExciterWet = bassHarmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
-        // Treble exciter: True Harmonic-Only Exciter with fundamental subtraction (f(u) - u).
-        // User slider (0.0 ... 4.0) controls harmonic drive directly:
-        // 0.0 = off, 1.0 = standard studio presence, 4.0 = maximum presence.
+
+        // High-frequency Loudness compensation:
+        // Clean +3.0 dB High-Shelf boost according to ISO 226 equal-loudness contours,
+        // dynamically scaled by volume level and user treble scale slider.
         let trebleGainScale = max(0, Double(_trebleGainScale))
-        _highExciterWet = Float(trebleGainScale)
-        return [Float(_bassEQ0DB)]
+        let trebleEQDB = 3.0 * amount * trebleGainScale
+        _highExciterWet = Float(trebleEQDB)
+
+        return [Float(_bassEQ0DB), Float(trebleEQDB)]
     }
 
     private func updateHeadroom(gains: [Float]) {
-        let response = Self.realizedResponseDB(sectionGains: gains.map(Double.init), sampleRate: sampleRate)
+        let response = Self.realizedResponseDB(sectionGains: gains.map(Double.init), trebleFrequency: _trebleCrossoverFrequency, sampleRate: sampleRate)
         let peak = zip(Self.fitGridFrequencies(), response)
             .filter { $0.0 < sampleRate / 2 }
             .map { $0.1 }.max() ?? 0
 
         // Headroom is budgeted strictly from the realized linear EQ shelf response.
-        // Parallel harmonic exciters generate overtones in dedicated sidechains rather than
-        // coherent fundamental energy, and downstream BrickwallLimiter handles transient peaks.
         _peakGainDB = max(0.0, peak)
         updatePreamp()
     }
@@ -248,7 +246,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     /// Build the flat coefficient array for `vDSP_biquad_CreateSetup`.
-    static func coefficientsForBands(gains: [Float], sampleRate: Double) -> [Double] {
+    static func coefficientsForBands(gains: [Float], trebleFrequency: Double = 1500.0, sampleRate: Double) -> [Double] {
         guard gains.count == bandCount else {
             return (0..<bandCount).flatMap { _ in [1.0, 0.0, 0.0, 0.0, 0.0] }
         }
@@ -256,7 +254,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         var allCoeffs: [Double] = []
         allCoeffs.reserveCapacity(bandCount * 5)
         for (index, filter) in filterDefinitions.enumerated() {
-            guard filter.frequency < sampleRate / 2.0 else {
+            let filterFreq = filter.kind == .highShelf ? trebleFrequency : filter.frequency
+            guard filterFreq < sampleRate / 2.0 else {
                 allCoeffs.append(contentsOf: [1.0, 0.0, 0.0, 0.0, 0.0])
                 continue
             }
@@ -264,7 +263,14 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             switch filter.kind {
             case .lowShelf:
                 coeffs = BiquadMath.lowShelfCoefficients(
-                    frequency: filter.frequency,
+                    frequency: filterFreq,
+                    gainDB: gains[index],
+                    q: filter.q,
+                    sampleRate: sampleRate
+                )
+            case .highShelf:
+                coeffs = BiquadMath.highShelfCoefficients(
+                    frequency: filterFreq,
                     gainDB: gains[index],
                     q: filter.q,
                     sampleRate: sampleRate
@@ -280,9 +286,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     override func recomputeCoefficients() -> (coefficients: [Double], sectionCount: Int)? {
         let gains = computeBandGains()
         updateHeadroom(gains: gains)
-        let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0 && _highExciterWet == 0.0
+        let allNegligible = gains.allSatisfy { abs($0) < 0.1 } && _lowExciterWet == 0.0
         guard !allNegligible else { return nil }
-        let coefficients = Self.coefficientsForBands(gains: gains, sampleRate: sampleRate)
+        let coefficients = Self.coefficientsForBands(gains: gains, trebleFrequency: _trebleCrossoverFrequency, sampleRate: sampleRate)
         return (coefficients, Self.bandCount)
     }
 
@@ -299,15 +305,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     override func process(input: UnsafePointer<Float>, output: UnsafeMutablePointer<Float>, frameCount: Int) {
-        // 1. Process linear loudness biquad filters first
+        // 1. Process linear loudness biquad filters first (low shelf + high shelf)
         super.process(input: input, output: output, frameCount: frameCount)
         
         let lowWet = _lowExciterWet
-        let highWet = _highExciterWet
-        
-        guard isEnabled, (lowWet > 0 || highWet > 0) else { return }
+        guard isEnabled, lowWet > 0 else { return }
 
-        // Crossover and non-linear processing (Stereo Interleaved)
+        // Bass harmonic exciter (Stereo Interleaved)
         for frame in 0..<frameCount {
             let idxL = frame * 2
             let idxR = frame * 2 + 1
@@ -315,25 +319,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let xL = output[idxL]
             let xR = output[idxR]
             
-            // Crossover split
+            // Bass split
             let lowL = _lpL.process(xL)
             let lowR = _lpR.process(xR)
-            
-            let highL = _hpL.process(xL)
-            let highR = _hpR.process(xR)
-            
-            // Fast De-Esser / Sibilant Tamer: track peak envelope of high frequencies (>3 kHz)
-            let hfInstant = max(abs(highL), abs(highR))
-            if hfInstant > _hfEnvelope {
-                _hfEnvelope = _hfEnvelope * 0.85 + hfInstant * 0.15
-            } else {
-                _hfEnvelope = _hfEnvelope * 0.998
-            }
-            
-            // Dynamic CV ducking (La Petite Excite style):
-            // Keeps high-frequency enhancement smooth and controlled under heavy transients or dense polyphony
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 2.5)
-            let effectiveWet = highWet * 0.25 * sibilantDucking
             
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
             // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
@@ -346,18 +334,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
-            // Treble Exciter (La Petite Excite parallel architecture):
-            // Parallel soft-saturated high band adds shimmer, presence, and warm harmonics without fundamental subtraction
-            let satHighL = saturateTreble(highL)
-            let satHighR = saturateTreble(highR)
-            
-            // Post-HPF (20 Hz DC blocker) cleans up DC offset without crossover phase cancellation notch
-            let cleanSatHighL = _hpPostL.process(satHighL)
-            let cleanSatHighR = _hpPostR.process(satHighR)
-            
-            // Sum 100% clean direct path + pure bass harmonics + parallel saturated treble band
-            let outL = xL + (filteredSatLowL * lowWet) + (cleanSatHighL * effectiveWet)
-            let outR = xR + (filteredSatLowR * lowWet) + (cleanSatHighR * effectiveWet)
+            // Sum 100% clean direct path (already filtered with bass + treble shelf) + pure bass harmonics
+            let outL = xL + (filteredSatLowL * lowWet)
+            let outR = xR + (filteredSatLowR * lowWet)
             
             output[idxL] = outL
             output[idxR] = outR
@@ -366,18 +345,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     private func updateCrossoverCoefficients() {
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
-        let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
         let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: 280.0, q: 0.707, sampleRate: sampleRate)
-        let treblePostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
-        _hpL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpPostL.updateCoefficients(b0: treblePostHPFCoeffs[0], b1: treblePostHPFCoeffs[1], b2: treblePostHPFCoeffs[2], a1: treblePostHPFCoeffs[3], a2: treblePostHPFCoeffs[4])
-        _hpPostR.updateCoefficients(b0: treblePostHPFCoeffs[0], b1: treblePostHPFCoeffs[1], b2: treblePostHPFCoeffs[2], a1: treblePostHPFCoeffs[3], a2: treblePostHPFCoeffs[4])
-        
         _lowPostHPFL.updateCoefficients(b0: bassPostHPFCoeffs[0], b1: bassPostHPFCoeffs[1], b2: bassPostHPFCoeffs[2], a1: bassPostHPFCoeffs[3], a2: bassPostHPFCoeffs[4])
         _lowPostHPFR.updateCoefficients(b0: bassPostHPFCoeffs[0], b1: bassPostHPFCoeffs[1], b2: bassPostHPFCoeffs[2], a1: bassPostHPFCoeffs[3], a2: bassPostHPFCoeffs[4])
         _lowPostLPFL.updateCoefficients(b0: bassPostLPFCoeffs[0], b1: bassPostLPFCoeffs[1], b2: bassPostLPFCoeffs[2], a1: bassPostLPFCoeffs[3], a2: bassPostLPFCoeffs[4])
@@ -385,15 +357,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
         _lpL.reset()
         _lpR.reset()
-        _hpL.reset()
-        _hpR.reset()
-        _hpPostL.reset()
-        _hpPostR.reset()
         _lowPostHPFL.reset()
         _lowPostHPFR.reset()
         _lowPostLPFL.reset()
         _lowPostLPFR.reset()
-        _hfEnvelope = 0.0
     }
 
     private static func cascadeMagnitude(coefficients: [Double], sectionCount: Int, omega: Double) -> Double {
@@ -450,21 +417,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         return u < 0 ? -shaped : shaped
     }
 
-    @inline(__always)
-    private func saturateTreble(_ u: Float) -> Float {
-        // Studio-grade gentle asymmetric saturation (La Petite Excite / triode tape model):
-        // Retains full high-band energy while gently rounding peaks and generating warm 2nd/3rd harmonics:
-        // - Positive half: gentle soft compression u / (1 + 0.5 * u)
-        // - Negative half: milder curvature u / (1 - 0.15 * u)
-        // - f'(0) = 1.0 from both sides -> smooth zero crossing, zero derivative discontinuity
-        // - Monotonic -> zero full-wave rectification, zero harsh octave fuzz
-        if u >= 0.0 {
-            return u / (1.0 + 0.5 * u)
-        } else {
-            return u / (1.0 - 0.15 * u)
-        }
-    }
-
     static func basisResponsesDB(sampleRate: Double) -> [[Double]] {
         let fitFrequencies = fitGridFrequencies()
         return filterDefinitions.map { filter in
@@ -473,7 +425,14 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             case .lowShelf:
                 coefficients = BiquadMath.lowShelfCoefficients(
                     frequency: filter.frequency,
-                    gainDB: 1.0,
+                    gainDB: Float(1.0),
+                    q: filter.q,
+                    sampleRate: sampleRate
+                )
+            case .highShelf:
+                coefficients = BiquadMath.highShelfCoefficients(
+                    frequency: filter.frequency,
+                    gainDB: Float(1.0),
                     q: filter.q,
                     sampleRate: sampleRate
                 )
@@ -486,8 +445,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         }
     }
 
-    static func realizedResponseDB(sectionGains: [Double], sampleRate: Double) -> [Double] {
-        let coefficients = coefficientsForBands(gains: sectionGains.map(Float.init), sampleRate: sampleRate)
+    static func realizedResponseDB(sectionGains: [Double], trebleFrequency: Double = 1500.0, sampleRate: Double) -> [Double] {
+        let coefficients = coefficientsForBands(gains: sectionGains.map(Float.init), trebleFrequency: trebleFrequency, sampleRate: sampleRate)
         return fitGridFrequencies().map { frequency in
             let omega = 2.0 * Double.pi * frequency / sampleRate
             return 20.0 * log10(cascadeMagnitude(coefficients: coefficients, sectionCount: bandCount, omega: omega))

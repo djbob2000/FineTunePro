@@ -260,16 +260,16 @@ struct DeviceEnhancementPanel: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    // Treble Exciter Wet Slider
+                    // Treble EQ Boost Slider
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
-                            Text("Treble Exciter Wet")
+                            Text("Treble Boost")
                                 .font(DesignTokens.Typography.caption)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
 
                             Spacer()
 
-                            Text(String(format: "%.1f", loudnessTrebleGainScale))
+                            Text(String(format: "+%.1f dB", loudnessTrebleGainScale * 3.0))
                                 .font(DesignTokens.Typography.caption)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                         }
@@ -279,22 +279,22 @@ struct DeviceEnhancementPanel: View {
                                 get: { loudnessTrebleGainScale },
                                 set: { onLoudnessTrebleGainScaleChange?($0) }
                             ),
-                            in: 0.0...4.0,
+                            in: 0.0...2.0,
                             step: 0.1
                         )
                         .controlSize(.mini)
 
-                        Text("High-frequency harmonic presence (0.0 = off, 1.0 = standard, 4.0 = max).")
+                        Text("Equal-loudness treble compensation (1.0 = +3.0 dB ISO 226 curve).")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, 4)
 
-                    // Treble Exciter Cutoff Frequency Slider (1000 - 6000 Hz)
+                    // Treble Cutoff Frequency Slider (1000 - 6000 Hz)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
-                            Text("Treble Exciter Freq")
+                            Text("Treble Freq")
                                 .font(DesignTokens.Typography.caption)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
 
@@ -315,7 +315,7 @@ struct DeviceEnhancementPanel: View {
                         )
                         .controlSize(.mini)
 
-                        Text("Cutoff frequency for high-frequency excitation (1000–6000 Hz).")
+                        Text("High-shelf corner frequency for treble compensation (1000–6000 Hz).")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)

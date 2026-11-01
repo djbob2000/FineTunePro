@@ -88,3 +88,6 @@
 | Task 85 | Build Release `.app`, codesign, verify package and push | done |
 | Task 86 | Implement Variant A (true parallel saturated HF sidechain without fundamental subtraction, 20Hz DC blocker, scaled wet mix) in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
 | Task 87 | Build Release `.app`, codesign, verify package and push | done |
+| Task 88 | Configure EQ Treble Exciter to default 1.5 kHz and Wet 4.0 in `EQSettings.swift`, `EQPreset.swift`, and `EQPanelView.swift` | done |
+| Task 89 | Refactor Loudness Compensation to pure +3dB High-Shelf EQ in `LoudnessCompensator.swift` and update UI labels in `DeviceEnhancementPanel.swift` | done |
+| Task 90 | Document Treble Exciter architecture in `docs/dsp/treble_exciter.md`, rebuild Release `.app`, codesign, verify and push | done |

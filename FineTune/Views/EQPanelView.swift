@@ -183,7 +183,7 @@ struct EQPanelView: View {
                 get: { settings.trebleExciterWet > 0 },
                 set: { newValue in
                     if newValue {
-                        settings.trebleExciterWet = lastNonZeroWet > 0 ? lastNonZeroWet : 0.40
+                        settings.trebleExciterWet = lastNonZeroWet > 0 ? lastNonZeroWet : 4.0
                     } else {
                         if settings.trebleExciterWet > 0 {
                             lastNonZeroWet = settings.trebleExciterWet

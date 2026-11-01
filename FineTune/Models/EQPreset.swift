@@ -110,12 +110,12 @@ enum EQPreset: String, CaseIterable, Identifiable {
 
         // MARK: - Speech
         case .vocalClarity:
-            // Enhanced vocal presence (1k-2kHz), reduced boxiness (125Hz & 250Hz) + 1.5kHz Exciter
+            // Enhanced vocal presence (1k-2kHz), reduced boxiness (125Hz & 250Hz) + 1.5kHz Exciter Wet 4.0
             return EQSettings(
                 bandGains: [-5, -3, -3, -4, -1, 2, 4, 3, 1, 0],
                 isEnabled: true,
                 isAutoEQEnabled: false,
-                trebleExciterWet: 0.40,
+                trebleExciterWet: 4.0,
                 trebleExciterFrequency: 1500.0
             )
         case .podcast:
