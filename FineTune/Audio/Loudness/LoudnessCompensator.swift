@@ -185,8 +185,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
         // High-frequency Loudness compensation:
         // Clean +3.0 dB High-Shelf boost at 6.0 kHz according to ISO 226 equal-loudness contours,
-        // dynamically scaled by volume level.
-        let trebleEQDB = 3.0 * amount
+        // dynamically scaled by volume level and loudness gain scale.
+        let trebleEQDB = 3.0 * amount * bassScale
         _highExciterWet = Float(trebleEQDB)
 
         return [Float(_bassEQ0DB), Float(trebleEQDB)]
