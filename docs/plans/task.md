@@ -64,3 +64,6 @@
 | Task 61 | Implement Treble Exciter Wet (0.0 to 4.0) slider in UI (`DeviceEnhancementPanel`, `DeviceEnhancementPicker`, `DeviceRow`, `MenuBarPopupView`) | done |
 | Task 62 | Update DSP wet scaling in `LoudnessCompensator.swift` and unit tests in `FineTuneTests` | done |
 | Task 63 | Full Verification, Release Build, Codesign & Push | done |
+| Task 64 | Implement Classic Aphex / La Petite Excite Exciter in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
+| Task 65 | Update Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
+| Task 66 | Verification, Release Build, Codesign & Push | done |

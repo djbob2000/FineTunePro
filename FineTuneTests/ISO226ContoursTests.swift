@@ -595,14 +595,21 @@ struct LoudnessCompensatorHybridTests {
     func trebleExciterWetScalesWithTrebleGainScale() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
+        // At trebleGainScale = 1.0, wet is 0.25 (nominal +2 dB studio air)
         processor.updateForVolume(0.0, trebleGainScale: 1.0)
+        #expect(abs(processor.testHighExciterWet - 0.25) < 0.0001)
+
+        // At trebleGainScale = 4.0, wet is 1.0 (max +6 dB presence)
+        processor.updateForVolume(0.0, trebleGainScale: 4.0)
         #expect(abs(processor.testHighExciterWet - 1.0) < 0.0001)
 
-        processor.updateForVolume(0.0, trebleGainScale: 4.0)
-        #expect(abs(processor.testHighExciterWet - 4.0) < 0.0001)
-
+        // At trebleGainScale = 0.0, wet is 0.0 (bypass)
         processor.updateForVolume(0.0, trebleGainScale: 0.0)
         #expect(abs(processor.testHighExciterWet - 0.0) < 0.0001)
+
+        // Remains active at 100% volume (volume = 1.0), independent of loudness amount
+        processor.updateForVolume(1.0, trebleGainScale: 2.0)
+        #expect(abs(processor.testHighExciterWet - 0.5) < 0.0001)
     }
 
     @Test("Pure harmonic exciter generates no measurable DC offset")

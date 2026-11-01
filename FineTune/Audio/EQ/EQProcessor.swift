@@ -107,13 +107,13 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             }
 
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
-            let effectiveHighWet = highWet * sibilantDucking
+            let effectiveHighWet = highWet * 0.25 * sibilantDucking
 
-            // Pure even-harmonic HF excitation (2nd and 4th harmonics)
-            let satHighL = generateTrebleHarmonics(highL)
-            let satHighR = generateTrebleHarmonics(highR)
+            // Treble excitation: Classic Aphex / La Petite Excite asymmetric soft saturation
+            let satHighL = softClipHigh(highL)
+            let satHighR = softClipHigh(highR)
 
-            // Post-HPF to clean up low/mid harmonics from saturation
+            // Post-HPF (200 Hz DC block)
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
 
@@ -140,26 +140,14 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func softKnee(_ u: Float) -> Float {
-        let a = abs(u)
-        if a <= 0.8 {
-            return u
-        }
-
-        let v = (a - 0.8) / 0.2
-        let shaped = 0.8 + 0.2 * v / sqrt(1.0 + v * v)
-        return u < 0 ? -shaped : shaped
-    }
-
-    @inline(__always)
-    private func generateTrebleHarmonics(_ x: Float) -> Float {
-        // Pure even-harmonic HF exciter (2nd and 4th harmonics for silky air and warmth).
-        // Does NOT pass through linear fundamental 'c', eliminating phase cancellation / comb filtering
-        // with the dry signal (true parallel exciter topology as in Aphex Aural Exciter / La Petite Excite).
-        // Even harmonics (c^2, c^4) provide smooth analog tube/tape presence without harsh odd-order grit.
-        let c = softKnee(x)
-        let c2 = c * c
-        let c4 = c2 * c2
-        return 0.15 * c2 + 0.05 * c4
+    private func softClipHigh(_ x: Float) -> Float {
+        // Classic Aphex / La Petite Excite asymmetric soft saturation:
+        // Pre-gain (drive = 2.0) brings high-frequency musical content into gentle saturation.
+        let u = x * 2.0
+        // Symmetrical smooth compression (odd harmonics, transient rounding)
+        let s = u / sqrt(1.0 + u * u)
+        // Asymmetric even-harmonic overtone (octave-up tube/analog presence)
+        let sat = (s + 0.30 * s * s) * 0.5
+        return sat
     }
 }

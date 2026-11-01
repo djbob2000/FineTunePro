@@ -185,8 +185,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
         _lowExciterWet = harmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
+        // Treble exciter: Classic Aphex / La Petite Excite parallel mix.
+        // User slider (0.0 ... 4.0) controls wet mix directly:
+        // 0.0 = off, 1.0 = standard air (0.25 wet mix, ~ +2 dB), 4.0 = max presence (1.00 wet mix, ~ +6 dB).
         let trebleWetScale = max(0, Double(_trebleGainScale))
-        _highExciterWet = harmonicsEnabled ? Float(amount * trebleWetScale) : 0
+        _highExciterWet = harmonicsEnabled ? Float(trebleWetScale * 0.25) : 0
         return [Float(_bassEQ0DB)]
     }
 
@@ -343,11 +346,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
-            // Treble pure harmonic excitation (even-order overtones: 2nd and 4th harmonics)
-            let satHighL = generateTrebleHarmonics(highL)
-            let satHighR = generateTrebleHarmonics(highR)
+            // Treble excitation: Classic Aphex / La Petite Excite asymmetric soft saturation
+            let satHighL = softClipHigh(highL)
+            let satHighR = softClipHigh(highR)
             
-            // HPF post-processing to clean up low/mid harmonics from ВЧ
+            // Post-HPF (200 Hz DC block) cleans up DC offset from asymmetric saturation without phase comb filtering
             let filteredSatHighL = _hpPostL.process(satHighL)
             let filteredSatHighR = _hpPostR.process(satHighR)
             
@@ -446,15 +449,15 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func generateTrebleHarmonics(_ x: Float) -> Float {
-        // Pure even-harmonic HF exciter (2nd and 4th harmonics for silky air and warmth).
-        // Does NOT pass through linear fundamental 'c', eliminating phase cancellation / comb filtering
-        // with the dry signal (true parallel exciter topology as in Aphex Aural Exciter / La Petite Excite).
-        // Even harmonics (c^2, c^4) provide smooth analog tube/tape presence without harsh odd-order grit.
-        let c = softKnee(x)
-        let c2 = c * c
-        let c4 = c2 * c2
-        return 0.15 * c2 + 0.05 * c4
+    private func softClipHigh(_ x: Float) -> Float {
+        // Classic Aphex / La Petite Excite asymmetric soft saturation:
+        // Pre-gain (drive = 2.0) brings high-frequency musical content into gentle saturation.
+        let u = x * 2.0
+        // Symmetrical smooth compression (odd harmonics, transient rounding)
+        let s = u / sqrt(1.0 + u * u)
+        // Asymmetric even-harmonic overtone (octave-up tube/analog presence)
+        let sat = (s + 0.30 * s * s) * 0.5
+        return sat
     }
 
     static func basisResponsesDB(sampleRate: Double) -> [[Double]] {
