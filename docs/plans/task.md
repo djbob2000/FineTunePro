@@ -71,3 +71,4 @@
 | Task 68 | Update & Verify DSP Unit Tests in `FineTuneTests` | done |
 | Task 69 | Full Verification, Release Build & Codesign | done |
 | Task 70 | Commit & Push to GitHub | done |
+| Task 71 | Remove all unit and UI test files, test targets, and test dependencies | done |

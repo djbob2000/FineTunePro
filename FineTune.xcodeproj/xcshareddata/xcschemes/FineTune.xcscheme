@@ -30,28 +30,6 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
       <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "79A607BB2F05C9E10008D52A"
-               BuildableName = "FineTuneTests.xctest"
-               BlueprintName = "FineTuneTests"
-               ReferencedContainer = "container:FineTune.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "79A607C52F05C9E10008D52A"
-               BuildableName = "FineTuneUITests.xctest"
-               BlueprintName = "FineTuneUITests"
-               ReferencedContainer = "container:FineTune.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
