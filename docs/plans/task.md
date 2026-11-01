@@ -58,3 +58,6 @@
 | Task 55 | Implement 0.6 headroom factor in `LoudnessCompensator.swift` and clean up unused plumbing | done |
 | Task 56 | Update unit tests for 0.6 headroom factor and clean test suites | done |
 | Task 57 | Full Verification, Release Build, Codesign & Push | done |
+| Task 58 | Implement Pure Harmonic Treble Exciter in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
+| Task 59 | Verify DSP Unit Tests in `FineTuneTests` | done |
+| Task 60 | Full Suite Verification, Release Build, Codesign & Push | done |

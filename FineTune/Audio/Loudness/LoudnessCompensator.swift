@@ -343,9 +343,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
-            // Treble saturation
-            let satHighL = softClipHigh(highL)
-            let satHighR = softClipHigh(highR)
+            // Treble pure harmonic excitation (even-order overtones: 2nd and 4th harmonics)
+            let satHighL = generateTrebleHarmonics(highL)
+            let satHighR = generateTrebleHarmonics(highR)
             
             // HPF post-processing to clean up low/mid harmonics from ВЧ
             let filteredSatHighL = _hpPostL.process(satHighL)
@@ -446,17 +446,15 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func softClipHigh(_ x: Float) -> Float {
-        // Multi-harmonic HF exciter (2nd, 3rd, 4th, and 5th harmonics)
-        // Even harmonics (2nd, 4th) add silky warmth and air; odd harmonics (3rd, 5th) are
-        // heavily attenuated to prevent harsh sibilance ("зиканье/песок").
-        // C² soft knee above |u| > 0.8 eliminates hard clipping corners without altering low levels.
-        let c = softKnee(x * 1.1)
+    private func generateTrebleHarmonics(_ x: Float) -> Float {
+        // Pure even-harmonic HF exciter (2nd and 4th harmonics for silky air and warmth).
+        // Does NOT pass through linear fundamental 'c', eliminating phase cancellation / comb filtering
+        // with the dry signal (true parallel exciter topology as in Aphex Aural Exciter / La Petite Excite).
+        // Even harmonics (c^2, c^4) provide smooth analog tube/tape presence without harsh odd-order grit.
+        let c = softKnee(x)
         let c2 = c * c
-        let c3 = c2 * c
-        let c4 = c3 * c
-        let c5 = c4 * c
-        return c - 0.20 * c2 - 0.06 * c3 + 0.08 * c4 - 0.02 * c5
+        let c4 = c2 * c2
+        return 0.15 * c2 + 0.05 * c4
     }
 
     static func basisResponsesDB(sampleRate: Double) -> [[Double]] {

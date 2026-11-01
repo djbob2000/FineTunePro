@@ -109,9 +109,9 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
             let effectiveHighWet = highWet * sibilantDucking
 
-            // Non-linear harmonic saturation (2nd, 3rd, 4th, 5th harmonics)
-            let satHighL = softClipHigh(highL)
-            let satHighR = softClipHigh(highR)
+            // Pure even-harmonic HF excitation (2nd and 4th harmonics)
+            let satHighL = generateTrebleHarmonics(highL)
+            let satHighR = generateTrebleHarmonics(highR)
 
             // Post-HPF to clean up low/mid harmonics from saturation
             let filteredSatHighL = _hpPostL.process(satHighL)
@@ -152,13 +152,14 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func softClipHigh(_ x: Float) -> Float {
-        // Multi-harmonic HF exciter (2nd, 3rd, 4th, and 5th harmonics)
-        let c = softKnee(x * 1.1)
+    private func generateTrebleHarmonics(_ x: Float) -> Float {
+        // Pure even-harmonic HF exciter (2nd and 4th harmonics for silky air and warmth).
+        // Does NOT pass through linear fundamental 'c', eliminating phase cancellation / comb filtering
+        // with the dry signal (true parallel exciter topology as in Aphex Aural Exciter / La Petite Excite).
+        // Even harmonics (c^2, c^4) provide smooth analog tube/tape presence without harsh odd-order grit.
+        let c = softKnee(x)
         let c2 = c * c
-        let c3 = c2 * c
-        let c4 = c3 * c
-        let c5 = c4 * c
-        return c - 0.20 * c2 - 0.06 * c3 + 0.08 * c4 - 0.02 * c5
+        let c4 = c2 * c2
+        return 0.15 * c2 + 0.05 * c4
     }
 }
