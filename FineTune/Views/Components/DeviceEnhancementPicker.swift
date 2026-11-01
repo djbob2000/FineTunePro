@@ -26,6 +26,8 @@ struct DeviceEnhancementPicker: View {
     var onLoudnessBassCrossoverChange: ((Double) -> Void)? = nil
     var loudnessBassPostLPF: Double = 200.0
     var onLoudnessBassPostLPFChange: ((Double) -> Void)? = nil
+    var loudnessBassExciterWet: Double = 1.0
+    var onLoudnessBassExciterWetChange: ((Double) -> Void)? = nil
     var supportsLoudness: Bool = false
     var supportsAutoEQ: Bool = true
 
@@ -131,6 +133,8 @@ struct DeviceEnhancementPicker: View {
                 onLoudnessBassCrossoverChange: onLoudnessBassCrossoverChange,
                 loudnessBassPostLPF: loudnessBassPostLPF,
                 onLoudnessBassPostLPFChange: onLoudnessBassPostLPFChange,
+                loudnessBassExciterWet: loudnessBassExciterWet,
+                onLoudnessBassExciterWetChange: onLoudnessBassExciterWetChange,
                 supportsAutoEQ: supportsAutoEQ
             )
         }

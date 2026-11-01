@@ -59,8 +59,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
     private var _currentMaxDB: Double = -30.0
-    /// Bass exciter wet amount (0.0 to 1.0).
-    private var _currentBassExciterWet: Float = 0.20
+    /// Bass exciter wet amount (0.0 to 4.0).
+    private var _currentBassExciterWet: Float = 1.0
     /// Bass linear EQ amount (0.0 to 1.0).
     private var _currentBassLinearWet: Float = 1.0
 
@@ -104,7 +104,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 70.0, bassPostLPFFrequency: Double = 200.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 70.0, bassPostLPFFrequency: Double = 200.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 1.0, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -186,9 +186,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let bassAmount = amount * bassScale * linearWet
         _bassEQ0DB = 10 * bassAmount
 
-        // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
+        // Low exciter parallel wet mix (0.0 ... 4.0 scaled by volume amount).
         let bassHarmonicsEnabled = _currentBassExciterWet > 0
-        _lowExciterWet = bassHarmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
+        _lowExciterWet = bassHarmonicsEnabled ? Float(Double(_currentBassExciterWet) * Double(amount) * bassScale) : 0
 
         // High-frequency Loudness compensation:
         // Clean +3.0 dB High-Shelf boost at 6.0 kHz according to ISO 226 equal-loudness contours,
@@ -403,12 +403,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // Musical bass harmonic saturation:
         // Pure harmonic generation without duplicating the fundamental (which is already
         // fully preserved and shaped by the ISO 226 EQ shelf filter in the direct path).
-        // - Even term '+0.20 * s^2' adds warm 2nd harmonic overtones (octave up) for punch and small-speaker audibility;
+        // - Even term '+0.80 * s^2' adds warm 2nd harmonic overtones (octave up) for punch and audibility;
         //   the resulting DC bias is blocked by _lowPostHPF (20 Hz).
-        // - Odd term '-0.05 * s^3' provides gentle harmonic saturation.
+        // - Odd term '-0.20 * s^3' provides gentle harmonic saturation.
         let s2 = s * s
         let s3 = s2 * s
-        return 0.20 * s2 - 0.05 * s3
+        return 0.80 * s2 - 0.20 * s3
     }
 
     @inline(__always)

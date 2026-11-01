@@ -50,6 +50,8 @@ struct DeviceRow: View {
     let onLoudnessBassCrossoverChange: ((Double) -> Void)?
     let loudnessBassPostLPF: Double
     let onLoudnessBassPostLPFChange: ((Double) -> Void)?
+    let loudnessBassExciterWet: Double
+    let onLoudnessBassExciterWetChange: ((Double) -> Void)?
     let isSmartVolumeEnabled: Bool
     let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
@@ -132,6 +134,8 @@ struct DeviceRow: View {
         onLoudnessBassCrossoverChange: ((Double) -> Void)? = nil,
         loudnessBassPostLPF: Double = 200.0,
         onLoudnessBassPostLPFChange: ((Double) -> Void)? = nil,
+        loudnessBassExciterWet: Double = 1.0,
+        onLoudnessBassExciterWetChange: ((Double) -> Void)? = nil,
         isSmartVolumeEnabled: Bool = false,
         onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false,
@@ -183,6 +187,8 @@ struct DeviceRow: View {
         self.onLoudnessBassCrossoverChange = onLoudnessBassCrossoverChange
         self.loudnessBassPostLPF = loudnessBassPostLPF
         self.onLoudnessBassPostLPFChange = onLoudnessBassPostLPFChange
+        self.loudnessBassExciterWet = loudnessBassExciterWet
+        self.onLoudnessBassExciterWetChange = onLoudnessBassExciterWetChange
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
@@ -319,6 +325,8 @@ struct DeviceRow: View {
                         onLoudnessBassCrossoverChange: { freq in onLoudnessBassCrossoverChange?(freq) },
                         loudnessBassPostLPF: loudnessBassPostLPF,
                         onLoudnessBassPostLPFChange: { freq in onLoudnessBassPostLPFChange?(freq) },
+                        loudnessBassExciterWet: loudnessBassExciterWet,
+                        onLoudnessBassExciterWetChange: { amount in onLoudnessBassExciterWetChange?(amount) },
                         supportsLoudness: true,
                         supportsAutoEQ: device.supportsAutoEQ
                     )

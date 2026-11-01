@@ -1163,12 +1163,12 @@ final class SettingsManager {
     }
 
     func getLoudnessBassExciterWet(for deviceUID: String) -> Double {
-        let val = settings.deviceLoudnessBassExciterWet[deviceUID] ?? 0.20
-        return min(1.0, max(0.0, val))
+        let val = settings.deviceLoudnessBassExciterWet[deviceUID] ?? 1.0
+        return min(4.0, max(0.0, val))
     }
 
     func setLoudnessBassExciterWet(for deviceUID: String, to amount: Double) {
-        settings.deviceLoudnessBassExciterWet[deviceUID] = min(1.0, max(0.0, amount))
+        settings.deviceLoudnessBassExciterWet[deviceUID] = min(4.0, max(0.0, amount))
         scheduleSave()
     }
 

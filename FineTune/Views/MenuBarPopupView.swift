@@ -1543,6 +1543,10 @@ struct ObservedDeviceRow: View {
             onLoudnessBassPostLPFChange: { freq in
                 audioEngine.setLoudnessBassPostLPF(for: device.uid, to: freq)
             },
+            loudnessBassExciterWet: audioEngine.settingsManager.getLoudnessBassExciterWet(for: device.uid),
+            onLoudnessBassExciterWetChange: { amount in
+                audioEngine.setLoudnessBassExciterWet(for: device.uid, to: amount)
+            },
             isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
             onSmartVolumeToggle: { enabled in
                 audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
