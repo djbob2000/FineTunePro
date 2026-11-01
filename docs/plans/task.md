@@ -72,3 +72,7 @@
 | Task 69 | Full Verification, Release Build & Codesign | done |
 | Task 70 | Commit & Push to GitHub | done |
 | Task 71 | Remove all unit and UI test files, test targets, and test dependencies | done |
+| Task 72 | Enable Loudness Compensation & Treble Exciter on all devices (eliminate `isBuiltIn` bypass in `AudioEngine.swift` and `DeviceRow.swift`) | done |
+| Task 73 | Decouple Treble Exciter from bass exciter, calibrate audible gain staging and set 1000 Hz post-HPF in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
+| Task 74 | Build Release `.app`, codesign and verify package | done |
+| Task 75 | Commit and push changes to repository | in_progress |

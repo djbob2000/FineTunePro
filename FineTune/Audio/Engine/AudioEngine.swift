@@ -872,22 +872,17 @@ final class AudioEngine {
 
 
     private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 1000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
-        let isBuiltIn = deviceMonitor.device(for: deviceUID)?.transportType == .builtIn
-        let actualEnabled = isBuiltIn ? false : enabled
-        let actualGainScale = isBuiltIn ? 0.0 : gainScale
-        let actualTrebleGainScale = isBuiltIn ? 1.0 : trebleGainScale
-
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
             tap.updateLoudnessCompensation(
                 volume: effectiveLoudnessVolume(for: tap),
-                enabled: actualEnabled,
+                enabled: enabled,
                 referencePhon: referencePhon,
                 maxDB: maxDB,
-                gainScale: actualGainScale,
+                gainScale: gainScale,
                 bassCrossover: bassCrossover,
                 trebleCrossover: trebleCrossover,
-                trebleGainScale: actualTrebleGainScale,
+                trebleGainScale: trebleGainScale,
                 bassExciterWet: bassExciterWet,
                 bassLinearWet: bassLinearWet
             )
@@ -1550,8 +1545,7 @@ final class AudioEngine {
         let isSmartVolumeActive = settingsManager.getAppSmartVolumeEnabled(for: app.persistenceIdentifier) || settingsManager.getSmartVolumeEnabled(for: primaryDeviceUID)
         loudnessEqSettings.enabled = isSmartVolumeActive
 
-        let isBuiltIn = deviceMonitor.device(for: primaryDeviceUID)?.transportType == .builtIn
-        let loudnessEnabled = isBuiltIn ? false : settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
+        let loudnessEnabled = settingsManager.getLoudnessCompensationEnabled(for: primaryDeviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: primaryDeviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: primaryDeviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: primaryDeviceUID)
@@ -1644,8 +1638,7 @@ final class AudioEngine {
 
     private func applyLoudnessCompensationToTap(_ tap: any ProcessTapControlling) {
         guard let deviceUID = tap.currentDeviceUID else { return }
-        let isBuiltIn = deviceMonitor.device(for: deviceUID)?.transportType == .builtIn
-        let enabled = !isBuiltIn && settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
+        let enabled = settingsManager.getLoudnessCompensationEnabled(for: deviceUID)
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)

@@ -289,8 +289,7 @@ struct DeviceRow: View {
                 Spacer(minLength: 0)
 
                 // AutoEQ & Loudness picker inside the name area so slider length stays consistent
-                if device.supportsAutoEQ || device.id.readTransportType() != .builtIn,
-                   let profileManager = autoEQProfileManager,
+                if let profileManager = autoEQProfileManager,
                    let onSelect = onAutoEQSelect,
                    let onImport = onAutoEQImport {
                     DeviceEnhancementPicker(
@@ -312,7 +311,7 @@ struct DeviceRow: View {
                         onLoudnessMaxDBChange: { maxDB in onLoudnessMaxDBChange?(maxDB) },
                         loudnessTrebleGainScale: loudnessTrebleGainScale,
                         onLoudnessTrebleGainScaleChange: { scale in onLoudnessTrebleGainScaleChange?(scale) },
-                        supportsLoudness: device.id.readTransportType() != .builtIn,
+                        supportsLoudness: true,
                         supportsAutoEQ: device.supportsAutoEQ
                     )
                 }

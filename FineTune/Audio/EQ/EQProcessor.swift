@@ -106,16 +106,17 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
                 _hfEnvelope = _hfEnvelope * 0.998
             }
 
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 3.0)
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 2.0)
             let effectiveDrive = highDrive * sibilantDucking
 
             // Treble excitation: True Harmonic-Only Exciter (Fundamental Subtraction, zero phase cancellation)
-            let drivenHighL = softKnee(highL * effectiveDrive)
-            let drivenHighR = softKnee(highR * effectiveDrive)
+            // Pre-gain 2.5x drives high-frequency band into musical saturation
+            let drivenHighL = softKnee(highL * effectiveDrive * 2.5)
+            let drivenHighR = softKnee(highR * effectiveDrive * 2.5)
             let harmHighL = generateTrebleHarmonics(drivenHighL)
             let harmHighR = generateTrebleHarmonics(drivenHighR)
 
-            // Post-HPF (20 Hz DC block) cleans up DC offset without phase cancellation
+            // Post-HPF (1000 Hz) cleans up DC offset and sub-1kHz intermodulation difference products
             let cleanHarmHighL = _hpPostL.process(harmHighL)
             let cleanHarmHighR = _hpPostR.process(harmHighR)
 
@@ -129,12 +130,12 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
         let freq = frequency ?? _currentSettings?.trebleExciterFrequency ?? 1000.0
         _currentCrossoverFrequency = freq
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
-        let dcBlockCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
+        let hpPostCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
 
         _hpL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
         _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpPostL.updateCoefficients(b0: dcBlockCoeffs[0], b1: dcBlockCoeffs[1], b2: dcBlockCoeffs[2], a1: dcBlockCoeffs[3], a2: dcBlockCoeffs[4])
-        _hpPostR.updateCoefficients(b0: dcBlockCoeffs[0], b1: dcBlockCoeffs[1], b2: dcBlockCoeffs[2], a1: dcBlockCoeffs[3], a2: dcBlockCoeffs[4])
+        _hpPostL.updateCoefficients(b0: hpPostCoeffs[0], b1: hpPostCoeffs[1], b2: hpPostCoeffs[2], a1: hpPostCoeffs[3], a2: hpPostCoeffs[4])
+        _hpPostR.updateCoefficients(b0: hpPostCoeffs[0], b1: hpPostCoeffs[1], b2: hpPostCoeffs[2], a1: hpPostCoeffs[3], a2: hpPostCoeffs[4])
 
         _hpL.reset()
         _hpR.reset()
@@ -156,16 +157,16 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // True Harmonic-Only Exciter with fundamental subtraction (f(u) - u):
-        // Eliminates fundamental duplication and phase cancellation.
-        // Positive half-wave: +0.35 * u^2 (octave-up warm 2nd harmonic) - 0.12 * u^3 (air 3rd harmonic)
-        // Negative half-wave: -0.08 * u^3 (odd harmonic richness)
+        // True Harmonic-Only Exciter with fundamental cancellation:
+        // Even-harmonic component (+0.80 * u^2) adds brilliant 2nd harmonic (octave-up sheen/air).
+        // Pure odd-harmonic component (-0.25 * (u^3 - 0.75 * u)) adds 3rd harmonic edge with 0% fundamental.
+        // Positive/negative asymmetry provides warm analog presence.
         let u2 = u * u
-        let u3 = u2 * u
+        let u3_pure = u2 * u - 0.75 * u
         if u > 0 {
-            return 0.35 * u2 - 0.12 * u3
+            return 0.80 * u2 - 0.25 * u3_pure
         } else {
-            return -0.08 * u3
+            return 0.60 * u2 - 0.15 * u3_pure
         }
     }
 }

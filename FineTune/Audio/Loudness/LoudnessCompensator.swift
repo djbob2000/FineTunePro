@@ -183,13 +183,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _bassEQ0DB = 10 * bassAmount
 
         // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
-        let harmonicsEnabled = _currentBassExciterWet > 0
-        _lowExciterWet = harmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
+        let bassHarmonicsEnabled = _currentBassExciterWet > 0
+        _lowExciterWet = bassHarmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
         // Treble exciter: True Harmonic-Only Exciter with fundamental subtraction (f(u) - u).
         // User slider (0.0 ... 4.0) controls harmonic drive directly:
         // 0.0 = off, 1.0 = standard studio presence, 4.0 = maximum presence.
         let trebleGainScale = max(0, Double(_trebleGainScale))
-        _highExciterWet = harmonicsEnabled ? Float(trebleGainScale) : 0
+        _highExciterWet = Float(trebleGainScale)
         return [Float(_bassEQ0DB)]
     }
 
@@ -330,8 +330,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
                 _hfEnvelope = _hfEnvelope * 0.998
             }
             
-            // Background automatic CV ducking on harsh sibilants (above 0.20 peak)
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 3.0)
+            // Background automatic CV ducking on harsh sibilants (above 0.25 peak)
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 2.0)
             let effectiveDrive = highWet * sibilantDucking
             
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
@@ -346,12 +346,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
             // Treble excitation: True Harmonic-Only Exciter (Fundamental Subtraction, zero phase cancellation)
-            let drivenHighL = softKnee(highL * effectiveDrive)
-            let drivenHighR = softKnee(highR * effectiveDrive)
+            // Pre-gain 2.5x drives high-frequency band into musical saturation
+            let drivenHighL = softKnee(highL * effectiveDrive * 2.5)
+            let drivenHighR = softKnee(highR * effectiveDrive * 2.5)
             let harmHighL = generateTrebleHarmonics(drivenHighL)
             let harmHighR = generateTrebleHarmonics(drivenHighR)
             
-            // Post DC-blocker (20 Hz) cleans up DC offset from asymmetric quadratic term
+            // Post-HPF (1000 Hz) cleans up DC offset and sub-1kHz intermodulation difference products
             let cleanHarmHighL = _hpPostL.process(harmHighL)
             let cleanHarmHighR = _hpPostR.process(harmHighR)
             
@@ -369,7 +370,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
         let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: 280.0, q: 0.707, sampleRate: sampleRate)
-        let treblePostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
+        let treblePostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
@@ -452,16 +453,16 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // True Harmonic-Only Exciter with fundamental subtraction (f(u) - u):
-        // Eliminates fundamental duplication and phase cancellation.
-        // Positive half-wave: +0.35 * u^2 (octave-up warm 2nd harmonic) - 0.12 * u^3 (air 3rd harmonic)
-        // Negative half-wave: -0.08 * u^3 (odd harmonic richness)
+        // True Harmonic-Only Exciter with fundamental cancellation:
+        // Even-harmonic component (+0.80 * u^2) adds brilliant 2nd harmonic (octave-up sheen/air).
+        // Pure odd-harmonic component (-0.25 * (u^3 - 0.75 * u)) adds 3rd harmonic edge with 0% fundamental.
+        // Positive/negative asymmetry provides warm analog presence.
         let u2 = u * u
-        let u3 = u2 * u
+        let u3_pure = u2 * u - 0.75 * u
         if u > 0 {
-            return 0.35 * u2 - 0.12 * u3
+            return 0.80 * u2 - 0.25 * u3_pure
         } else {
-            return -0.08 * u3
+            return 0.60 * u2 - 0.15 * u3_pure
         }
     }
 
