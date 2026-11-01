@@ -81,3 +81,6 @@
 | Task 78 | Update treble exciter crossover frequency default to 3000.0 Hz across engine, settings, and DSP | done |
 | Task 79 | Implement smooth bipolar harmonic generator without kinks or rectification in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
 | Task 80 | Build Release `.app`, codesign, verify package and push | done |
+| Task 81 | Add Treble Exciter Cutoff Frequency slider (1000–6000 Hz) to DeviceEnhancementPanel and wire across UI hierarchy | done |
+| Task 82 | Update default crossover to 1500 Hz and calibrate sensitive harmonic generator for audible presence in DSP | done |
+| Task 83 | Build Release `.app`, codesign, verify and push | done |

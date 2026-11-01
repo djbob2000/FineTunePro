@@ -48,6 +48,8 @@ struct DeviceRow: View {
     let onLoudnessMaxDBChange: ((Double) -> Void)?
     var loudnessTrebleGainScale: Double = 1.0
     var onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil
+    var loudnessTrebleCrossover: Double = 1500.0
+    var onLoudnessTrebleCrossoverChange: ((Double) -> Void)? = nil
     let isSmartVolumeEnabled: Bool
     let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
@@ -128,6 +130,8 @@ struct DeviceRow: View {
         onLoudnessMaxDBChange: ((Double) -> Void)? = nil,
         loudnessTrebleGainScale: Double = 1.0,
         onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil,
+        loudnessTrebleCrossover: Double = 1500.0,
+        onLoudnessTrebleCrossoverChange: ((Double) -> Void)? = nil,
         isSmartVolumeEnabled: Bool = false,
         onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false,
@@ -177,6 +181,8 @@ struct DeviceRow: View {
         self.onLoudnessMaxDBChange = onLoudnessMaxDBChange
         self.loudnessTrebleGainScale = loudnessTrebleGainScale
         self.onLoudnessTrebleGainScaleChange = onLoudnessTrebleGainScaleChange
+        self.loudnessTrebleCrossover = loudnessTrebleCrossover
+        self.onLoudnessTrebleCrossoverChange = onLoudnessTrebleCrossoverChange
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
@@ -311,6 +317,8 @@ struct DeviceRow: View {
                         onLoudnessMaxDBChange: { maxDB in onLoudnessMaxDBChange?(maxDB) },
                         loudnessTrebleGainScale: loudnessTrebleGainScale,
                         onLoudnessTrebleGainScaleChange: { scale in onLoudnessTrebleGainScaleChange?(scale) },
+                        loudnessTrebleCrossover: loudnessTrebleCrossover,
+                        onLoudnessTrebleCrossoverChange: { freq in onLoudnessTrebleCrossoverChange?(freq) },
                         supportsLoudness: true,
                         supportsAutoEQ: device.supportsAutoEQ
                     )

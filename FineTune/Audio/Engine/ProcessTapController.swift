@@ -152,7 +152,7 @@ final class ProcessTapController: ProcessTapControlling {
     private var _lastLoudnessGainScale: Float = 1.0
     /// Last effective loudness bass crossover frequency passed to updateLoudnessCompensation.
     private var _lastLoudnessBassCrossover: Double = 100.0
-    private var _lastLoudnessTrebleCrossover: Double = 3000.0
+    private var _lastLoudnessTrebleCrossover: Double = 1500.0
     private var _lastLoudnessTrebleGainScale: Float = 1.0
     private var _lastLoudnessBassExciterWet: Float = 0.20
     private var _lastLoudnessBassLinearWet: Float = 1.0
@@ -346,7 +346,7 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryAutoEQProcessor?.setPreampEnabled(enabled)
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 110.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 110.0, trebleCrossover: Double = 1500.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         _lastLoudnessEnabled = enabled
         _lastLoudnessVolume = volume
         _lastLoudnessReferencePhon = referencePhon

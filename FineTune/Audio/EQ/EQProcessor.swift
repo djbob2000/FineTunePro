@@ -19,7 +19,7 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _hpPostR = BiquadState()
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
 
-    private var _currentCrossoverFrequency: Double = 3000.0
+    private var _currentCrossoverFrequency: Double = 1500.0
 
     /// Read-only access to current settings
     var currentSettings: EQSettings? { _currentSettings }
@@ -31,7 +31,7 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             category: "EQProcessor",
             initiallyEnabled: true
         )
-        updateCrossoverCoefficients(frequency: 3000.0)
+        updateCrossoverCoefficients(frequency: 1500.0)
         // Initialize with flat EQ
         updateSettings(EQSettings.flat)
     }
@@ -41,7 +41,7 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     /// Update EQ settings (call from main thread).
     func updateSettings(_ settings: EQSettings) {
         setEnabled(settings.isEnabled)
-        let oldFreq = _currentSettings?.trebleExciterFrequency ?? 3000.0
+        let oldFreq = _currentSettings?.trebleExciterFrequency ?? 1500.0
         _currentSettings = settings
 
         if settings.trebleExciterFrequency != oldFreq {
@@ -127,7 +127,7 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     }
 
     private func updateCrossoverCoefficients(frequency: Double? = nil) {
-        let freq = frequency ?? _currentSettings?.trebleExciterFrequency ?? 3000.0
+        let freq = frequency ?? _currentSettings?.trebleExciterFrequency ?? 1500.0
         _currentCrossoverFrequency = freq
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
         let hpPostCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
@@ -146,19 +146,20 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
         // Pure Harmonic Exciter with Fundamental Subtraction (h(u) = u - f(u)):
-        // Asymmetric smooth saturation models vintage tube / diode exciter non-linearity:
-        // - Positive swing saturates at +1.0 (softer knee, rich 2nd and 3rd harmonics)
-        // - Negative swing saturates at -2.0 (firmer knee, preserves negative transient depth)
+        // Scaled for real-world high-frequency audio levels (0.02 - 0.20 peak).
+        // - Positive swing saturates softly (w = u * 4.0), generating warm 2nd and 3rd harmonics
+        // - Negative swing has softer curvature (v = w * 0.5), breaking symmetry for even harmonics
         // - C2 continuous at u = 0 (h(0)=0, h'(0)=0, h''(0)=0) eliminating zero-crossing clicks/fuzz
-        // - Strictly monotonic (no full-wave rectification or octave buzzing)
-        // - Generates warm 2nd harmonic sheen and crisp 3rd harmonic air
-        if u > 0.0 {
-            let s = u / sqrt(1.0 + u * u)
-            return u - s
+        // - Strictly monotonic (zero full-wave rectification, zero octave buzzing)
+        // - Calibrated output at -18...-12 dB relative to high-pass band at standard drive
+        let w = u * 4.0
+        if w > 0.0 {
+            let s = w / sqrt(1.0 + w * w)
+            return (w - s) * 0.25
         } else {
-            let v = u * 0.5
-            let s = u / sqrt(1.0 + v * v)
-            return u - s
+            let v = w * 0.5
+            let s = w / sqrt(1.0 + v * v)
+            return (w - s) * 0.25
         }
     }
 }

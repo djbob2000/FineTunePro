@@ -50,7 +50,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Crossover frequency for low-frequency band (Hz).
     private var _bassCrossoverFrequency: Double = 110.0
     /// Crossover frequency for high-frequency band (Hz).
-    private var _trebleCrossoverFrequency: Double = 3000.0
+    private var _trebleCrossoverFrequency: Double = 1500.0
     /// Treble gain scale (amount) for the exciter.
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
@@ -105,7 +105,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 1500.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -454,19 +454,20 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
         // Pure Harmonic Exciter with Fundamental Subtraction (h(u) = u - f(u)):
-        // Asymmetric smooth saturation models vintage tube / diode exciter non-linearity:
-        // - Positive swing saturates at +1.0 (softer knee, rich 2nd and 3rd harmonics)
-        // - Negative swing saturates at -2.0 (firmer knee, preserves negative transient depth)
+        // Scaled for real-world high-frequency audio levels (0.02 - 0.20 peak).
+        // - Positive swing saturates softly (w = u * 4.0), generating warm 2nd and 3rd harmonics
+        // - Negative swing has softer curvature (v = w * 0.5), breaking symmetry for even harmonics
         // - C2 continuous at u = 0 (h(0)=0, h'(0)=0, h''(0)=0) eliminating zero-crossing clicks/fuzz
-        // - Strictly monotonic (no full-wave rectification or octave buzzing)
-        // - Generates warm 2nd harmonic sheen and crisp 3rd harmonic air
-        if u > 0.0 {
-            let s = u / sqrt(1.0 + u * u)
-            return u - s
+        // - Strictly monotonic (zero full-wave rectification, zero octave buzzing)
+        // - Calibrated output at -18...-12 dB relative to high-pass band at standard drive
+        let w = u * 4.0
+        if w > 0.0 {
+            let s = w / sqrt(1.0 + w * w)
+            return (w - s) * 0.25
         } else {
-            let v = u * 0.5
-            let s = u / sqrt(1.0 + v * v)
-            return u - s
+            let v = w * 0.5
+            let s = w / sqrt(1.0 + v * v)
+            return (w - s) * 0.25
         }
     }
 

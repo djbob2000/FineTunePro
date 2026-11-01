@@ -715,6 +715,10 @@ struct MenuBarPopupView: View {
                         onLoudnessTrebleGainScaleChange: { scale in
                             audioEngine.setLoudnessTrebleGainScale(for: device.uid, to: scale)
                         },
+                        loudnessTrebleCrossover: audioEngine.settingsManager.getLoudnessTrebleCrossover(for: device.uid),
+                        onLoudnessTrebleCrossoverChange: { freq in
+                            audioEngine.setLoudnessTrebleCrossover(for: device.uid, to: freq)
+                        },
                         loudnessBassLinearWet: audioEngine.settingsManager.getLoudnessBassLinearWet(for: device.uid),
                         onLoudnessBassLinearWetChange: { amount in
                             audioEngine.setLoudnessBassLinearWet(for: device.uid, to: amount)
@@ -1542,6 +1546,10 @@ struct ObservedDeviceRow: View {
             loudnessTrebleGainScale: audioEngine.settingsManager.getLoudnessTrebleGainScale(for: device.uid),
             onLoudnessTrebleGainScaleChange: { scale in
                 audioEngine.setLoudnessTrebleGainScale(for: device.uid, to: scale)
+            },
+            loudnessTrebleCrossover: audioEngine.settingsManager.getLoudnessTrebleCrossover(for: device.uid),
+            onLoudnessTrebleCrossoverChange: { freq in
+                audioEngine.setLoudnessTrebleCrossover(for: device.uid, to: freq)
             },
             isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
             onSmartVolumeToggle: { enabled in

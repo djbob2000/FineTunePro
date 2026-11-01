@@ -25,11 +25,11 @@ nonisolated struct EQSettings: Codable, Equatable {
     /// Treble exciter crossover frequency in Hz (1000 to 8000 Hz)
     var trebleExciterFrequency: Double
 
-    init(bandGains: [Float] = Array(repeating: 0, count: 10), isEnabled: Bool = true, isAutoEQEnabled: Bool = false, trebleExciterWet: Float = 0.0, trebleExciterFrequency: Double = 3000.0) {
+    init(bandGains: [Float] = Array(repeating: 0, count: 10), isEnabled: Bool = true, isAutoEQEnabled: Bool = false, trebleExciterWet: Float = 0.0, trebleExciterFrequency: Double = 1500.0) {
         self.bandGains = Self.normalizeBands(bandGains)
         self.isEnabled = isEnabled
         self.isAutoEQEnabled = isAutoEQEnabled
-        self.trebleExciterWet = min(1.0, max(0.0, trebleExciterWet))
+        self.trebleExciterWet = min(4.0, max(0.0, trebleExciterWet))
         self.trebleExciterFrequency = min(8000.0, max(1000.0, trebleExciterFrequency))
     }
 
@@ -49,8 +49,8 @@ nonisolated struct EQSettings: Codable, Equatable {
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.isAutoEQEnabled = try container.decodeIfPresent(Bool.self, forKey: .isAutoEQEnabled) ?? false
         let exciter = try container.decodeIfPresent(Float.self, forKey: .trebleExciterWet) ?? 0.0
-        self.trebleExciterWet = min(1.0, max(0.0, exciter))
-        let freq = try container.decodeIfPresent(Double.self, forKey: .trebleExciterFrequency) ?? 3000.0
+        self.trebleExciterWet = min(4.0, max(0.0, exciter))
+        let freq = try container.decodeIfPresent(Double.self, forKey: .trebleExciterFrequency) ?? 1500.0
         self.trebleExciterFrequency = min(8000.0, max(1000.0, freq))
     }
 

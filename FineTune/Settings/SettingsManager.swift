@@ -1172,7 +1172,7 @@ final class SettingsManager {
     }
 
     func getLoudnessTrebleCrossover(for deviceUID: String) -> Double {
-        settings.deviceLoudnessTrebleCrossover[deviceUID] ?? 3000.0
+        settings.deviceLoudnessTrebleCrossover[deviceUID] ?? 1500.0
     }
 
     func setLoudnessTrebleCrossover(for deviceUID: String, to frequency: Double) {

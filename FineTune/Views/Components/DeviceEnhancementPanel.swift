@@ -26,6 +26,8 @@ struct DeviceEnhancementPanel: View {
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
     var loudnessTrebleGainScale: Double = 1.0
     var onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil
+    var loudnessTrebleCrossover: Double = 1500.0
+    var onLoudnessTrebleCrossoverChange: ((Double) -> Void)? = nil
     var supportsAutoEQ: Bool = true
 
     @State private var searchText = ""
@@ -283,6 +285,37 @@ struct DeviceEnhancementPanel: View {
                         .controlSize(.mini)
 
                         Text("High-frequency harmonic presence (0.0 = off, 1.0 = standard, 4.0 = max).")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 4)
+
+                    // Treble Exciter Cutoff Frequency Slider (1000 - 6000 Hz)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Treble Exciter Freq")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                            Spacer()
+
+                            Text(formatExciterFrequency(loudnessTrebleCrossover))
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { loudnessTrebleCrossover },
+                                set: { onLoudnessTrebleCrossoverChange?($0) }
+                            ),
+                            in: 1000.0...6000.0,
+                            step: 100.0
+                        )
+                        .controlSize(.mini)
+
+                        Text("Cutoff frequency for high-frequency excitation (1000–6000 Hz).")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -831,6 +864,15 @@ struct DeviceEnhancementPanel: View {
     }
 
     // MARK: - Helpers
+
+    private func formatExciterFrequency(_ freq: Double) -> String {
+        if freq >= 1000 {
+            let khz = freq / 1000.0
+            return String(format: khz.truncatingRemainder(dividingBy: 1) == 0 ? "%.0fkHz" : "%.1fkHz", khz)
+        } else {
+            return "\(Int(freq))Hz"
+        }
+    }
 
     private func isHighlighted(_ itemID: String) -> Bool {
         guard let index = highlightedIndex else { return false }
