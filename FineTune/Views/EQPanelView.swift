@@ -239,7 +239,8 @@ struct EQPanelView: View {
                                     onSettingsChanged(settings)
                                 }
                             ),
-                            in: 0.05...1.0
+                            in: 0.0...4.0,
+                            step: 0.05
                         )
                         .controlSize(.small)
 

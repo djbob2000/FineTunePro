@@ -1539,6 +1539,10 @@ struct ObservedDeviceRow: View {
             onLoudnessMaxDBChange: { maxDB in
                 audioEngine.setLoudnessMaxDB(for: device.uid, to: maxDB)
             },
+            loudnessTrebleGainScale: audioEngine.settingsManager.getLoudnessTrebleGainScale(for: device.uid),
+            onLoudnessTrebleGainScaleChange: { scale in
+                audioEngine.setLoudnessTrebleGainScale(for: device.uid, to: scale)
+            },
             isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
             onSmartVolumeToggle: { enabled in
                 audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)

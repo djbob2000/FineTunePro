@@ -46,6 +46,8 @@ struct DeviceRow: View {
     let onLoudnessToggle: ((Bool) -> Void)?
     let loudnessMaxDB: Double
     let onLoudnessMaxDBChange: ((Double) -> Void)?
+    var loudnessTrebleGainScale: Double = 1.0
+    var onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil
     let isSmartVolumeEnabled: Bool
     let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
@@ -124,6 +126,8 @@ struct DeviceRow: View {
         onLoudnessToggle: ((Bool) -> Void)? = nil,
         loudnessMaxDB: Double = -30.0,
         onLoudnessMaxDBChange: ((Double) -> Void)? = nil,
+        loudnessTrebleGainScale: Double = 1.0,
+        onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil,
         isSmartVolumeEnabled: Bool = false,
         onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false,
@@ -171,6 +175,8 @@ struct DeviceRow: View {
         self.onLoudnessToggle = onLoudnessToggle
         self.loudnessMaxDB = loudnessMaxDB
         self.onLoudnessMaxDBChange = onLoudnessMaxDBChange
+        self.loudnessTrebleGainScale = loudnessTrebleGainScale
+        self.onLoudnessTrebleGainScaleChange = onLoudnessTrebleGainScaleChange
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
@@ -304,6 +310,8 @@ struct DeviceRow: View {
                         onLoudnessToggle: { enabled in onLoudnessToggle?(enabled) },
                         loudnessMaxDB: loudnessMaxDB,
                         onLoudnessMaxDBChange: { maxDB in onLoudnessMaxDBChange?(maxDB) },
+                        loudnessTrebleGainScale: loudnessTrebleGainScale,
+                        onLoudnessTrebleGainScaleChange: { scale in onLoudnessTrebleGainScaleChange?(scale) },
                         supportsLoudness: device.id.readTransportType() != .builtIn,
                         supportsAutoEQ: device.supportsAutoEQ
                     )

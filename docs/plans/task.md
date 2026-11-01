@@ -61,3 +61,6 @@
 | Task 58 | Implement Pure Harmonic Treble Exciter in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
 | Task 59 | Verify DSP Unit Tests in `FineTuneTests` | done |
 | Task 60 | Full Suite Verification, Release Build, Codesign & Push | done |
+| Task 61 | Implement Treble Exciter Wet (0.0 to 4.0) slider in UI (`DeviceEnhancementPanel`, `DeviceEnhancementPicker`, `DeviceRow`, `MenuBarPopupView`) | done |
+| Task 62 | Update DSP wet scaling in `LoudnessCompensator.swift` and unit tests in `FineTuneTests` | done |
+| Task 63 | Full Verification, Release Build, Codesign & Push | done |

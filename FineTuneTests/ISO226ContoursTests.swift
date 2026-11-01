@@ -591,15 +591,18 @@ struct LoudnessCompensatorHybridTests {
         #expect(processor.testHighExciterWet == 0.0)
     }
 
-    @Test("Treble lift uses exciter wet equivalent to 3 dB instead of EQ")
-    func trebleLiftUsesExciterWetEquivalentToThreeDB() {
+    @Test("Treble exciter wet scales directly with trebleGainScale")
+    func trebleExciterWetScalesWithTrebleGainScale() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
         processor.updateForVolume(0.0, trebleGainScale: 1.0)
+        #expect(abs(processor.testHighExciterWet - 1.0) < 0.0001)
 
-        let expectedWet = Float(pow(10.0, 3.0 / 20.0) - 1.0)
-        #expect(abs(processor.testHighExciterWet - expectedWet) < 0.0001,
-                "Expected high exciter wet \(expectedWet), got \(processor.testHighExciterWet)")
+        processor.updateForVolume(0.0, trebleGainScale: 4.0)
+        #expect(abs(processor.testHighExciterWet - 4.0) < 0.0001)
+
+        processor.updateForVolume(0.0, trebleGainScale: 0.0)
+        #expect(abs(processor.testHighExciterWet - 0.0) < 0.0001)
     }
 
     @Test("Pure harmonic exciter generates no measurable DC offset")

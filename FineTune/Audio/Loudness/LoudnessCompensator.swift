@@ -185,8 +185,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
         _lowExciterWet = harmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
-        let highBoostDB = 3 * max(0, Double(_trebleGainScale)) * amount
-        _highExciterWet = harmonicsEnabled ? Float(pow(10, highBoostDB / 20) - 1) : 0
+        let trebleWetScale = max(0, Double(_trebleGainScale))
+        _highExciterWet = harmonicsEnabled ? Float(amount * trebleWetScale) : 0
         return [Float(_bassEQ0DB)]
     }
 

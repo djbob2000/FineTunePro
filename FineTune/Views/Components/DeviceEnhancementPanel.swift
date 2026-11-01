@@ -24,6 +24,8 @@ struct DeviceEnhancementPanel: View {
     var onLoudnessToggle: ((Bool) -> Void)? = nil
     var loudnessMaxDB: Double = -30.0
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
+    var loudnessTrebleGainScale: Double = 1.0
+    var onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil
     var supportsAutoEQ: Bool = true
 
     @State private var searchText = ""
@@ -255,6 +257,37 @@ struct DeviceEnhancementPanel: View {
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    // Treble Exciter Wet Slider
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Treble Exciter Wet")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                            Spacer()
+
+                            Text(String(format: "%.1f", loudnessTrebleGainScale))
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { loudnessTrebleGainScale },
+                                set: { onLoudnessTrebleGainScaleChange?($0) }
+                            ),
+                            in: 0.0...4.0,
+                            step: 0.1
+                        )
+                        .controlSize(.mini)
+
+                        Text("High-frequency harmonic presence (0.0 = off, 1.0 = standard, 4.0 = max).")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 4)
                 }
                 .padding(.leading, 14)
                 .padding(.top, 2)
