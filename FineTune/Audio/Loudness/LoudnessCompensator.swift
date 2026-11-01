@@ -59,8 +59,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
     private var _currentMaxDB: Double = -30.0
-    /// Bass exciter wet amount (0.0 to 4.0, locked to 1.5).
-    private var _currentBassExciterWet: Float = 1.5
+    /// Bass exciter wet amount (0.0 to 4.0, locked to 1.0).
+    private var _currentBassExciterWet: Float = 1.0
     /// Bass linear EQ amount (0.0 to 1.0).
     private var _currentBassLinearWet: Float = 1.0
 
@@ -102,7 +102,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 70.0, bassPostLPFFrequency: Double = 200.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 1.5, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 70.0, bassPostLPFFrequency: Double = 200.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 1.0, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -204,8 +204,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             .filter { $0.0 < sampleRate / 2 }
             .map { $0.1 }.max() ?? 0
 
-        // Headroom is budgeted strictly from the realized linear EQ shelf response.
-        _peakGainDB = max(0.0, peak)
+        // Headroom budget: realized linear EQ shelf response + parallel exciter boost.
+        // At max compensation (lowWet = 0.50), the exciter adds up to +2.92 dB (20 * log10(1 + 0.8 * 0.50)).
+        // Multiplied by the 0.6 broadband headroom budget factor, this reserves exactly 1.75 dB (~1.74 dB)
+        // of clean preamp attenuation to prevent low-end bloat and inter-sample peaks.
+        let exciterPeakDB = _lowExciterWet > 0 ? 20.0 * log10(1.0 + 0.80 * Double(_lowExciterWet)) : 0.0
+        _peakGainDB = max(0.0, peak) + exciterPeakDB
         updatePreamp()
     }
 

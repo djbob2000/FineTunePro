@@ -1163,7 +1163,7 @@ final class SettingsManager {
     }
 
     func getLoudnessBassExciterWet(for deviceUID: String) -> Double {
-        let val = settings.deviceLoudnessBassExciterWet[deviceUID] ?? 1.5
+        let val = settings.deviceLoudnessBassExciterWet[deviceUID] ?? 1.0
         return min(4.0, max(0.0, val))
     }
 
