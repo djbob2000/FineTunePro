@@ -24,12 +24,6 @@ struct DeviceEnhancementPanel: View {
     var onLoudnessToggle: ((Bool) -> Void)? = nil
     var loudnessMaxDB: Double = -30.0
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
-    var loudnessBassCrossover: Double = 70.0
-    var onLoudnessBassCrossoverChange: ((Double) -> Void)? = nil
-    var loudnessBassPostLPF: Double = 200.0
-    var onLoudnessBassPostLPFChange: ((Double) -> Void)? = nil
-    var loudnessBassExciterWet: Double = 1.0
-    var onLoudnessBassExciterWetChange: ((Double) -> Void)? = nil
     var supportsAutoEQ: Bool = true
 
     @State private var searchText = ""
@@ -261,68 +255,6 @@ struct DeviceEnhancementPanel: View {
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
-                    // Bass Frequency Slider (50 - 120 Hz)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text("Bass Cutoff")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                            Spacer()
-
-                            Text("\(Int(loudnessBassCrossover)) Hz")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { loudnessBassCrossover },
-                                set: { onLoudnessBassCrossoverChange?($0) }
-                            ),
-                            in: 50.0...120.0,
-                            step: 1.0
-                        )
-                        .controlSize(.mini)
-
-                        Text("Crossover frequency for bass saturation (50–120 Hz).")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 4)
-
-                    // Bass Exciter Wet Slider (0.0 - 4.0)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text("Harmonics Wet")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                            Spacer()
-
-                            Text(String(format: "%.1f", loudnessBassExciterWet))
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { loudnessBassExciterWet },
-                                set: { onLoudnessBassExciterWetChange?($0) }
-                            ),
-                            in: 0.0...4.0,
-                            step: 0.1
-                        )
-                        .controlSize(.mini)
-
-                        Text("Parallel bass saturation intensity (0.0 = off, 1.0 = standard, 4.0 = max).")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 4)
                 }
                 .padding(.leading, 14)
                 .padding(.top, 2)

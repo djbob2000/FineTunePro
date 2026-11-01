@@ -96,3 +96,4 @@
 | Task 93 | Add UI sliders for Bass Split (50–120 Hz) and Harmonics LPF (100–300 Hz) in Loudness Compensation with real-time DSP tuning | done |
 | Task 94 | Add Harmonics Wet slider (0.0–4.0) to Loudness UI, calibrate bass harmonic drive and uncap settings range | done |
 | Task 95 | Refactor lowExciter in LoudnessCompensator to studio parallel analog architecture (La Petite Excite model), remove phase-cancelling post-LPF, update UI | done |
+| Task 96 | Fix Bass Exciter statically at 70 Hz & Knob 1.5, remove bass tuning sliders from UI, and finalize DSP documentation | done |

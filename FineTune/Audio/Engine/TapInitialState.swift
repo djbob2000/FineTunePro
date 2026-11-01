@@ -22,7 +22,7 @@ struct TapInitialState {
     var loudnessGainScale: Double = 1.0
     var loudnessTrebleCrossover: Double = 6000.0
     var loudnessTrebleGainScale: Double = 1.0
-    var loudnessBassExciterWet: Double = 1.0
+    var loudnessBassExciterWet: Double = 1.5
     var loudnessBassLinearWet: Double = 1.0
 }
 

@@ -1535,18 +1535,6 @@ struct ObservedDeviceRow: View {
             onLoudnessMaxDBChange: { maxDB in
                 audioEngine.setLoudnessMaxDB(for: device.uid, to: maxDB)
             },
-            loudnessBassCrossover: audioEngine.settingsManager.getLoudnessBassCrossover(for: device.uid),
-            onLoudnessBassCrossoverChange: { freq in
-                audioEngine.setLoudnessBassCrossover(for: device.uid, to: freq)
-            },
-            loudnessBassPostLPF: audioEngine.settingsManager.getLoudnessBassPostLPF(for: device.uid),
-            onLoudnessBassPostLPFChange: { freq in
-                audioEngine.setLoudnessBassPostLPF(for: device.uid, to: freq)
-            },
-            loudnessBassExciterWet: audioEngine.settingsManager.getLoudnessBassExciterWet(for: device.uid),
-            onLoudnessBassExciterWetChange: { amount in
-                audioEngine.setLoudnessBassExciterWet(for: device.uid, to: amount)
-            },
             isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
             onSmartVolumeToggle: { enabled in
                 audioEngine.setSmartVolumeEnabled(for: device.uid, enabled: enabled)
