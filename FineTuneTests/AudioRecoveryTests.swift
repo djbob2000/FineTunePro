@@ -335,7 +335,7 @@ private final class RecoveryTap: ProcessTapControlling {
         if profile == nil { clearedProfileUIDs.insert(deviceUID) }
     }
     func setAutoEQPreampEnabled(_ enabled: Bool) {}
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float, preampMode: LoudnessPreampMode = .auto, manualPreampDB: Double = 0.0) {}
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float) {}
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {}
     func switchDevice(to newDeviceUID: String, preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws { currentDeviceUIDs = [newDeviceUID] }
     func updateDevices(to newDeviceUIDs: [String], preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws { currentDeviceUIDs = newDeviceUIDs }

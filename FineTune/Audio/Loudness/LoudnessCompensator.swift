@@ -76,15 +76,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private nonisolated(unsafe) var _highExciterWet: Float = 0.0
     private nonisolated(unsafe) var _bassEQ0DB: Double = 0.0
     private nonisolated(unsafe) var _preampGain: Float = 1.0
-    private nonisolated(unsafe) var _preampMode: LoudnessPreampMode = .auto
-    private nonisolated(unsafe) var _manualPreampDB: Double = 0.0
     /// Cached gain budget; digital-volume-only updates need no coefficient rebuild.
     private var _peakGainDB: Double = 0.0
     private nonisolated(unsafe) var _hfEnvelope: Float = 0.0
     var lowExciterWet: Float { _lowExciterWet }
     var highExciterWet: Float { _highExciterWet }
-    var preampMode: LoudnessPreampMode { _preampMode }
-    var manualPreampDB: Double { _manualPreampDB }
 
     // MARK: - Init
 
@@ -109,7 +105,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0, preampMode: LoudnessPreampMode = .auto, manualPreampDB: Double = 0.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -117,8 +113,6 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             || trebleCrossoverFrequency != _trebleCrossoverFrequency
             || trebleGainScale != _trebleGainScale
             || bassExciterWet != _currentBassExciterWet || bassLinearWet != _currentBassLinearWet
-        _preampMode = preampMode
-        _manualPreampDB = manualPreampDB
         _currentDigitalVolume = digitalVolume
         if isEnabled && !curveChanged {
             updatePreamp()
@@ -210,16 +204,18 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     private func updatePreamp() {
-        if _preampMode == .manual {
-            let clampedDB = min(0.0, max(-12.0, _manualPreampDB))
-            _preampGain = Float(pow(10.0, clampedDB / 20.0))
-        } else {
-            // Boost above unity contributes no headroom. It remains the final limiter's job.
-            let digital = max(1e-8, min(1, Double(_currentDigitalVolume)))
-            let availableDB = -20 * log10(digital)
-            let cutDB = max(0, _peakGainDB - availableDB)
-            _preampGain = Float(pow(10, -cutDB / 20))
-        }
+        // Boost above unity contributes no headroom. It remains the final limiter's job.
+        // In real music / pink noise, low frequencies (<110 Hz) contain ~20-30% of total
+        // broadband signal power across the 10-octave audible spectrum. Attenuating the entire track
+        // 1:1 against a shelf boost causes excessive midrange/vocal attenuation ("midrange ducking").
+        // A headroom budget factor of 0.6 matches the broadband RMS power integration ratio
+        // (~6 dB cut for +10 dB bass shelf), preserving dynamics while downstream BrickwallLimiter
+        // handles rare transient peaks.
+        let digital = max(1e-8, min(1, Double(_currentDigitalVolume)))
+        let availableDB = -20 * log10(digital)
+        let budgetedPeakDB = _peakGainDB * 0.6
+        let cutDB = max(0, budgetedPeakDB - availableDB)
+        _preampGain = Float(pow(10, -cutDB / 20))
     }
 
     /// Fit the fixed four-section loudness topology to the ISO-derived target curve.

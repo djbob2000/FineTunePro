@@ -22,11 +22,6 @@ struct SystemLaunchAtLoginService: LaunchAtLoginProviding {
 
 // MARK: - Pinned App Info
 
-enum LoudnessPreampMode: String, Codable, CaseIterable, Sendable {
-    case auto
-    case manual
-}
-
 struct PinnedAppInfo: Codable, Equatable {
     let persistenceIdentifier: String
     let displayName: String
@@ -228,8 +223,6 @@ final class SettingsManager {
         var deviceLoudnessBassLinearWet: [String: Double] = [:] // deviceUID -> bass linear wet (0.0 to 1.0)
         var deviceLoudnessTrebleCrossover: [String: Double] = [:] // deviceUID -> treble crossover frequency
         var deviceLoudnessTrebleGainScale: [String: Double] = [:] // deviceUID -> treble gain scale (amount)
-        var deviceLoudnessPreampMode: [String: LoudnessPreampMode] = [:] // deviceUID -> preamp mode (.auto / .manual)
-        var deviceLoudnessPreampManualDB: [String: Double] = [:] // deviceUID -> manual preamp dB (-12.0 to 0.0)
 
         // Per-device buffer frame size preference (Auto, 256, 512, 768, 1024, 2048)
         var deviceBufferFrameSizePreference: [String: Int] = [:]
@@ -300,8 +293,6 @@ final class SettingsManager {
             deviceLoudnessBassLinearWet = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassLinearWet) ?? [:]
             deviceLoudnessTrebleCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessTrebleCrossover) ?? [:]
             deviceLoudnessTrebleGainScale = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessTrebleGainScale) ?? [:]
-            deviceLoudnessPreampMode = try c.decodeIfPresent([String: LoudnessPreampMode].self, forKey: .deviceLoudnessPreampMode) ?? [:]
-            deviceLoudnessPreampManualDB = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessPreampManualDB) ?? [:]
             deviceBufferFrameSizePreference = try c.decodeIfPresent([String: Int].self, forKey: .deviceBufferFrameSizePreference) ?? [:]
             userEQPresets = try c.decodeIfPresent([UserEQPreset].self, forKey: .userEQPresets) ?? []
         }
@@ -1198,25 +1189,6 @@ final class SettingsManager {
         scheduleSave()
     }
 
-    func getLoudnessPreampMode(for deviceUID: String) -> LoudnessPreampMode {
-        settings.deviceLoudnessPreampMode[deviceUID] ?? .auto
-    }
-
-    func setLoudnessPreampMode(for deviceUID: String, to mode: LoudnessPreampMode) {
-        settings.deviceLoudnessPreampMode[deviceUID] = mode
-        scheduleSave()
-    }
-
-    func getLoudnessPreampManualDB(for deviceUID: String) -> Double {
-        let val = settings.deviceLoudnessPreampManualDB[deviceUID] ?? 0.0
-        return min(0.0, max(-12.0, val))
-    }
-
-    func setLoudnessPreampManualDB(for deviceUID: String, to dB: Double) {
-        settings.deviceLoudnessPreampManualDB[deviceUID] = min(0.0, max(-12.0, dB))
-        scheduleSave()
-    }
-
     func updateAppSettings(_ newSettings: AppSettings) {
         appSettings = newSettings
     }
@@ -1329,8 +1301,6 @@ final class SettingsManager {
         settings.deviceLoudnessTrebleGainScale.removeAll()
         settings.deviceLoudnessBassExciterWet.removeAll()
         settings.deviceLoudnessBassLinearWet.removeAll()
-        settings.deviceLoudnessPreampMode.removeAll()
-        settings.deviceLoudnessPreampManualDB.removeAll()
         settings.deviceAutoEQ.removeAll()
         settings.favoriteAutoEQProfiles.removeAll()
         settings.appDeviceSelectionMode.removeAll()

@@ -54,3 +54,7 @@
 | Task 51 | Propagate settings through `AudioEngine` and tap controllers | done |
 | Task 52 | Implement Auto/Manual Preamp UI in `DeviceEnhancementPanel.swift` | done |
 | Task 53 | Full Verification, Release Build, Codesign & Push | done |
+| Task 54 | Remove Preamp Gain UI controls from `DeviceEnhancementPanel` and row views | done |
+| Task 55 | Implement 0.6 headroom factor in `LoudnessCompensator.swift` and clean up unused plumbing | done |
+| Task 56 | Update unit tests for 0.6 headroom factor and clean test suites | done |
+| Task 57 | Full Verification, Release Build, Codesign & Push | done |

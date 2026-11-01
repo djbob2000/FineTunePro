@@ -47,8 +47,6 @@ final class RecordingProcessTapController: ProcessTapControlling {
         var loudnessTrebleGainScale: Double
         var loudnessBassExciterWet: Double
         var loudnessBassLinearWet: Double
-        var loudnessPreampMode: LoudnessPreampMode
-        var loudnessPreampManualDB: Double
 
         @MainActor
         init(_ s: TapInitialState) {
@@ -71,8 +69,6 @@ final class RecordingProcessTapController: ProcessTapControlling {
             self.loudnessTrebleGainScale = s.loudnessTrebleGainScale
             self.loudnessBassExciterWet = s.loudnessBassExciterWet
             self.loudnessBassLinearWet = s.loudnessBassLinearWet
-            self.loudnessPreampMode = s.loudnessPreampMode
-            self.loudnessPreampManualDB = s.loudnessPreampManualDB
         }
     }
 
@@ -136,7 +132,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         events.append(.setAutoEQPreampEnabled(enabled))
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float, preampMode: LoudnessPreampMode = .auto, manualPreampDB: Double = 0.0) {
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float) {
         lastLoudnessDigitalVolume = self.volume
         events.append(.updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, gainScale: gainScale, bassCrossover: bassCrossover, trebleCrossover: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet))
     }

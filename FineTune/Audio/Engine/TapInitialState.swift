@@ -23,8 +23,6 @@ struct TapInitialState {
     var loudnessTrebleGainScale: Double = 1.0
     var loudnessBassExciterWet: Double = 0.20
     var loudnessBassLinearWet: Double = 1.0
-    var loudnessPreampMode: LoudnessPreampMode = .auto
-    var loudnessPreampManualDB: Double = 0.0
 }
 
 /// Destination settings captured on main before a routing operation suspends.

@@ -157,8 +157,6 @@ final class ProcessTapController: ProcessTapControlling {
     private var _lastLoudnessBassExciterWet: Float = 0.20
     private var _lastLoudnessBassLinearWet: Float = 1.0
     private var _lastLoudnessMaxDB: Double = -30.0
-    private var _lastLoudnessPreampMode: LoudnessPreampMode = .auto
-    private var _lastLoudnessPreampManualDB: Double = 0.0
     private nonisolated(unsafe) var secondaryEQProcessor: EQProcessor?
     private nonisolated(unsafe) var secondaryAutoEQProcessor: AutoEQProcessor?
     private nonisolated(unsafe) var secondaryDynamicEqualizer: DynamicEqualizer?
@@ -348,7 +346,7 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryAutoEQProcessor?.setPreampEnabled(enabled)
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 110.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0, preampMode: LoudnessPreampMode = .auto, manualPreampDB: Double = 0.0) {
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 110.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         _lastLoudnessEnabled = enabled
         _lastLoudnessVolume = volume
         _lastLoudnessReferencePhon = referencePhon
@@ -359,11 +357,9 @@ final class ProcessTapController: ProcessTapControlling {
         _lastLoudnessBassExciterWet = bassExciterWet
         _lastLoudnessBassLinearWet = bassLinearWet
         _lastLoudnessMaxDB = maxDB
-        _lastLoudnessPreampMode = preampMode
-        _lastLoudnessPreampManualDB = manualPreampDB
         if enabled {
-            loudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet, preampMode: preampMode, manualPreampDB: manualPreampDB)
-            secondaryLoudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet, preampMode: preampMode, manualPreampDB: manualPreampDB)
+            loudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet)
+            secondaryLoudnessCompensator?.updateForVolume(volume, digitalVolume: _volume, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossoverFrequency: bassCrossover, trebleCrossoverFrequency: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet)
         } else {
             loudnessCompensator?.setEnabled(false)
             secondaryLoudnessCompensator?.setEnabled(false)
@@ -380,8 +376,7 @@ final class ProcessTapController: ProcessTapControlling {
                 referencePhon: _lastLoudnessReferencePhon, maxDB: _lastLoudnessMaxDB,
                 gainScale: _lastLoudnessGainScale, bassCrossoverFrequency: _lastLoudnessBassCrossover,
                 trebleCrossoverFrequency: _lastLoudnessTrebleCrossover, trebleGainScale: _lastLoudnessTrebleGainScale,
-                bassExciterWet: _lastLoudnessBassExciterWet, bassLinearWet: _lastLoudnessBassLinearWet,
-                preampMode: _lastLoudnessPreampMode, manualPreampDB: _lastLoudnessPreampManualDB
+                bassExciterWet: _lastLoudnessBassExciterWet, bassLinearWet: _lastLoudnessBassLinearWet
             )
         }
         return processor
@@ -968,8 +963,7 @@ final class ProcessTapController: ProcessTapControlling {
             referencePhon: initial.loudnessReferencePhon, maxDB: initial.loudnessMaxDB,
             gainScale: Float(initial.loudnessGainScale), bassCrossover: initial.loudnessBassCrossover,
             trebleCrossover: initial.loudnessTrebleCrossover, trebleGainScale: Float(initial.loudnessTrebleGainScale),
-            bassExciterWet: Float(initial.loudnessBassExciterWet), bassLinearWet: Float(initial.loudnessBassLinearWet),
-            preampMode: initial.loudnessPreampMode, manualPreampDB: initial.loudnessPreampManualDB
+            bassExciterWet: Float(initial.loudnessBassExciterWet), bassLinearWet: Float(initial.loudnessBassLinearWet)
         )
         loudnessCompensator = makeLoudnessCompensator(sampleRate: sampleRate)
         _currentAUEntries = initial.appAUEffectChain
