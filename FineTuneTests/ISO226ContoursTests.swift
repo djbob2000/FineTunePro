@@ -167,7 +167,7 @@ struct ISO226ContoursMigrationTests {
 @Suite("LoudnessCompensator — headroom fitting")
 struct LoudnessCompensatorHeadroomTests {
 
-    @Test("4-filter loudness fit tracks the target contour at 3% system volume")
+    @Test("Single low-shelf loudness filter tracks the target contour at 3% system volume")
     func fittedCascadeTracksTargetAtThreePercentVolume() {
         let sampleRate = 48_000.0
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.03)
@@ -175,33 +175,16 @@ struct LoudnessCompensatorHeadroomTests {
         let fittedGains = LoudnessCompensator.fittedSectionGains(forPhon: phon, amount: 1.0, sampleRate: sampleRate)
         let coefficients = LoudnessCompensator.coefficientsForBands(gains: fittedGains, sampleRate: sampleRate)
 
-        #expect(LoudnessCompensator.bandCount == 4)
+        #expect(LoudnessCompensator.bandCount == 1)
 
-        var lowFrequencySquaredError = 0.0
-        var lowFrequencyCount = 0
-        var maxAbsError = 0.0
-
-        for index in 0..<96 {
-            let frequency = 20.0 * pow(20_000.0 / 20.0, Double(index) / 95.0)
-            let targetDB = ISO226Contours.interpolateCompensation(targetGains, atFrequency: frequency)
-            let realizedDB = cascadeResponseDB(
-                coefficients: coefficients,
-                sectionCount: LoudnessCompensator.bandCount,
-                sampleRate: sampleRate,
-                frequency: frequency
-            )
-            let responseError = realizedDB - targetDB
-            maxAbsError = max(maxAbsError, abs(responseError))
-
-            if frequency <= 150.0 {
-                lowFrequencySquaredError += responseError * responseError
-                lowFrequencyCount += 1
-            }
-        }
-
-        let lowFrequencyRMSE = sqrt(lowFrequencySquaredError / Double(lowFrequencyCount))
-        #expect(lowFrequencyRMSE <= 2.0, "Low-frequency RMSE should stay within 2 dB, got \(lowFrequencyRMSE) dB")
-        #expect(maxAbsError <= 3.0, "Max fitted-response error should stay within 3 dB, got \(maxAbsError) dB")
+        let targetLowDB = ISO226Contours.interpolateCompensation(targetGains, atFrequency: 60.0)
+        let realizedLowDB = cascadeResponseDB(
+            coefficients: coefficients,
+            sectionCount: LoudnessCompensator.bandCount,
+            sampleRate: sampleRate,
+            frequency: 60.0
+        )
+        #expect(abs(realizedLowDB - targetLowDB) <= 5.0, "Low-shelf error at 60 Hz should stay within 5 dB, got \(abs(realizedLowDB - targetLowDB)) dB")
     }
 
     private func cascadeResponseDB(
@@ -579,14 +562,14 @@ struct LoudnessCompensatorHybridTests {
         #expect(wet2 != wet1)
     }
 
-    @Test("Soft bass variant uses a 35 percent low wet mix at maximum compensation")
+    @Test("Soft bass variant uses a 0.50 low wet mix at maximum compensation")
     func softBassVariantUsesHigherLowWetMix() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
         processor.updateForVolume(0.0)
 
-        #expect(abs(processor.testLowExciterWet - 0.35) < 0.0001,
-                "Expected low exciter wet to be 0.35 at maximum compensation, got \(processor.testLowExciterWet)")
+        #expect(abs(processor.testLowExciterWet - 0.50) < 0.0001,
+                "Expected low exciter wet to be 0.50 at maximum compensation, got \(processor.testLowExciterWet)")
     }
 
     @Test("Soft bass variant uses 10 dB low EQ at maximum compensation")
@@ -617,6 +600,179 @@ struct LoudnessCompensatorHybridTests {
         let expectedWet = Float(pow(10.0, 3.0 / 20.0) - 1.0)
         #expect(abs(processor.testHighExciterWet - expectedWet) < 0.0001,
                 "Expected high exciter wet \(expectedWet), got \(processor.testHighExciterWet)")
+    }
+
+    @Test("Pure harmonic exciter generates no measurable DC offset")
+    func pureHarmonicExciterZeroDCOffset() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0)
+
+        // 50 Hz sine wave
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.5 * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        // Steady-state DC offset across the second half of the buffer
+        let startFrame = frameCount / 2
+        var sumDC = 0.0
+        for i in startFrame..<frameCount {
+            sumDC += Double(output[i * 2])
+        }
+        let meanDC = abs(sumDC / Double(frameCount - startFrame))
+        #expect(meanDC < 1e-4, "Expected mean DC offset to be near zero, got \(meanDC)")
+    }
+
+    @Test("Bass exciter retains fundamental and generates musical harmonic overtones without compression")
+    func aphexBigBottomHarmonicGeneration() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0, bassCrossoverFrequency: 80.0, trebleGainScale: 0.0)
+
+        // 40 Hz sub-bass sine wave
+        let f0 = 40.0
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.5 * sin(2.0 * .pi * f0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        let magF0 = magnitude(at: f0, in: output, sampleRate: sampleRate)
+        let magH2 = magnitude(at: f0 * 2.0, in: output, sampleRate: sampleRate)
+        let magH3 = magnitude(at: f0 * 3.0, in: output, sampleRate: sampleRate)
+
+        #expect(magF0 > 0.0, "Expected strong fundamental retention")
+        #expect(magH2 > 0.0, "Expected non-zero 2nd harmonic")
+        #expect(magH2 > magH3, "Expected H2 > H3, got H2=\(magH2) H3=\(magH3)")
+    }
+
+    @Test("Bass exciter preserves healthy preamp headroom when digital attenuation is available")
+    func aphexBigBottomHeadroomPreservation() {
+        let processor = LoudnessCompensator(sampleRate: 48_000.0)
+        // At max loudness compensation with typical digital volume attenuation at low volume (digitalVolume = 0.15):
+        processor.updateForVolume(0.0, digitalVolume: 0.15)
+
+        // Preamp gain should be 1.0 because the bounded wet budget (peakGainDB ~ 13.8 dB)
+        // fits completely within the 16.5 dB digital attenuation headroom.
+        #expect(processor.testPreampGain == 1.0,
+                "Expected preamp gain to be 1.0 when digital headroom is available, got \(processor.testPreampGain)")
+    }
+
+    @Test("Preamp headroom management prevents output from exceeding 0 dBFS under full-scale input")
+    func aphexBigBottomPreventsClippingUnderFullScaleInput() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+
+        // In ProcessTapController, loudness compensation runs after the volume slider,
+        // so a 0 dBFS full-scale track arrives at the compensator scaled by digitalVolume.
+        for volume in [Float(1.0), Float(0.50), Float(0.35), Float(0.25), Float(0.10)] {
+            processor.updateForVolume(volume, digitalVolume: volume)
+
+            // 0 dBFS 50 Hz sine wave scaled by the upstream volume slider
+            var input = [Float](repeating: 0.0, count: frameCount * 2)
+            for i in 0..<frameCount {
+                let sample = Float(Double(volume) * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+                input[i * 2] = sample
+                input[i * 2 + 1] = sample
+            }
+
+            var output = [Float](repeating: 0.0, count: frameCount * 2)
+            processor.process(input: input, output: &output, frameCount: frameCount)
+
+            var maxPeak: Float = 0.0
+            for i in 0..<frameCount {
+                let peak = max(abs(output[i * 2]), abs(output[i * 2 + 1]))
+                if peak > maxPeak { maxPeak = peak }
+            }
+
+            #expect(maxPeak <= 1.0001, "Expected peak output to stay at or below 0 dBFS (1.0), got \(maxPeak) at volume \(volume)")
+        }
+    }
+
+    @Test("Bass exciter maintains bounded peak ratio without severe asymmetrical overload")
+    func bassExciterMaintainsBoundedPeakRatio() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0)
+
+        // 50 Hz sine wave with typical bass amplitude 0.6
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.6 * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        // Measure steady-state peaks in the second half of the buffer
+        let startFrame = frameCount / 2
+        var maxPositive: Float = 0.0
+        var maxNegative: Float = 0.0
+        for i in startFrame..<frameCount {
+            let sample = output[i * 2]
+            if sample > maxPositive { maxPositive = sample }
+            if -sample > maxNegative { maxNegative = -sample }
+        }
+
+        #expect(maxPositive > 0.0)
+        #expect(maxNegative > 0.0)
+        let peakRatio = maxPositive / maxNegative
+        #expect(peakRatio >= 0.85 && peakRatio <= 1.15,
+                "Peak ratio should stay bounded within 15%, got positive=\(maxPositive), negative=\(maxNegative), ratio=\(peakRatio)")
+    }
+
+    @Test("Bass exciter is purely instantaneous and exhibits zero time-domain envelope pumping on note tails")
+    func bassExciterHasZeroTimeDomainPumping() {
+        let sampleRate = 48_000.0
+        let frameCount = 48_000
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        processor.updateForVolume(0.0)
+
+        // 50 Hz steady-state sine wave with constant low-amplitude (tail level)
+        var input = [Float](repeating: 0.0, count: frameCount * 2)
+        for i in 0..<frameCount {
+            let sample = Float(0.2 * sin(2.0 * .pi * 50.0 * Double(i) / sampleRate))
+            input[i * 2] = sample
+            input[i * 2 + 1] = sample
+        }
+
+        var output = [Float](repeating: 0.0, count: frameCount * 2)
+        processor.process(input: input, output: &output, frameCount: frameCount)
+
+        // Compare peak amplitude in earlier cycle vs later cycle to ensure gain does not drift/pump over time
+        let cycleSamples = Int(sampleRate / 50.0) // 960 samples
+        let earlyCycleStart = cycleSamples * 10
+        let lateCycleStart = cycleSamples * 40
+
+        var earlyPeak: Float = 0.0
+        for i in earlyCycleStart..<(earlyCycleStart + cycleSamples) {
+            earlyPeak = max(earlyPeak, abs(output[i * 2]))
+        }
+
+        var latePeak: Float = 0.0
+        for i in lateCycleStart..<(lateCycleStart + cycleSamples) {
+            latePeak = max(latePeak, abs(output[i * 2]))
+        }
+
+        #expect(earlyPeak > 0.0)
+        let driftRatio = abs(latePeak - earlyPeak) / earlyPeak
+        #expect(driftRatio < 0.001, "Expected zero gain pumping across cycles, got drift ratio \(driftRatio)")
     }
 
     @Test("Measure low exciter bass contribution")

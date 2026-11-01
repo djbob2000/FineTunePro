@@ -508,3 +508,4 @@ struct MonoPersistenceTests {
         #expect(restored.getMonoDownmix(for: "app") == nil)
     }
 }
+

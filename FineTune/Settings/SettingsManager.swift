@@ -1134,7 +1134,7 @@ final class SettingsManager {
 
 
     func getLoudnessBassCrossover(for deviceUID: String) -> Double {
-        settings.deviceLoudnessBassCrossover[deviceUID] ?? 70.0
+        settings.deviceLoudnessBassCrossover[deviceUID] ?? 110.0
     }
 
     func setLoudnessBassCrossover(for deviceUID: String, to frequency: Double) {
@@ -1299,6 +1299,8 @@ final class SettingsManager {
         settings.deviceLoudnessGainScale.removeAll()
         settings.deviceLoudnessTrebleCrossover.removeAll()
         settings.deviceLoudnessTrebleGainScale.removeAll()
+        settings.deviceLoudnessBassExciterWet.removeAll()
+        settings.deviceLoudnessBassLinearWet.removeAll()
         settings.deviceAutoEQ.removeAll()
         settings.favoriteAutoEQProfiles.removeAll()
         settings.appDeviceSelectionMode.removeAll()

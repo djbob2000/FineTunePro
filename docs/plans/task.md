@@ -1,0 +1,60 @@
+# Task Tracker
+
+| Task ID | Description | Status |
+|---|---|---|
+| Task 1 | Update DSP State & Post-Filters in `LoudnessCompensator.swift` | done |
+| Task 2 | Implement Smooth Sigmoid, Pure Harmonic Generator & Audio Process Loop | done |
+| Task 3 | Unit Tests for Harmonic Purity & Regression Safety | done |
+| Task 4 | Full Suite Verification & Final Commit | done |
+| Task 5 | Prune unused filters (Peaking/HighShelf) down to single Low-Shelf (`bandCount = 1`) | done |
+| Task 6 | Set max lowWet to 0.70 (+6 dB harmonic boost at max compensation) | done |
+| Task 7 | Smooth treble exciter input with C2 soft-knee (`softKnee`) in both HF processors | done |
+| Task 8 | Recalibrate headroom budget (independent band maximums, restoring ~5 dB volume) | done |
+| Task 9 | Rebuild Release `.app` bundle, commit & push to GitHub | done |
+| Task 10 | Implement Aphex Big Bottom bass exciter architecture in `LoudnessCompensator.swift` | done |
+| Task 11 | Update Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
+| Task 12 | Verification, Release `.app` Build & Codesign | done |
+| Task 13 | Commit & Push to GitHub | done |
+| Task 14 | Set optimal lowWet to 0.50 (-6 dB parallel mix), update test suite, rebuild & push | done |
+| Task 15 | Implement Aphex Big Bottom optical compressor and symmetrical saturator | done |
+| Task 16 | Refactor bass exciter to true Waves MaxxBass / Aphex Big Bottom pure harmonic sidechain architecture | done |
+| Task 17 | Clarify DSP documentation & mathematical accuracy in `LoudnessCompensator.swift` and tests | done |
+| Task 18 | Update DSP logic in `FineTune/Audio/Loudness/LoudnessCompensator.swift` | done |
+| Task 19 | Update Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
+| Task 20 | Full Test Suite Verification | done |
+| Task 21 | Release Binary Build & Codesign | done |
+| Task 22 | Push to GitHub & Verification Report | done |
+| Task 23 | Remove bass optical compressor & sustain leveler in `LoudnessCompensator.swift` (eliminate `_bassEnvelope` & `optoGain`, retain EQ + instant saturation/exciter) | done |
+| Task 24 | Update DSP unit tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
+| Task 25 | Full Test Suite Verification | done |
+| Task 26 | Rebuild Release `.app` bundle, codesign & verify | done |
+| Task 27 | Commit & Push to GitHub | done |
+| Task 28 | Remove exciter contribution from headroom calculation in `FineTune/Audio/Loudness/LoudnessCompensator.swift` | done |
+| Task 29 | Update unit tests in `FineTuneTests/ISO226ContoursTests.swift` and verify tests | done |
+| Task 30 | Full Test Suite Verification | done |
+| Task 31 | Rebuild Release `.app` bundle, codesign & verify | done |
+| Task 32 | Commit & Push to GitHub | done |
+| Task 33 | Implement Waves Renaissance Bass multi-harmonic polynomial (2f0, 3f0, 4f0, 5f0) in `LoudnessCompensator.swift` | done |
+| Task 34 | Update & Run Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` and `LoudnessHeadroomRegressionTests.swift` | done |
+| Task 35 | Full Test Suite Verification | done |
+| Task 36 | Rebuild Release `.app` bundle, codesign & verify | done |
+| Task 37 | Commit & Push to GitHub | done |
+| Task 38 | Update Test Suite for Path 2 (Unity Midrange & Band-Limited Bass Safety) in `LoudnessHeadroomRegressionTests.swift` | done |
+| Task 39 | Implement Low-Band Dynamic Limiter & Eliminate Global Preamp Cut in `LoudnessCompensator.swift` | done |
+| Task 40 | Full Test Suite Verification (`ISO226ContoursTests`, `LoudnessHeadroomRegressionTests`) | done |
+| Task 41 | Design True Dynamic EQ architecture | done |
+| Task 42 | Add Unit Tests for True Dynamic EQ level-dependent bass boost | done |
+| Task 43 | Implement True Dynamic EQ in `LoudnessCompensator.swift` | done |
+| Task 44 | Test Suite Verification (`LoudnessHeadroomRegressionTests`, `ISO226ContoursTests`) | done |
+| Task 45 | Release Build, Codesign & Verify | done |
+| Task 46 | Commit & Push to GitHub | done |
+| Task 47 | Restore clean audio baseline from ef4ec50 (decoupled exciter headroom, pure harmonics, no soft-limiter distortion) | done |
+| Task 49 | Add Settings Persistence for `LoudnessPreampMode` and `deviceLoudnessPreampManualDB` | done |
+| Task 50 | Support manual preamp gain in `LoudnessCompensator.swift` with regression tests | done |
+| Task 51 | Propagate settings through `AudioEngine` and tap controllers | done |
+| Task 52 | Implement Auto/Manual Preamp UI in `DeviceEnhancementPanel.swift` | done |
+| Task 53 | Full Verification, Release Build, Codesign & Push | done |
+| Task 54 | Remove Preamp Gain UI controls from `DeviceEnhancementPanel` and row views | done |
+| Task 55 | Implement 0.6 headroom factor in `LoudnessCompensator.swift` and clean up unused plumbing | done |
+| Task 56 | Update unit tests for 0.6 headroom factor and clean test suites | done |
+| Task 57 | Full Verification, Release Build, Codesign & Push | done |
