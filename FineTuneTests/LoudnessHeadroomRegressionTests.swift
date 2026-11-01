@@ -149,6 +149,24 @@ struct LoudnessHeadroomRegressionTests {
         #expect(abs(measure(processor, frequency: 1_000).gainDB) < 0.05)
     }
 
+    @Test("Manual preamp gain overrides automatic headroom calculation")
+    func manualPreampGainOverridesAutoHeadroom() {
+        let processor = LoudnessCompensator(sampleRate: 48_000)
+        // With digitalVolume 1.0, Auto mode would apply ~ -10 dB cut
+        processor.updateForVolume(0.25, digitalVolume: 1.0, preampMode: .manual, manualPreampDB: -3.0)
+        let expectedGain = Float(pow(10.0, -3.0 / 20.0))
+        #expect(abs(processor.testPreampGain - expectedGain) < 0.001)
+
+        // Test 0 dB (bypass input attenuation)
+        processor.updateForVolume(0.25, digitalVolume: 1.0, preampMode: .manual, manualPreampDB: 0.0)
+        #expect(abs(processor.testPreampGain - 1.0) < 0.001)
+
+        // Test clamping to -12 dB
+        processor.updateForVolume(0.25, digitalVolume: 1.0, preampMode: .manual, manualPreampDB: -20.0)
+        let minGain = Float(pow(10.0, -12.0 / 20.0))
+        #expect(abs(processor.testPreampGain - minGain) < 0.001)
+    }
+
     private func gain(at frequency: Double, digital: Float) -> Double {
         let processor = LoudnessCompensator(sampleRate: 48_000)
         processor.updateForVolume(0.25, digitalVolume: digital, bassExciterWet: 0)
