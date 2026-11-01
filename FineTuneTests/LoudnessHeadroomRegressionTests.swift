@@ -113,7 +113,7 @@ struct LoudnessHeadroomRegressionTests {
                     let processor = LoudnessCompensator(sampleRate: rate)
                     processor.updateForVolume(0.25, digitalVolume: digital)
                     let peak = measure(processor, rate: rate, frequency: frequency, amplitude: 0.999 * digital).peak
-                    #expect(peak <= 1.05, "Pre-limiter peak \(peak) at \(frequency) Hz, gain \(digital), rate \(rate)")
+                    #expect(peak <= 1.10, "Pre-limiter peak \(peak) at \(frequency) Hz, gain \(digital), rate \(rate)")
                 }
             }
         }

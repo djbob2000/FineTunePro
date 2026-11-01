@@ -49,3 +49,4 @@
 | Task 45 | Release Build, Codesign & Verify | done |
 | Task 46 | Commit & Push to GitHub | done |
 | Task 47 | Restore clean audio baseline from ef4ec50 (decoupled exciter headroom, pure harmonics, no soft-limiter distortion) | done |
+| Task 48 | Add +3 dB (1.4125x) makeup gain after softKnee in bass harmonic exciter | done |
