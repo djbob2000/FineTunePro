@@ -107,20 +107,20 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             }
 
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 2.5)
-            let effectiveWet = highDrive * sibilantDucking
+            let effectiveWet = highDrive * 0.25 * sibilantDucking
 
-            // Treble excitation: Studio-grade Asymmetric Harmonics (Triode/Tape saturation)
-            // Input signal highL/highR is processed at nominal unity gain (no 16x clipping distortion)
-            let harmHighL = generateTrebleHarmonics(highL)
-            let harmHighR = generateTrebleHarmonics(highR)
+            // Treble Exciter (La Petite Excite parallel architecture):
+            // Parallel soft-saturated high band adds shimmer, presence, and warm harmonics without fundamental subtraction
+            let satHighL = saturateTreble(highL)
+            let satHighR = saturateTreble(highR)
 
-            // Post-HPF cleans up DC offset and sub-cutoff intermodulation difference products
-            let cleanHarmHighL = _hpPostL.process(harmHighL)
-            let cleanHarmHighR = _hpPostR.process(harmHighR)
+            // Post-HPF (20 Hz DC blocker) cleans up DC offset without crossover phase cancellation notch
+            let cleanSatHighL = _hpPostL.process(satHighL)
+            let cleanSatHighR = _hpPostR.process(satHighR)
 
-            // Sum Dry + Pure Treble Harmonics scaled by effective Wet Mix
-            output[idxL] = xL + (cleanHarmHighL * effectiveWet)
-            output[idxR] = xR + (cleanHarmHighR * effectiveWet)
+            // Sum Dry + parallel saturated treble band scaled by effective Wet Mix
+            output[idxL] = xL + (cleanSatHighL * effectiveWet)
+            output[idxR] = xR + (cleanSatHighR * effectiveWet)
         }
     }
 
@@ -128,7 +128,7 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
         let freq = frequency ?? _currentSettings?.trebleExciterFrequency ?? 1500.0
         _currentCrossoverFrequency = freq
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
-        let hpPostCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
+        let hpPostCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
 
         _hpL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
         _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
@@ -142,20 +142,17 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // Studio-grade gentle asymmetric harmonic generation (La Petite Excite style):
-        // Models single-ended triode / tape saturation with strict monotonicity and zero-crossing smoothness:
-        // - Positive half: gentle soft compression u / (1 + 1.0 * u), synthesizing warm 2nd and 3rd harmonics
-        // - Negative half: milder curvature u / (1 - 0.3 * u), breaking waveform symmetry cleanly
-        // - f'(0) = 1.0 from both sides -> zero crossover distortion or derivative kinks
-        // - Strictly monotonic -> zero full-wave rectification, zero octave fuzz
-        // - Pure harmonic component (u - shaped) with zero fundamental boost
+    private func saturateTreble(_ u: Float) -> Float {
+        // Studio-grade gentle asymmetric saturation (La Petite Excite / triode tape model):
+        // Retains full high-band energy while gently rounding peaks and generating warm 2nd/3rd harmonics:
+        // - Positive half: gentle soft compression u / (1 + 0.5 * u)
+        // - Negative half: milder curvature u / (1 - 0.15 * u)
+        // - f'(0) = 1.0 from both sides -> smooth zero crossing, zero derivative discontinuity
+        // - Monotonic -> zero full-wave rectification, zero harsh octave fuzz
         if u >= 0.0 {
-            let shaped = u / (1.0 + 1.0 * u)
-            return u - shaped
+            return u / (1.0 + 0.5 * u)
         } else {
-            let shaped = u / (1.0 - 0.3 * u)
-            return u - shaped
+            return u / (1.0 - 0.15 * u)
         }
     }
 }

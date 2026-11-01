@@ -86,3 +86,5 @@
 | Task 83 | Build Release `.app`, codesign, verify and push | done |
 | Task 84 | Implement La Petite Excite architecture (unity-gain gentle saturation, Wet Mix scaling, CV ducking) in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
 | Task 85 | Build Release `.app`, codesign, verify package and push | done |
+| Task 86 | Implement Variant A (true parallel saturated HF sidechain without fundamental subtraction, 20Hz DC blocker, scaled wet mix) in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
+| Task 87 | Build Release `.app`, codesign, verify package and push | done |

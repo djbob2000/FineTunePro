@@ -333,7 +333,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             // Dynamic CV ducking (La Petite Excite style):
             // Keeps high-frequency enhancement smooth and controlled under heavy transients or dense polyphony
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 2.5)
-            let effectiveWet = highWet * sibilantDucking
+            let effectiveWet = highWet * 0.25 * sibilantDucking
             
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
             // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
@@ -346,18 +346,18 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
-            // Treble excitation: Studio-grade Asymmetric Harmonics (Triode/Tape saturation)
-            // Input signal highL/highR is processed at nominal unity gain (no 16x clipping distortion)
-            let harmHighL = generateTrebleHarmonics(highL)
-            let harmHighR = generateTrebleHarmonics(highR)
+            // Treble Exciter (La Petite Excite parallel architecture):
+            // Parallel soft-saturated high band adds shimmer, presence, and warm harmonics without fundamental subtraction
+            let satHighL = saturateTreble(highL)
+            let satHighR = saturateTreble(highR)
             
-            // Post-HPF cleans up DC offset and sub-cutoff intermodulation difference products
-            let cleanHarmHighL = _hpPostL.process(harmHighL)
-            let cleanHarmHighR = _hpPostR.process(harmHighR)
+            // Post-HPF (20 Hz DC blocker) cleans up DC offset without crossover phase cancellation notch
+            let cleanSatHighL = _hpPostL.process(satHighL)
+            let cleanSatHighR = _hpPostR.process(satHighR)
             
-            // Sum 100% clean direct path + pure bass harmonics + treble harmonics scaled by effective Wet Mix
-            let outL = xL + (filteredSatLowL * lowWet) + (cleanHarmHighL * effectiveWet)
-            let outR = xR + (filteredSatLowR * lowWet) + (cleanHarmHighR * effectiveWet)
+            // Sum 100% clean direct path + pure bass harmonics + parallel saturated treble band
+            let outL = xL + (filteredSatLowL * lowWet) + (cleanSatHighL * effectiveWet)
+            let outR = xR + (filteredSatLowR * lowWet) + (cleanSatHighR * effectiveWet)
             
             output[idxL] = outL
             output[idxR] = outR
@@ -369,7 +369,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
         let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: 280.0, q: 0.707, sampleRate: sampleRate)
-        let treblePostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
+        let treblePostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
@@ -451,20 +451,17 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // Studio-grade gentle asymmetric harmonic generation (La Petite Excite style):
-        // Models single-ended triode / tape saturation with strict monotonicity and zero-crossing smoothness:
-        // - Positive half: gentle soft compression u / (1 + 1.0 * u), synthesizing warm 2nd and 3rd harmonics
-        // - Negative half: milder curvature u / (1 - 0.3 * u), breaking waveform symmetry cleanly
-        // - f'(0) = 1.0 from both sides -> zero crossover distortion or derivative kinks
-        // - Strictly monotonic -> zero full-wave rectification, zero octave fuzz
-        // - Pure harmonic component (u - shaped) with zero fundamental boost
+    private func saturateTreble(_ u: Float) -> Float {
+        // Studio-grade gentle asymmetric saturation (La Petite Excite / triode tape model):
+        // Retains full high-band energy while gently rounding peaks and generating warm 2nd/3rd harmonics:
+        // - Positive half: gentle soft compression u / (1 + 0.5 * u)
+        // - Negative half: milder curvature u / (1 - 0.15 * u)
+        // - f'(0) = 1.0 from both sides -> smooth zero crossing, zero derivative discontinuity
+        // - Monotonic -> zero full-wave rectification, zero harsh octave fuzz
         if u >= 0.0 {
-            let shaped = u / (1.0 + 1.0 * u)
-            return u - shaped
+            return u / (1.0 + 0.5 * u)
         } else {
-            let shaped = u / (1.0 - 0.3 * u)
-            return u - shaped
+            return u / (1.0 - 0.15 * u)
         }
     }
 
