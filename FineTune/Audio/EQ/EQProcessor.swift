@@ -109,10 +109,9 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 2.0)
             let effectiveDrive = highDrive * sibilantDucking
 
-            // Treble excitation: True Harmonic-Only Exciter (Fundamental Subtraction, zero phase cancellation)
-            // Pre-gain 2.5x drives high-frequency band into musical saturation
-            let drivenHighL = softKnee(highL * effectiveDrive * 2.5)
-            let drivenHighR = softKnee(highR * effectiveDrive * 2.5)
+            // Treble excitation: Pure Harmonic Exciter (Fundamental Subtraction, zero phase cancellation)
+            let drivenHighL = softKnee(highL * effectiveDrive)
+            let drivenHighR = softKnee(highR * effectiveDrive)
             let harmHighL = generateTrebleHarmonics(drivenHighL)
             let harmHighR = generateTrebleHarmonics(drivenHighR)
 
@@ -157,16 +156,16 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // True Harmonic-Only Exciter with fundamental cancellation:
-        // Even-harmonic component (+0.80 * u^2) adds brilliant 2nd harmonic (octave-up sheen/air).
-        // Pure odd-harmonic component (-0.25 * (u^3 - 0.75 * u)) adds 3rd harmonic edge with 0% fundamental.
-        // Positive/negative asymmetry provides warm analog presence.
+        // Pure Harmonic Exciter with 0% fundamental component:
+        // Even-harmonic component (+2.0 * u^2) adds brilliant 2nd harmonic (octave-up sheen/air).
+        // Pure odd-harmonic component (-0.60 * (u^3 - 0.75 * u)) adds 3rd harmonic edge with 0% fundamental.
+        // Asymmetry provides warm analog excitation.
         let u2 = u * u
         let u3_pure = u2 * u - 0.75 * u
         if u > 0 {
-            return 0.80 * u2 - 0.25 * u3_pure
+            return 2.0 * u2 - 0.60 * u3_pure
         } else {
-            return 0.60 * u2 - 0.15 * u3_pure
+            return 1.5 * u2 - 0.40 * u3_pure
         }
     }
 }

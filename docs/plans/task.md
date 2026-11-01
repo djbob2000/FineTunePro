@@ -76,3 +76,5 @@
 | Task 73 | Decouple Treble Exciter from bass exciter, calibrate audible gain staging and set 1000 Hz post-HPF in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
 | Task 74 | Build Release `.app`, codesign and verify package | done |
 | Task 75 | Commit and push changes to repository | done |
+| Task 76 | Remove artificial `2.5x` pre-gain, drive harmonic generator directly via Drive knob in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
+| Task 77 | Verify compilation, rebuild Release `.app`, codesign and push | done |
