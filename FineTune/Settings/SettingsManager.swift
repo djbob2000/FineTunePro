@@ -218,6 +218,7 @@ final class SettingsManager {
         var deviceLoudnessReferencePhon: [String: Double] = [:] // deviceUID -> startDB (default: 0.0)
         var deviceLoudnessMaxDB: [String: Double] = [:] // deviceUID -> maxDB (default: -20.0)
         var deviceLoudnessBassCrossover: [String: Double] = [:] // deviceUID -> crossover frequency
+        var deviceLoudnessBassPostLPF: [String: Double] = [:] // deviceUID -> bass harmonics post-LPF cutoff
         var deviceLoudnessGainScale: [String: Double] = [:] // deviceUID -> gain scale (amount)
         var deviceLoudnessBassExciterWet: [String: Double] = [:] // deviceUID -> bass exciter wet (0.0 to 1.0)
         var deviceLoudnessBassLinearWet: [String: Double] = [:] // deviceUID -> bass linear wet (0.0 to 1.0)
@@ -288,6 +289,7 @@ final class SettingsManager {
             deviceLoudnessCompensationEnabled = try c.decodeIfPresent([String: Bool].self, forKey: .deviceLoudnessCompensationEnabled) ?? [:]
             deviceLoudnessReferencePhon = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessReferencePhon) ?? [:]
             deviceLoudnessBassCrossover = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassCrossover) ?? [:]
+            deviceLoudnessBassPostLPF = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassPostLPF) ?? [:]
             deviceLoudnessGainScale = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessGainScale) ?? [:]
             deviceLoudnessBassExciterWet = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassExciterWet) ?? [:]
             deviceLoudnessBassLinearWet = try c.decodeIfPresent([String: Double].self, forKey: .deviceLoudnessBassLinearWet) ?? [:]
@@ -1134,11 +1136,20 @@ final class SettingsManager {
 
 
     func getLoudnessBassCrossover(for deviceUID: String) -> Double {
-        settings.deviceLoudnessBassCrossover[deviceUID] ?? 110.0
+        settings.deviceLoudnessBassCrossover[deviceUID] ?? 70.0
     }
 
     func setLoudnessBassCrossover(for deviceUID: String, to frequency: Double) {
-        settings.deviceLoudnessBassCrossover[deviceUID] = frequency
+        settings.deviceLoudnessBassCrossover[deviceUID] = min(120.0, max(50.0, frequency))
+        scheduleSave()
+    }
+
+    func getLoudnessBassPostLPF(for deviceUID: String) -> Double {
+        settings.deviceLoudnessBassPostLPF[deviceUID] ?? 200.0
+    }
+
+    func setLoudnessBassPostLPF(for deviceUID: String, to frequency: Double) {
+        settings.deviceLoudnessBassPostLPF[deviceUID] = min(300.0, max(100.0, frequency))
         scheduleSave()
     }
 
@@ -1296,6 +1307,7 @@ final class SettingsManager {
         settings.deviceLoudnessCompensationEnabled.removeAll()
         settings.deviceLoudnessReferencePhon.removeAll()
         settings.deviceLoudnessBassCrossover.removeAll()
+        settings.deviceLoudnessBassPostLPF.removeAll()
         settings.deviceLoudnessGainScale.removeAll()
         settings.deviceLoudnessTrebleCrossover.removeAll()
         settings.deviceLoudnessTrebleGainScale.removeAll()

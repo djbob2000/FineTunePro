@@ -24,6 +24,10 @@ struct DeviceEnhancementPanel: View {
     var onLoudnessToggle: ((Bool) -> Void)? = nil
     var loudnessMaxDB: Double = -30.0
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
+    var loudnessBassCrossover: Double = 70.0
+    var onLoudnessBassCrossoverChange: ((Double) -> Void)? = nil
+    var loudnessBassPostLPF: Double = 200.0
+    var onLoudnessBassPostLPFChange: ((Double) -> Void)? = nil
     var supportsAutoEQ: Bool = true
 
     @State private var searchText = ""
@@ -255,6 +259,68 @@ struct DeviceEnhancementPanel: View {
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    // Bass Frequency Slider (50 - 120 Hz)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Bass Cutoff")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                            Spacer()
+
+                            Text("\(Int(loudnessBassCrossover)) Hz")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { loudnessBassCrossover },
+                                set: { onLoudnessBassCrossoverChange?($0) }
+                            ),
+                            in: 50.0...120.0,
+                            step: 1.0
+                        )
+                        .controlSize(.mini)
+
+                        Text("Exciter bass split frequency (50–120 Hz).")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 4)
+
+                    // Bass Harmonics LPF Slider (100 - 300 Hz)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Harmonics LPF")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                            Spacer()
+
+                            Text("\(Int(loudnessBassPostLPF)) Hz")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { loudnessBassPostLPF },
+                                set: { onLoudnessBassPostLPFChange?($0) }
+                            ),
+                            in: 100.0...300.0,
+                            step: 5.0
+                        )
+                        .controlSize(.mini)
+
+                        Text("Upper cutoff for synthesized harmonics (100–300 Hz).")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 4)
                 }
                 .padding(.leading, 14)
                 .padding(.top, 2)

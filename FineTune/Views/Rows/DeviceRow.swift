@@ -46,6 +46,10 @@ struct DeviceRow: View {
     let onLoudnessToggle: ((Bool) -> Void)?
     let loudnessMaxDB: Double
     let onLoudnessMaxDBChange: ((Double) -> Void)?
+    let loudnessBassCrossover: Double
+    let onLoudnessBassCrossoverChange: ((Double) -> Void)?
+    let loudnessBassPostLPF: Double
+    let onLoudnessBassPostLPFChange: ((Double) -> Void)?
     let isSmartVolumeEnabled: Bool
     let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
@@ -124,6 +128,10 @@ struct DeviceRow: View {
         onLoudnessToggle: ((Bool) -> Void)? = nil,
         loudnessMaxDB: Double = -30.0,
         onLoudnessMaxDBChange: ((Double) -> Void)? = nil,
+        loudnessBassCrossover: Double = 70.0,
+        onLoudnessBassCrossoverChange: ((Double) -> Void)? = nil,
+        loudnessBassPostLPF: Double = 200.0,
+        onLoudnessBassPostLPFChange: ((Double) -> Void)? = nil,
         isSmartVolumeEnabled: Bool = false,
         onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false,
@@ -171,6 +179,10 @@ struct DeviceRow: View {
         self.onLoudnessToggle = onLoudnessToggle
         self.loudnessMaxDB = loudnessMaxDB
         self.onLoudnessMaxDBChange = onLoudnessMaxDBChange
+        self.loudnessBassCrossover = loudnessBassCrossover
+        self.onLoudnessBassCrossoverChange = onLoudnessBassCrossoverChange
+        self.loudnessBassPostLPF = loudnessBassPostLPF
+        self.onLoudnessBassPostLPFChange = onLoudnessBassPostLPFChange
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
@@ -303,6 +315,10 @@ struct DeviceRow: View {
                         onLoudnessToggle: { enabled in onLoudnessToggle?(enabled) },
                         loudnessMaxDB: loudnessMaxDB,
                         onLoudnessMaxDBChange: { maxDB in onLoudnessMaxDBChange?(maxDB) },
+                        loudnessBassCrossover: loudnessBassCrossover,
+                        onLoudnessBassCrossoverChange: { freq in onLoudnessBassCrossoverChange?(freq) },
+                        loudnessBassPostLPF: loudnessBassPostLPF,
+                        onLoudnessBassPostLPFChange: { freq in onLoudnessBassPostLPFChange?(freq) },
                         supportsLoudness: true,
                         supportsAutoEQ: device.supportsAutoEQ
                     )

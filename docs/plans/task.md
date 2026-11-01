@@ -93,3 +93,4 @@
 | Task 90 | Document Treble Exciter architecture in `docs/dsp/treble_exciter.md`, rebuild Release `.app`, codesign, verify and push | done |
 | Task 91 | Port proven studio-grade exciter (1.5 kHz crossover, 20 Hz DC blocker eliminating phase cancellation notch) and unit tests to Chibot `fix/voice-exciter-soft-knee` | done |
 | Task 92 | Remove Loudness treble sliders from UI, fix Loudness High-Shelf to static 6000 Hz (+3.0 dB ISO 226 curve), rebuild & sign Release app | done |
+| Task 93 | Add UI sliders for Bass Split (50–120 Hz) and Harmonics LPF (100–300 Hz) in Loudness Compensation with real-time DSP tuning | done |

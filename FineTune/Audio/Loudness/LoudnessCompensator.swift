@@ -50,7 +50,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Gain scale used for the last coefficient computation.
     private var _currentGainScale: Float = 1.0
     /// Crossover frequency for low-frequency band (Hz).
-    private var _bassCrossoverFrequency: Double = 110.0
+    private var _bassCrossoverFrequency: Double = 70.0
+    /// Upper cutoff frequency for bass harmonics post-LPF (Hz).
+    private var _bassPostLPFFrequency: Double = 200.0
     /// Corner frequency for high-frequency shelf (Hz) - 6000 Hz industry standard (RME, Yamaha, ISO 226).
     private var _trebleCrossoverFrequency: Double = 6000.0
     /// Treble gain scale (amount) for high-shelf boost.
@@ -102,11 +104,12 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 70.0, bassPostLPFFrequency: Double = 200.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
             || bassCrossoverFrequency != _bassCrossoverFrequency
+            || bassPostLPFFrequency != _bassPostLPFFrequency
             || trebleCrossoverFrequency != _trebleCrossoverFrequency
             || trebleGainScale != _trebleGainScale
             || bassExciterWet != _currentBassExciterWet || bassLinearWet != _currentBassLinearWet
@@ -119,6 +122,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         var crossoverChanged = false
         if _bassCrossoverFrequency != bassCrossoverFrequency {
             _bassCrossoverFrequency = bassCrossoverFrequency
+            crossoverChanged = true
+        }
+        if _bassPostLPFFrequency != bassPostLPFFrequency {
+            _bassPostLPFFrequency = bassPostLPFFrequency
             crossoverChanged = true
         }
         if _trebleCrossoverFrequency != trebleCrossoverFrequency {
@@ -345,7 +352,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private func updateCrossoverCoefficients() {
         let lpCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
-        let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: 280.0, q: 0.707, sampleRate: sampleRate)
+        let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: _bassPostLPFFrequency, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])

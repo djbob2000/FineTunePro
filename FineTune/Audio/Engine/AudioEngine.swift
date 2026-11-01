@@ -799,7 +799,8 @@ final class AudioEngine {
                 referencePhon: ISO226Contours.defaultReferencePhon,
                 maxDB: -30.0,
                 gainScale: 0.0,
-                bassCrossover: 180.0,
+                bassCrossover: 70.0,
+                bassPostLPF: 200.0,
                 trebleCrossover: 6000.0,
                 trebleGainScale: 1.0,
                 bassExciterWet: 0.20,
@@ -871,7 +872,7 @@ final class AudioEngine {
     }
 
 
-    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, bassPostLPF: Double = 200.0, trebleCrossover: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
             tap.updateLoudnessCompensation(
@@ -881,6 +882,7 @@ final class AudioEngine {
                 maxDB: maxDB,
                 gainScale: gainScale,
                 bassCrossover: bassCrossover,
+                bassPostLPF: bassPostLPF,
                 trebleCrossover: trebleCrossover,
                 trebleGainScale: trebleGainScale,
                 bassExciterWet: bassExciterWet,
@@ -1425,6 +1427,11 @@ final class AudioEngine {
         pushLoudnessUpdate(for: deviceUID)
     }
 
+    func setLoudnessBassPostLPF(for deviceUID: String, to frequency: Double) {
+        settingsManager.setLoudnessBassPostLPF(for: deviceUID, to: frequency)
+        pushLoudnessUpdate(for: deviceUID)
+    }
+
     func setLoudnessGainScale(for deviceUID: String, to scale: Double) {
         settingsManager.setLoudnessGainScale(for: deviceUID, to: scale)
         pushLoudnessUpdate(for: deviceUID)
@@ -1642,6 +1649,7 @@ final class AudioEngine {
         let referencePhon = settingsManager.getLoudnessReferencePhon(for: deviceUID)
         let maxDB = settingsManager.getLoudnessMaxDB(for: deviceUID)
         let crossover = settingsManager.getLoudnessBassCrossover(for: deviceUID)
+        let postLPF = settingsManager.getLoudnessBassPostLPF(for: deviceUID)
         let scale = settingsManager.getLoudnessGainScale(for: deviceUID)
         let trebleCrossover = settingsManager.getLoudnessTrebleCrossover(for: deviceUID)
         let trebleScale = settingsManager.getLoudnessTrebleGainScale(for: deviceUID)
@@ -1654,6 +1662,7 @@ final class AudioEngine {
             maxDB: maxDB,
             gainScale: enabled ? Float(scale) : 0.0,
             bassCrossover: crossover,
+            bassPostLPF: postLPF,
             trebleCrossover: trebleCrossover,
             trebleGainScale: enabled ? Float(trebleScale) : 1.0,
             bassExciterWet: Float(exciterWet),
