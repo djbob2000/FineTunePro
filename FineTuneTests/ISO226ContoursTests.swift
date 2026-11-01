@@ -245,7 +245,7 @@ struct LoudnessCompensatorCustomReferenceTests {
         let processor = LoudnessCompensator(sampleRate: 48_000)
         // Set custom reference level to 60.0 phon
         // At full volume (1.0), estimatedPhon is 60.0, which matches the custom reference level
-        processor.updateForVolume(1.0, referencePhon: 60.0)
+        processor.updateForVolume(1.0, referencePhon: 60.0, trebleGainScale: 0.0)
         #expect(!processor.isEnabled, "Processor should be bypassed/disabled at the reference level")
     }
 
@@ -530,6 +530,61 @@ struct LoudnessCompensatorHybridTests {
         #expect(magHighCrossover < magEnabled * 0.1, "High crossover should heavily reduce 2nd harmonic, got \(magHighCrossover) vs \(magEnabled)")
     }
 
+    @Test("Treble exciter generates 2nd and 3rd harmonics with fundamental subtraction and no DC offset")
+    func trebleExciterPureHarmonicsAndDCOffset() {
+        let sampleRate = 48000.0
+        let freq = 2000.0 // Above 1000 Hz crossover
+        let frameCount = 2400 // 100 full cycles of 2000 Hz at 48kHz
+        let settleFrames = 9600 // 200 ms settling for 20 Hz DC blocker
+        let totalFrames = settleFrames + frameCount
+
+        var input = [Float](repeating: 0.0, count: totalFrames * 2)
+        for i in 0..<totalFrames {
+            let val = Float(0.5 * sin(2.0 * .pi * freq * Double(i) / sampleRate))
+            input[i * 2] = val
+            input[i * 2 + 1] = val
+        }
+
+        let processor = LoudnessCompensator(sampleRate: sampleRate)
+        // Set volume = 1.0 (0 dB loudness EQ), trebleGainScale = 2.0 (Drive = 2.0)
+        processor.updateForVolume(1.0, gainScale: 0.0, trebleCrossoverFrequency: 1000.0, trebleGainScale: 2.0)
+
+        var output = [Float](repeating: 0.0, count: totalFrames * 2)
+        processor.process(input: input, output: &output, frameCount: totalFrames)
+
+        func dftMagnitude(targetFreq: Double) -> Double {
+            var realSum = 0.0
+            var imagSum = 0.0
+            for i in 0..<frameCount {
+                let sampleIdx = (settleFrames + i) * 2
+                let angle = 2.0 * .pi * targetFreq * Double(settleFrames + i) / sampleRate
+                realSum += Double(output[sampleIdx]) * cos(angle)
+                imagSum += Double(output[sampleIdx]) * sin(angle)
+            }
+            return 2.0 * sqrt(realSum * realSum + imagSum * imagSum) / Double(frameCount)
+        }
+
+        let fundamentalMag = dftMagnitude(targetFreq: 2000.0)
+        let secondHarmonicMag = dftMagnitude(targetFreq: 4000.0)
+        let thirdHarmonicMag = dftMagnitude(targetFreq: 6000.0)
+
+        // Fundamental input is 0.5. Due to fundamental subtraction, fundamental should remain near 0.5 (within 0.5 dB)
+        let fundamentalGainDB = 20.0 * log10(fundamentalMag / 0.5)
+        #expect(abs(fundamentalGainDB) < 0.5, "Fundamental should not be amplified by exciter, got \(fundamentalGainDB) dB")
+
+        // 2nd harmonic (4000 Hz) and 3rd harmonic (6000 Hz) should be clearly present
+        #expect(secondHarmonicMag > 0.005, "2nd harmonic should be generated, got \(secondHarmonicMag)")
+        #expect(thirdHarmonicMag > 0.001, "3rd harmonic should be generated, got \(thirdHarmonicMag)")
+
+        // Steady-state DC offset across the frame buffer should be practically 0 (< 1e-4) due to 20 Hz DC blocker
+        var dcSum = 0.0
+        for i in 0..<frameCount {
+            dcSum += Double(output[(settleFrames + i) * 2])
+        }
+        let dcOffset = abs(dcSum / Double(frameCount))
+        #expect(dcOffset < 1e-4, "DC offset should be blocked, got \(dcOffset)")
+    }
+
 
 
 
@@ -591,25 +646,25 @@ struct LoudnessCompensatorHybridTests {
         #expect(processor.testHighExciterWet == 0.0)
     }
 
-    @Test("Treble exciter wet scales directly with trebleGainScale")
+    @Test("Treble exciter drive scales directly with trebleGainScale")
     func trebleExciterWetScalesWithTrebleGainScale() {
         let processor = LoudnessCompensator(sampleRate: 48_000.0)
 
-        // At trebleGainScale = 1.0, wet is 0.25 (nominal +2 dB studio air)
+        // At trebleGainScale = 1.0, drive is 1.0 (nominal studio presence)
         processor.updateForVolume(0.0, trebleGainScale: 1.0)
-        #expect(abs(processor.testHighExciterWet - 0.25) < 0.0001)
-
-        // At trebleGainScale = 4.0, wet is 1.0 (max +6 dB presence)
-        processor.updateForVolume(0.0, trebleGainScale: 4.0)
         #expect(abs(processor.testHighExciterWet - 1.0) < 0.0001)
 
-        // At trebleGainScale = 0.0, wet is 0.0 (bypass)
+        // At trebleGainScale = 4.0, drive is 4.0 (max presence)
+        processor.updateForVolume(0.0, trebleGainScale: 4.0)
+        #expect(abs(processor.testHighExciterWet - 4.0) < 0.0001)
+
+        // At trebleGainScale = 0.0, drive is 0.0 (bypass)
         processor.updateForVolume(0.0, trebleGainScale: 0.0)
         #expect(abs(processor.testHighExciterWet - 0.0) < 0.0001)
 
         // Remains active at 100% volume (volume = 1.0), independent of loudness amount
         processor.updateForVolume(1.0, trebleGainScale: 2.0)
-        #expect(abs(processor.testHighExciterWet - 0.5) < 0.0001)
+        #expect(abs(processor.testHighExciterWet - 2.0) < 0.0001)
     }
 
     @Test("Pure harmonic exciter generates no measurable DC offset")

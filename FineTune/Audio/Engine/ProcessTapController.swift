@@ -346,7 +346,7 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryAutoEQProcessor?.setPreampEnabled(enabled)
     }
 
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 110.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 110.0, trebleCrossover: Double = 1000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         _lastLoudnessEnabled = enabled
         _lastLoudnessVolume = volume
         _lastLoudnessReferencePhon = referencePhon

@@ -800,7 +800,7 @@ final class AudioEngine {
                 maxDB: -30.0,
                 gainScale: 0.0,
                 bassCrossover: 180.0,
-                trebleCrossover: 3000.0,
+                trebleCrossover: 1000.0,
                 trebleGainScale: 1.0,
                 bassExciterWet: 0.20,
                 bassLinearWet: 1.0
@@ -871,7 +871,7 @@ final class AudioEngine {
     }
 
 
-    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 1000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let isBuiltIn = deviceMonitor.device(for: deviceUID)?.transportType == .builtIn
         let actualEnabled = isBuiltIn ? false : enabled
         let actualGainScale = isBuiltIn ? 0.0 : gainScale

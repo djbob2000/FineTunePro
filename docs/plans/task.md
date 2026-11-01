@@ -67,3 +67,7 @@
 | Task 64 | Implement Classic Aphex / La Petite Excite Exciter in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
 | Task 65 | Update Unit Tests in `FineTuneTests/ISO226ContoursTests.swift` | done |
 | Task 66 | Verification, Release Build, Codesign & Push | done |
+| Task 67 | Implement True Harmonic-Only HF Exciter in DSP (`LoudnessCompensator`, `EQProcessor`, `SettingsManager`, `AudioEngine`) | done |
+| Task 68 | Update & Verify DSP Unit Tests in `FineTuneTests` | done |
+| Task 69 | Full Verification, Release Build & Codesign | done |
+| Task 70 | Commit & Push to GitHub | done |

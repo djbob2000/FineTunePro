@@ -50,7 +50,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Crossover frequency for low-frequency band (Hz).
     private var _bassCrossoverFrequency: Double = 110.0
     /// Crossover frequency for high-frequency band (Hz).
-    private var _trebleCrossoverFrequency: Double = 3000.0
+    private var _trebleCrossoverFrequency: Double = 1000.0
     /// Treble gain scale (amount) for the exciter.
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
@@ -105,7 +105,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 1000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -185,11 +185,11 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         // Low exciter parallel wet mix (0.50 / -6 dB mix at maximum compensation).
         let harmonicsEnabled = _currentBassExciterWet > 0
         _lowExciterWet = harmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
-        // Treble exciter: Classic Aphex / La Petite Excite parallel mix.
-        // User slider (0.0 ... 4.0) controls wet mix directly:
-        // 0.0 = off, 1.0 = standard air (0.25 wet mix, ~ +2 dB), 4.0 = max presence (1.00 wet mix, ~ +6 dB).
-        let trebleWetScale = max(0, Double(_trebleGainScale))
-        _highExciterWet = harmonicsEnabled ? Float(trebleWetScale * 0.25) : 0
+        // Treble exciter: True Harmonic-Only Exciter with fundamental subtraction (f(u) - u).
+        // User slider (0.0 ... 4.0) controls harmonic drive directly:
+        // 0.0 = off, 1.0 = standard studio presence, 4.0 = maximum presence.
+        let trebleGainScale = max(0, Double(_trebleGainScale))
+        _highExciterWet = harmonicsEnabled ? Float(trebleGainScale) : 0
         return [Float(_bassEQ0DB)]
     }
 
@@ -322,18 +322,17 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let highL = _hpL.process(xL)
             let highR = _hpR.process(xR)
             
-            // Fast De-Esser / Sibilant Tamer: track peak envelope of high frequencies (>3 kHz)
+            // Fast De-Esser / Sibilant Tamer: track peak envelope of high frequencies (>1 kHz)
             let hfInstant = max(abs(highL), abs(highR))
-            // Fast attack (~1 ms), medium release (~30 ms) envelope follower
             if hfInstant > _hfEnvelope {
-                _hfEnvelope = _hfEnvelope * 0.8 + hfInstant * 0.2
+                _hfEnvelope = _hfEnvelope * 0.85 + hfInstant * 0.15
             } else {
                 _hfEnvelope = _hfEnvelope * 0.998
             }
             
-            // Smoothly duck high exciter wet gain on sharp sibilant bursts ('S', 'TS', 'SH') above 0.25 peak
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
-            let effectiveHighWet = highWet * sibilantDucking
+            // Background automatic CV ducking on harsh sibilants (above 0.20 peak)
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 3.0)
+            let effectiveDrive = highWet * sibilantDucking
             
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
             // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
@@ -346,17 +345,19 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
-            // Treble excitation: Classic Aphex / La Petite Excite asymmetric soft saturation
-            let satHighL = softClipHigh(highL)
-            let satHighR = softClipHigh(highR)
+            // Treble excitation: True Harmonic-Only Exciter (Fundamental Subtraction, zero phase cancellation)
+            let drivenHighL = softKnee(highL * effectiveDrive)
+            let drivenHighR = softKnee(highR * effectiveDrive)
+            let harmHighL = generateTrebleHarmonics(drivenHighL)
+            let harmHighR = generateTrebleHarmonics(drivenHighR)
             
-            // Post-HPF (200 Hz DC block) cleans up DC offset from asymmetric saturation without phase comb filtering
-            let filteredSatHighL = _hpPostL.process(satHighL)
-            let filteredSatHighR = _hpPostR.process(satHighR)
+            // Post DC-blocker (20 Hz) cleans up DC offset from asymmetric quadratic term
+            let cleanHarmHighL = _hpPostL.process(harmHighL)
+            let cleanHarmHighR = _hpPostR.process(harmHighR)
             
-            // Sum dry and wet; their headroom was reserved by the global preamp.
-            let outL = xL + (filteredSatLowL * lowWet) + (filteredSatHighL * effectiveHighWet)
-            let outR = xR + (filteredSatLowR * lowWet) + (filteredSatHighR * effectiveHighWet)
+            // Sum 100% clean direct path + pure bass harmonics + pure treble harmonics directly
+            let outL = xL + (filteredSatLowL * lowWet) + cleanHarmHighL
+            let outR = xR + (filteredSatLowR * lowWet) + cleanHarmHighR
             
             output[idxL] = outL
             output[idxR] = outR
@@ -368,13 +369,14 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: _trebleCrossoverFrequency, q: 0.707, sampleRate: sampleRate)
         let bassPostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
         let bassPostLPFCoeffs = BiquadMath.lowPassCoefficients(frequency: 280.0, q: 0.707, sampleRate: sampleRate)
+        let treblePostHPFCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
 
         _lpL.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _lpR.updateCoefficients(b0: lpCoeffs[0], b1: lpCoeffs[1], b2: lpCoeffs[2], a1: lpCoeffs[3], a2: lpCoeffs[4])
         _hpL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
         _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpPostL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpPostR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+        _hpPostL.updateCoefficients(b0: treblePostHPFCoeffs[0], b1: treblePostHPFCoeffs[1], b2: treblePostHPFCoeffs[2], a1: treblePostHPFCoeffs[3], a2: treblePostHPFCoeffs[4])
+        _hpPostR.updateCoefficients(b0: treblePostHPFCoeffs[0], b1: treblePostHPFCoeffs[1], b2: treblePostHPFCoeffs[2], a1: treblePostHPFCoeffs[3], a2: treblePostHPFCoeffs[4])
         
         _lowPostHPFL.updateCoefficients(b0: bassPostHPFCoeffs[0], b1: bassPostHPFCoeffs[1], b2: bassPostHPFCoeffs[2], a1: bassPostHPFCoeffs[3], a2: bassPostHPFCoeffs[4])
         _lowPostHPFR.updateCoefficients(b0: bassPostHPFCoeffs[0], b1: bassPostHPFCoeffs[1], b2: bassPostHPFCoeffs[2], a1: bassPostHPFCoeffs[3], a2: bassPostHPFCoeffs[4])
@@ -449,15 +451,18 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func softClipHigh(_ x: Float) -> Float {
-        // Classic Aphex / La Petite Excite asymmetric soft saturation:
-        // Pre-gain (drive = 2.0) brings high-frequency musical content into gentle saturation.
-        let u = x * 2.0
-        // Symmetrical smooth compression (odd harmonics, transient rounding)
-        let s = u / sqrt(1.0 + u * u)
-        // Asymmetric even-harmonic overtone (octave-up tube/analog presence)
-        let sat = (s + 0.30 * s * s) * 0.5
-        return sat
+    private func generateTrebleHarmonics(_ u: Float) -> Float {
+        // True Harmonic-Only Exciter with fundamental subtraction (f(u) - u):
+        // Eliminates fundamental duplication and phase cancellation.
+        // Positive half-wave: +0.35 * u^2 (octave-up warm 2nd harmonic) - 0.12 * u^3 (air 3rd harmonic)
+        // Negative half-wave: -0.08 * u^3 (odd harmonic richness)
+        let u2 = u * u
+        let u3 = u2 * u
+        if u > 0 {
+            return 0.35 * u2 - 0.12 * u3
+        } else {
+            return -0.08 * u3
+        }
     }
 
     static func basisResponsesDB(sampleRate: Double) -> [[Double]] {

@@ -84,7 +84,7 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             return
         }
 
-        let highWet = settings.trebleExciterWet
+        let highDrive = settings.trebleExciterWet
 
         // 2. Apply Treble Exciter processing (Stereo Interleaved)
         for frame in 0..<frameCount {
@@ -94,32 +94,34 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
             let xL = output[idxL]
             let xR = output[idxR]
 
-            // HPF split at 3kHz
+            // HPF split at crossover frequency (default 1000 Hz)
             let highL = _hpL.process(xL)
             let highR = _hpR.process(xR)
 
             // Sibilant Tamer: envelope follower on high frequencies
             let hfInstant = max(abs(highL), abs(highR))
             if hfInstant > _hfEnvelope {
-                _hfEnvelope = _hfEnvelope * 0.8 + hfInstant * 0.2
+                _hfEnvelope = _hfEnvelope * 0.85 + hfInstant * 0.15
             } else {
                 _hfEnvelope = _hfEnvelope * 0.998
             }
 
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 3.0)
-            let effectiveHighWet = highWet * 0.25 * sibilantDucking
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 3.0)
+            let effectiveDrive = highDrive * sibilantDucking
 
-            // Treble excitation: Classic Aphex / La Petite Excite asymmetric soft saturation
-            let satHighL = softClipHigh(highL)
-            let satHighR = softClipHigh(highR)
+            // Treble excitation: True Harmonic-Only Exciter (Fundamental Subtraction, zero phase cancellation)
+            let drivenHighL = softKnee(highL * effectiveDrive)
+            let drivenHighR = softKnee(highR * effectiveDrive)
+            let harmHighL = generateTrebleHarmonics(drivenHighL)
+            let harmHighR = generateTrebleHarmonics(drivenHighR)
 
-            // Post-HPF (200 Hz DC block)
-            let filteredSatHighL = _hpPostL.process(satHighL)
-            let filteredSatHighR = _hpPostR.process(satHighR)
+            // Post-HPF (20 Hz DC block) cleans up DC offset without phase cancellation
+            let cleanHarmHighL = _hpPostL.process(harmHighL)
+            let cleanHarmHighR = _hpPostR.process(harmHighR)
 
-            // Sum Dry + Treble Exciter Wet
-            output[idxL] = xL + (filteredSatHighL * effectiveHighWet)
-            output[idxR] = xR + (filteredSatHighR * effectiveHighWet)
+            // Sum Dry + Pure Treble Harmonics directly
+            output[idxL] = xL + cleanHarmHighL
+            output[idxR] = xR + cleanHarmHighR
         }
     }
 
@@ -127,11 +129,12 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
         let freq = frequency ?? _currentSettings?.trebleExciterFrequency ?? 1000.0
         _currentCrossoverFrequency = freq
         let hpCoeffs = BiquadMath.highPassCoefficients(frequency: freq, q: 0.707, sampleRate: sampleRate)
+        let dcBlockCoeffs = BiquadMath.highPassCoefficients(frequency: 20.0, q: 0.707, sampleRate: sampleRate)
 
         _hpL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
         _hpR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpPostL.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
-        _hpPostR.updateCoefficients(b0: hpCoeffs[0], b1: hpCoeffs[1], b2: hpCoeffs[2], a1: hpCoeffs[3], a2: hpCoeffs[4])
+        _hpPostL.updateCoefficients(b0: dcBlockCoeffs[0], b1: dcBlockCoeffs[1], b2: dcBlockCoeffs[2], a1: dcBlockCoeffs[3], a2: dcBlockCoeffs[4])
+        _hpPostR.updateCoefficients(b0: dcBlockCoeffs[0], b1: dcBlockCoeffs[1], b2: dcBlockCoeffs[2], a1: dcBlockCoeffs[3], a2: dcBlockCoeffs[4])
 
         _hpL.reset()
         _hpR.reset()
@@ -140,14 +143,29 @@ final class EQProcessor: BiquadProcessor, @unchecked Sendable {
     }
 
     @inline(__always)
-    private func softClipHigh(_ x: Float) -> Float {
-        // Classic Aphex / La Petite Excite asymmetric soft saturation:
-        // Pre-gain (drive = 2.0) brings high-frequency musical content into gentle saturation.
-        let u = x * 2.0
-        // Symmetrical smooth compression (odd harmonics, transient rounding)
-        let s = u / sqrt(1.0 + u * u)
-        // Asymmetric even-harmonic overtone (octave-up tube/analog presence)
-        let sat = (s + 0.30 * s * s) * 0.5
-        return sat
+    private func softKnee(_ u: Float) -> Float {
+        let a = abs(u)
+        if a <= 0.8 {
+            return u
+        }
+
+        let v = (a - 0.8) / 0.2
+        let shaped = 0.8 + 0.2 * v / sqrt(1.0 + v * v)
+        return u < 0 ? -shaped : shaped
+    }
+
+    @inline(__always)
+    private func generateTrebleHarmonics(_ u: Float) -> Float {
+        // True Harmonic-Only Exciter with fundamental subtraction (f(u) - u):
+        // Eliminates fundamental duplication and phase cancellation.
+        // Positive half-wave: +0.35 * u^2 (octave-up warm 2nd harmonic) - 0.12 * u^3 (air 3rd harmonic)
+        // Negative half-wave: -0.08 * u^3 (odd harmonic richness)
+        let u2 = u * u
+        let u3 = u2 * u
+        if u > 0 {
+            return 0.35 * u2 - 0.12 * u3
+        } else {
+            return -0.08 * u3
+        }
     }
 }
