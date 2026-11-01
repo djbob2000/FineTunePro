@@ -286,38 +286,7 @@ struct DeviceEnhancementPanel: View {
                         )
                         .controlSize(.mini)
 
-                        Text("Exciter bass split frequency (50–120 Hz).")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 4)
-
-                    // Bass Harmonics LPF Slider (100 - 300 Hz)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text("Harmonics LPF")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                            Spacer()
-
-                            Text("\(Int(loudnessBassPostLPF)) Hz")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { loudnessBassPostLPF },
-                                set: { onLoudnessBassPostLPFChange?($0) }
-                            ),
-                            in: 100.0...300.0,
-                            step: 5.0
-                        )
-                        .controlSize(.mini)
-
-                        Text("Upper cutoff for synthesized harmonics (100–300 Hz).")
+                        Text("Crossover frequency for bass saturation (50–120 Hz).")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -348,7 +317,7 @@ struct DeviceEnhancementPanel: View {
                         )
                         .controlSize(.mini)
 
-                        Text("Bass harmonics intensity (0.0 = off, 1.0 = standard, 4.0 = max).")
+                        Text("Parallel bass saturation intensity (0.0 = off, 1.0 = standard, 4.0 = max).")
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
