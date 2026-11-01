@@ -328,9 +328,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
             // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
             // Soft-knee provides transparent peak conditioning above 0.8.
-            // +3 dB (1.4125x) makeup gain added after softKnee to restore dynamic energy compressed by the knee.
-            let drivenLowL = softKnee(lowL) * 1.4125
-            let drivenLowR = softKnee(lowR) * 1.4125
+            let drivenLowL = softKnee(lowL)
+            let drivenLowR = softKnee(lowR)
             
             let harmLowL = generateBassHarmonics(drivenLowL)
             let harmLowR = generateBassHarmonics(drivenLowR)
