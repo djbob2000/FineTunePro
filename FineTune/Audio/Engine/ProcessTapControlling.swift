@@ -28,7 +28,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func updateAutoEQProfile(_ profile: AutoEQProfile?, for deviceUID: String)
     func updateMirroredOutputGain(_ gain: Float, muted: Bool, for deviceUID: String)
     func setAutoEQPreampEnabled(_ enabled: Bool)
-    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float)
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float, preampMode: LoudnessPreampMode, manualPreampDB: Double)
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings)
     func switchDevice(to newDeviceUID: String, preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws
     func updateDevices(to newDeviceUIDs: [String], preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool) async throws
@@ -53,6 +53,10 @@ protocol ProcessTapControlling: AnyObject, Sendable {
 }
 
 extension ProcessTapControlling {
+    func updateLoudnessCompensation(volume: Float, enabled: Bool, referencePhon: Double, maxDB: Double, gainScale: Float, bassCrossover: Double, trebleCrossover: Double, trebleGainScale: Float, bassExciterWet: Float, bassLinearWet: Float) {
+        updateLoudnessCompensation(volume: volume, enabled: enabled, referencePhon: referencePhon, maxDB: maxDB, gainScale: gainScale, bassCrossover: bassCrossover, trebleCrossover: trebleCrossover, trebleGainScale: trebleGainScale, bassExciterWet: bassExciterWet, bassLinearWet: bassLinearWet, preampMode: .auto, manualPreampDB: 0.0)
+    }
+
     func updateAutoEQProfile(_ profile: AutoEQProfile?, for deviceUID: String) {
         if currentDeviceUID == deviceUID { updateAutoEQProfile(profile) }
     }

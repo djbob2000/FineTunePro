@@ -51,6 +51,6 @@
 | Task 47 | Restore clean audio baseline from ef4ec50 (decoupled exciter headroom, pure harmonics, no soft-limiter distortion) | done |
 | Task 49 | Add Settings Persistence for `LoudnessPreampMode` and `deviceLoudnessPreampManualDB` | done |
 | Task 50 | Support manual preamp gain in `LoudnessCompensator.swift` with regression tests | done |
-| Task 51 | Propagate settings through `AudioEngine` and tap controllers | in_progress |
-| Task 52 | Implement Auto/Manual Preamp UI in `DeviceEnhancementPanel.swift` | pending |
+| Task 51 | Propagate settings through `AudioEngine` and tap controllers | done |
+| Task 52 | Implement Auto/Manual Preamp UI in `DeviceEnhancementPanel.swift` | in_progress |
 | Task 53 | Full Verification, Release Build, Codesign & Push | pending |
