@@ -46,3 +46,4 @@ The Loudness Compensation DSP pipeline uses `_preampGain` to attenuate input sig
   - `.auto` calculation retains original headroom behavior.
   - `.manual` mode strictly enforces `pow(10.0, manualPreampDB / 20.0)` across all volumes.
   - Settings persistence round-trip.
+
