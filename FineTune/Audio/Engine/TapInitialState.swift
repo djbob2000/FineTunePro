@@ -19,7 +19,7 @@ struct TapInitialState {
     var loudnessEqualizerSettings: LoudnessEqualizerSettings = .init()
     var loudnessBassCrossover: Double = 110.0
     var loudnessGainScale: Double = 1.0
-    var loudnessTrebleCrossover: Double = 1500.0
+    var loudnessTrebleCrossover: Double = 6000.0
     var loudnessTrebleGainScale: Double = 1.0
     var loudnessBassExciterWet: Double = 0.20
     var loudnessBassLinearWet: Double = 1.0

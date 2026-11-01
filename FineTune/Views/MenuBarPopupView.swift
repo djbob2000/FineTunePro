@@ -711,14 +711,6 @@ struct MenuBarPopupView: View {
                         onLoudnessGainScaleChange: { scale in
                             audioEngine.setLoudnessGainScale(for: device.uid, to: scale)
                         },
-                        loudnessTrebleGainScale: audioEngine.settingsManager.getLoudnessTrebleGainScale(for: device.uid),
-                        onLoudnessTrebleGainScaleChange: { scale in
-                            audioEngine.setLoudnessTrebleGainScale(for: device.uid, to: scale)
-                        },
-                        loudnessTrebleCrossover: audioEngine.settingsManager.getLoudnessTrebleCrossover(for: device.uid),
-                        onLoudnessTrebleCrossoverChange: { freq in
-                            audioEngine.setLoudnessTrebleCrossover(for: device.uid, to: freq)
-                        },
                         loudnessBassLinearWet: audioEngine.settingsManager.getLoudnessBassLinearWet(for: device.uid),
                         onLoudnessBassLinearWetChange: { amount in
                             audioEngine.setLoudnessBassLinearWet(for: device.uid, to: amount)
@@ -1542,14 +1534,6 @@ struct ObservedDeviceRow: View {
             loudnessMaxDB: audioEngine.settingsManager.getLoudnessMaxDB(for: device.uid),
             onLoudnessMaxDBChange: { maxDB in
                 audioEngine.setLoudnessMaxDB(for: device.uid, to: maxDB)
-            },
-            loudnessTrebleGainScale: audioEngine.settingsManager.getLoudnessTrebleGainScale(for: device.uid),
-            onLoudnessTrebleGainScaleChange: { scale in
-                audioEngine.setLoudnessTrebleGainScale(for: device.uid, to: scale)
-            },
-            loudnessTrebleCrossover: audioEngine.settingsManager.getLoudnessTrebleCrossover(for: device.uid),
-            onLoudnessTrebleCrossoverChange: { freq in
-                audioEngine.setLoudnessTrebleCrossover(for: device.uid, to: freq)
             },
             isSmartVolumeEnabled: audioEngine.getSmartVolumeEnabled(for: device.uid),
             onSmartVolumeToggle: { enabled in

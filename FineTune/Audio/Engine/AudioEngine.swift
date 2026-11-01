@@ -800,7 +800,7 @@ final class AudioEngine {
                 maxDB: -30.0,
                 gainScale: 0.0,
                 bassCrossover: 180.0,
-                trebleCrossover: 1500.0,
+                trebleCrossover: 6000.0,
                 trebleGainScale: 1.0,
                 bassExciterWet: 0.20,
                 bassLinearWet: 1.0
@@ -871,7 +871,7 @@ final class AudioEngine {
     }
 
 
-    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 1500.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    private func updateTapsLoudness(deviceUID: String, enabled: Bool, referencePhon: Double, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossover: Double = 70.0, trebleCrossover: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         for tap in taps.values {
             guard tap.currentDeviceUID == deviceUID else { continue }
             tap.updateLoudnessCompensation(

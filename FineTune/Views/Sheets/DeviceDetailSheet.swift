@@ -17,10 +17,6 @@ struct DeviceDetailSheet: View {
     let onLoudnessMaxDBChange: (Double) -> Void
     let loudnessGainScale: Double
     let onLoudnessGainScaleChange: (Double) -> Void
-    let loudnessTrebleGainScale: Double
-    let onLoudnessTrebleGainScaleChange: (Double) -> Void
-    let loudnessTrebleCrossover: Double
-    let onLoudnessTrebleCrossoverChange: (Double) -> Void
     let loudnessBassLinearWet: Double
     let onLoudnessBassLinearWetChange: (Double) -> Void
     let onDismiss: () -> Void
@@ -46,10 +42,6 @@ struct DeviceDetailSheet: View {
         onLoudnessMaxDBChange: @escaping (Double) -> Void = { _ in },
         loudnessGainScale: Double = 1.0,
         onLoudnessGainScaleChange: @escaping (Double) -> Void = { _ in },
-        loudnessTrebleGainScale: Double = 1.0,
-        onLoudnessTrebleGainScaleChange: @escaping (Double) -> Void = { _ in },
-        loudnessTrebleCrossover: Double = 1500.0,
-        onLoudnessTrebleCrossoverChange: @escaping (Double) -> Void = { _ in },
         loudnessBassLinearWet: Double = 1.0,
         onLoudnessBassLinearWetChange: @escaping (Double) -> Void = { _ in },
         onBufferFrameSizePreferenceChange: @escaping (BufferFrameSizePreference) -> Void = { _ in },
@@ -69,10 +61,6 @@ struct DeviceDetailSheet: View {
         self.onLoudnessMaxDBChange = onLoudnessMaxDBChange
         self.loudnessGainScale = loudnessGainScale
         self.onLoudnessGainScaleChange = onLoudnessGainScaleChange
-        self.loudnessTrebleGainScale = loudnessTrebleGainScale
-        self.onLoudnessTrebleGainScaleChange = onLoudnessTrebleGainScaleChange
-        self.loudnessTrebleCrossover = loudnessTrebleCrossover
-        self.onLoudnessTrebleCrossoverChange = onLoudnessTrebleCrossoverChange
         self.loudnessBassLinearWet = loudnessBassLinearWet
         self.onLoudnessBassLinearWetChange = onLoudnessBassLinearWetChange
         self.onBufferFrameSizePreferenceChange = onBufferFrameSizePreferenceChange

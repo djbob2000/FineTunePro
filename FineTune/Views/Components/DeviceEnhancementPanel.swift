@@ -24,10 +24,6 @@ struct DeviceEnhancementPanel: View {
     var onLoudnessToggle: ((Bool) -> Void)? = nil
     var loudnessMaxDB: Double = -30.0
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
-    var loudnessTrebleGainScale: Double = 1.0
-    var onLoudnessTrebleGainScaleChange: ((Double) -> Void)? = nil
-    var loudnessTrebleCrossover: Double = 1500.0
-    var onLoudnessTrebleCrossoverChange: ((Double) -> Void)? = nil
     var supportsAutoEQ: Bool = true
 
     @State private var searchText = ""
@@ -259,68 +255,6 @@ struct DeviceEnhancementPanel: View {
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
-                    // Treble EQ Boost Slider
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text("Treble Boost")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                            Spacer()
-
-                            Text(String(format: "+%.1f dB", loudnessTrebleGainScale * 3.0))
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { loudnessTrebleGainScale },
-                                set: { onLoudnessTrebleGainScaleChange?($0) }
-                            ),
-                            in: 0.0...2.0,
-                            step: 0.1
-                        )
-                        .controlSize(.mini)
-
-                        Text("Equal-loudness treble compensation (1.0 = +3.0 dB ISO 226 curve).")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 4)
-
-                    // Treble Cutoff Frequency Slider (1000 - 6000 Hz)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text("Treble Freq")
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-
-                            Spacer()
-
-                            Text(formatExciterFrequency(loudnessTrebleCrossover))
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { loudnessTrebleCrossover },
-                                set: { onLoudnessTrebleCrossoverChange?($0) }
-                            ),
-                            in: 1000.0...6000.0,
-                            step: 100.0
-                        )
-                        .controlSize(.mini)
-
-                        Text("High-shelf corner frequency for treble compensation (1000–6000 Hz).")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 4)
                 }
                 .padding(.leading, 14)
                 .padding(.top, 2)
@@ -864,15 +798,6 @@ struct DeviceEnhancementPanel: View {
     }
 
     // MARK: - Helpers
-
-    private func formatExciterFrequency(_ freq: Double) -> String {
-        if freq >= 1000 {
-            let khz = freq / 1000.0
-            return String(format: khz.truncatingRemainder(dividingBy: 1) == 0 ? "%.0fkHz" : "%.1fkHz", khz)
-        } else {
-            return "\(Int(freq))Hz"
-        }
-    }
 
     private func isHighlighted(_ itemID: String) -> Bool {
         guard let index = highlightedIndex else { return false }

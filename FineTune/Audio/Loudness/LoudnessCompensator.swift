@@ -31,7 +31,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     private static let filterDefinitions: [LoudnessFilterDefinition] = [
         .init(kind: .lowShelf, frequency: 80, q: 0.707),
-        .init(kind: .highShelf, frequency: 3000, q: 0.707)
+        .init(kind: .highShelf, frequency: 6000, q: 0.707)
     ]
     static let bandFrequencies = filterDefinitions.map(\.frequency)
     static let bandCount = filterDefinitions.count
@@ -51,8 +51,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     private var _currentGainScale: Float = 1.0
     /// Crossover frequency for low-frequency band (Hz).
     private var _bassCrossoverFrequency: Double = 110.0
-    /// Corner frequency for high-frequency shelf (Hz).
-    private var _trebleCrossoverFrequency: Double = 3000.0
+    /// Corner frequency for high-frequency shelf (Hz) - 6000 Hz industry standard (RME, Yamaha, ISO 226).
+    private var _trebleCrossoverFrequency: Double = 6000.0
     /// Treble gain scale (amount) for high-shelf boost.
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
@@ -102,7 +102,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 1500.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 6000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -184,10 +184,9 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         _lowExciterWet = bassHarmonicsEnabled ? 0.50 * Float(amount * bassScale) : 0
 
         // High-frequency Loudness compensation:
-        // Clean +3.0 dB High-Shelf boost according to ISO 226 equal-loudness contours,
-        // dynamically scaled by volume level and user treble scale slider.
-        let trebleGainScale = max(0, Double(_trebleGainScale))
-        let trebleEQDB = 3.0 * amount * trebleGainScale
+        // Clean +3.0 dB High-Shelf boost at 6.0 kHz according to ISO 226 equal-loudness contours,
+        // dynamically scaled by volume level.
+        let trebleEQDB = 3.0 * amount
         _highExciterWet = Float(trebleEQDB)
 
         return [Float(_bassEQ0DB), Float(trebleEQDB)]
@@ -246,7 +245,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     /// Build the flat coefficient array for `vDSP_biquad_CreateSetup`.
-    static func coefficientsForBands(gains: [Float], trebleFrequency: Double = 1500.0, sampleRate: Double) -> [Double] {
+    static func coefficientsForBands(gains: [Float], trebleFrequency: Double = 6000.0, sampleRate: Double) -> [Double] {
         guard gains.count == bandCount else {
             return (0..<bandCount).flatMap { _ in [1.0, 0.0, 0.0, 0.0, 0.0] }
         }
