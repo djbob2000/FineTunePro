@@ -84,3 +84,5 @@
 | Task 81 | Add Treble Exciter Cutoff Frequency slider (1000–6000 Hz) to DeviceEnhancementPanel and wire across UI hierarchy | done |
 | Task 82 | Update default crossover to 1500 Hz and calibrate sensitive harmonic generator for audible presence in DSP | done |
 | Task 83 | Build Release `.app`, codesign, verify and push | done |
+| Task 84 | Implement La Petite Excite architecture (unity-gain gentle saturation, Wet Mix scaling, CV ducking) in `LoudnessCompensator.swift` and `EQProcessor.swift` | done |
+| Task 85 | Build Release `.app`, codesign, verify package and push | done |

@@ -330,9 +330,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
                 _hfEnvelope = _hfEnvelope * 0.998
             }
             
-            // Background automatic CV ducking on harsh sibilants (above 0.30 peak)
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.30) * 2.5)
-            let effectiveDrive = highWet * sibilantDucking
+            // Dynamic CV ducking (La Petite Excite style):
+            // Keeps high-frequency enhancement smooth and controlled under heavy transients or dense polyphony
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.20) * 2.5)
+            let effectiveWet = highWet * sibilantDucking
             
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
             // Preserves crisp transient punch and natural note decay without envelope pumping or sustain swelling.
@@ -345,20 +346,18 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowL = _lowPostLPFL.process(_lowPostHPFL.process(harmLowL))
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
-            // Treble excitation: Pure Harmonic Exciter (Fundamental Subtraction, zero phase cancellation)
-            // Drive directly scales high-frequency band into smooth asymmetric saturator
-            let drivenHighL = highL * effectiveDrive
-            let drivenHighR = highR * effectiveDrive
-            let harmHighL = generateTrebleHarmonics(drivenHighL)
-            let harmHighR = generateTrebleHarmonics(drivenHighR)
+            // Treble excitation: Studio-grade Asymmetric Harmonics (Triode/Tape saturation)
+            // Input signal highL/highR is processed at nominal unity gain (no 16x clipping distortion)
+            let harmHighL = generateTrebleHarmonics(highL)
+            let harmHighR = generateTrebleHarmonics(highR)
             
-            // Post-HPF (3000 Hz) cleans up DC offset and sub-3kHz intermodulation difference products
+            // Post-HPF cleans up DC offset and sub-cutoff intermodulation difference products
             let cleanHarmHighL = _hpPostL.process(harmHighL)
             let cleanHarmHighR = _hpPostR.process(harmHighR)
             
-            // Sum 100% clean direct path + pure bass harmonics + pure treble harmonics directly
-            let outL = xL + (filteredSatLowL * lowWet) + cleanHarmHighL
-            let outR = xR + (filteredSatLowR * lowWet) + cleanHarmHighR
+            // Sum 100% clean direct path + pure bass harmonics + treble harmonics scaled by effective Wet Mix
+            let outL = xL + (filteredSatLowL * lowWet) + (cleanHarmHighL * effectiveWet)
+            let outR = xR + (filteredSatLowR * lowWet) + (cleanHarmHighR * effectiveWet)
             
             output[idxL] = outL
             output[idxR] = outR
@@ -453,21 +452,19 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // Pure Harmonic Exciter with Fundamental Subtraction (h(u) = u - f(u)):
-        // Scaled for real-world high-frequency audio levels (0.02 - 0.20 peak).
-        // - Positive swing saturates softly (w = u * 4.0), generating warm 2nd and 3rd harmonics
-        // - Negative swing has softer curvature (v = w * 0.5), breaking symmetry for even harmonics
-        // - C2 continuous at u = 0 (h(0)=0, h'(0)=0, h''(0)=0) eliminating zero-crossing clicks/fuzz
-        // - Strictly monotonic (zero full-wave rectification, zero octave buzzing)
-        // - Calibrated output at -18...-12 dB relative to high-pass band at standard drive
-        let w = u * 4.0
-        if w > 0.0 {
-            let s = w / sqrt(1.0 + w * w)
-            return (w - s) * 0.25
+        // Studio-grade gentle asymmetric harmonic generation (La Petite Excite style):
+        // Models single-ended triode / tape saturation with strict monotonicity and zero-crossing smoothness:
+        // - Positive half: gentle soft compression u / (1 + 1.0 * u), synthesizing warm 2nd and 3rd harmonics
+        // - Negative half: milder curvature u / (1 - 0.3 * u), breaking waveform symmetry cleanly
+        // - f'(0) = 1.0 from both sides -> zero crossover distortion or derivative kinks
+        // - Strictly monotonic -> zero full-wave rectification, zero octave fuzz
+        // - Pure harmonic component (u - shaped) with zero fundamental boost
+        if u >= 0.0 {
+            let shaped = u / (1.0 + 1.0 * u)
+            return u - shaped
         } else {
-            let v = w * 0.5
-            let s = w / sqrt(1.0 + v * v)
-            return (w - s) * 0.25
+            let shaped = u / (1.0 - 0.3 * u)
+            return u - shaped
         }
     }
 
