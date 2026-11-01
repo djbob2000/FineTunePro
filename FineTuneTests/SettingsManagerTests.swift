@@ -508,3 +508,37 @@ struct MonoPersistenceTests {
         #expect(restored.getMonoDownmix(for: "app") == nil)
     }
 }
+
+@Suite("Loudness Preamp Settings Persistence")
+@MainActor
+struct LoudnessPreampSettingsTests {
+    @Test("Loudness preamp mode and manual dB round-trip through disk and have proper defaults")
+    func preampPersistence() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let settings = SettingsManager(directory: directory)
+        
+        // Defaults
+        #expect(settings.getLoudnessPreampMode(for: "dev1") == .auto)
+        #expect(settings.getLoudnessPreampManualDB(for: "dev1") == 0.0)
+        
+        // Set values
+        settings.setLoudnessPreampMode(for: "dev1", to: .manual)
+        settings.setLoudnessPreampManualDB(for: "dev1", to: -4.5)
+        
+        // Clamping check
+        settings.setLoudnessPreampManualDB(for: "dev2", to: +5.0) // should clamp to 0.0
+        #expect(settings.getLoudnessPreampManualDB(for: "dev2") == 0.0)
+        settings.setLoudnessPreampManualDB(for: "dev2", to: -20.0) // should clamp to -12.0
+        #expect(settings.getLoudnessPreampManualDB(for: "dev2") == -12.0)
+        
+        settings.flushSync()
+        
+        // Reload from disk
+        let restored = SettingsManager(directory: directory)
+        #expect(restored.getLoudnessPreampMode(for: "dev1") == .manual)
+        #expect(restored.getLoudnessPreampManualDB(for: "dev1") == -4.5)
+        #expect(restored.getLoudnessPreampManualDB(for: "dev2") == -12.0)
+    }
+}
+
