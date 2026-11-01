@@ -52,5 +52,5 @@
 | Task 49 | Add Settings Persistence for `LoudnessPreampMode` and `deviceLoudnessPreampManualDB` | done |
 | Task 50 | Support manual preamp gain in `LoudnessCompensator.swift` with regression tests | done |
 | Task 51 | Propagate settings through `AudioEngine` and tap controllers | done |
-| Task 52 | Implement Auto/Manual Preamp UI in `DeviceEnhancementPanel.swift` | in_progress |
-| Task 53 | Full Verification, Release Build, Codesign & Push | pending |
+| Task 52 | Implement Auto/Manual Preamp UI in `DeviceEnhancementPanel.swift` | done |
+| Task 53 | Full Verification, Release Build, Codesign & Push | in_progress |

@@ -24,6 +24,10 @@ struct DeviceEnhancementPanel: View {
     var onLoudnessToggle: ((Bool) -> Void)? = nil
     var loudnessMaxDB: Double = -30.0
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
+    var loudnessPreampMode: LoudnessPreampMode = .auto
+    var onLoudnessPreampModeChange: ((LoudnessPreampMode) -> Void)? = nil
+    var loudnessPreampManualDB: Double = 0.0
+    var onLoudnessPreampManualDBChange: ((Double) -> Void)? = nil
     var supportsAutoEQ: Bool = true
 
     @State private var searchText = ""
@@ -37,6 +41,7 @@ struct DeviceEnhancementPanel: View {
     @State private var fetchError: String?
     @FocusState private var isSearchFocused: Bool
     @State private var isMaxDBExpanded: Bool = false
+    @State private var isPreampExpanded: Bool = false
 
     private let maxVisibleItems = 6
     private let itemHeight: CGFloat = 28
@@ -254,6 +259,81 @@ struct DeviceEnhancementPanel: View {
                             .font(DesignTokens.Typography.caption)
                             .foregroundStyle(DesignTokens.Colors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.leading, 14)
+                .padding(.top, 2)
+
+                // Preamp Gain Section
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isPreampExpanded.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                .rotationEffect(.degrees(isPreampExpanded ? 90 : 0))
+
+                            Text("Preamp Gain")
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+
+                            Spacer()
+
+                            let modeLabel = loudnessPreampMode == .auto ? "Auto" : String(format: "%.1f\u{200A}dB", loudnessPreampManualDB)
+                            Text(modeLabel)
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if isPreampExpanded {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Picker("", selection: Binding(
+                                get: { loudnessPreampMode },
+                                set: { onLoudnessPreampModeChange?($0) }
+                            )) {
+                                Text("Auto").tag(LoudnessPreampMode.auto)
+                                Text("Manual").tag(LoudnessPreampMode.manual)
+                            }
+                            .pickerStyle(.segmented)
+                            .controlSize(.mini)
+
+                            if loudnessPreampMode == .manual {
+                                HStack {
+                                    Slider(
+                                        value: Binding(
+                                            get: { loudnessPreampManualDB },
+                                            set: { onLoudnessPreampManualDBChange?($0) }
+                                        ),
+                                        in: -12.0...0.0,
+                                        step: 0.5
+                                    )
+                                    .controlSize(.mini)
+
+                                    Text(String(format: "%.1f\u{200A}dB", loudnessPreampManualDB))
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                        .frame(width: 44, alignment: .trailing)
+                                }
+
+                                Text("Manual input attenuation before bass EQ. At 0\u{200A}dB, track volume is untouched.")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text("Automatic headroom cut based on volume and bass boost.")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(.top, 2)
                     }
                 }
                 .padding(.leading, 14)

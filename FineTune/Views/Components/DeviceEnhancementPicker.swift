@@ -22,6 +22,10 @@ struct DeviceEnhancementPicker: View {
     var onLoudnessToggle: ((Bool) -> Void)? = nil
     var loudnessMaxDB: Double = -30.0
     var onLoudnessMaxDBChange: ((Double) -> Void)? = nil
+    var loudnessPreampMode: LoudnessPreampMode = .auto
+    var onLoudnessPreampModeChange: ((LoudnessPreampMode) -> Void)? = nil
+    var loudnessPreampManualDB: Double = 0.0
+    var onLoudnessPreampManualDBChange: ((Double) -> Void)? = nil
     var supportsLoudness: Bool = false
     var supportsAutoEQ: Bool = true
 
@@ -123,6 +127,10 @@ struct DeviceEnhancementPicker: View {
                 onLoudnessToggle: onLoudnessToggle,
                 loudnessMaxDB: loudnessMaxDB,
                 onLoudnessMaxDBChange: onLoudnessMaxDBChange,
+                loudnessPreampMode: loudnessPreampMode,
+                onLoudnessPreampModeChange: onLoudnessPreampModeChange,
+                loudnessPreampManualDB: loudnessPreampManualDB,
+                onLoudnessPreampManualDBChange: onLoudnessPreampManualDBChange,
                 supportsAutoEQ: supportsAutoEQ
             )
         }

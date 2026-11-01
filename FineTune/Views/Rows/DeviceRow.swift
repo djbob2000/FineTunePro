@@ -46,6 +46,10 @@ struct DeviceRow: View {
     let onLoudnessToggle: ((Bool) -> Void)?
     let loudnessMaxDB: Double
     let onLoudnessMaxDBChange: ((Double) -> Void)?
+    let loudnessPreampMode: LoudnessPreampMode
+    let onLoudnessPreampModeChange: ((LoudnessPreampMode) -> Void)?
+    let loudnessPreampManualDB: Double
+    let onLoudnessPreampManualDBChange: ((Double) -> Void)?
     let isSmartVolumeEnabled: Bool
     let onSmartVolumeToggle: ((Bool) -> Void)?
     let isFocused: Bool
@@ -124,6 +128,10 @@ struct DeviceRow: View {
         onLoudnessToggle: ((Bool) -> Void)? = nil,
         loudnessMaxDB: Double = -30.0,
         onLoudnessMaxDBChange: ((Double) -> Void)? = nil,
+        loudnessPreampMode: LoudnessPreampMode = .auto,
+        onLoudnessPreampModeChange: ((LoudnessPreampMode) -> Void)? = nil,
+        loudnessPreampManualDB: Double = 0.0,
+        onLoudnessPreampManualDBChange: ((Double) -> Void)? = nil,
         isSmartVolumeEnabled: Bool = false,
         onSmartVolumeToggle: ((Bool) -> Void)? = nil,
         isFocused: Bool = false,
@@ -171,6 +179,10 @@ struct DeviceRow: View {
         self.onLoudnessToggle = onLoudnessToggle
         self.loudnessMaxDB = loudnessMaxDB
         self.onLoudnessMaxDBChange = onLoudnessMaxDBChange
+        self.loudnessPreampMode = loudnessPreampMode
+        self.onLoudnessPreampModeChange = onLoudnessPreampModeChange
+        self.loudnessPreampManualDB = loudnessPreampManualDB
+        self.onLoudnessPreampManualDBChange = onLoudnessPreampManualDBChange
         self.isSmartVolumeEnabled = isSmartVolumeEnabled
         self.onSmartVolumeToggle = onSmartVolumeToggle
         self.isFocused = isFocused
@@ -304,6 +316,10 @@ struct DeviceRow: View {
                         onLoudnessToggle: { enabled in onLoudnessToggle?(enabled) },
                         loudnessMaxDB: loudnessMaxDB,
                         onLoudnessMaxDBChange: { maxDB in onLoudnessMaxDBChange?(maxDB) },
+                        loudnessPreampMode: loudnessPreampMode,
+                        onLoudnessPreampModeChange: { mode in onLoudnessPreampModeChange?(mode) },
+                        loudnessPreampManualDB: loudnessPreampManualDB,
+                        onLoudnessPreampManualDBChange: { dB in onLoudnessPreampManualDBChange?(dB) },
                         supportsLoudness: device.id.readTransportType() != .builtIn,
                         supportsAutoEQ: device.supportsAutoEQ
                     )
