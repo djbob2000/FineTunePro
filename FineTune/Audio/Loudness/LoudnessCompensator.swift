@@ -50,7 +50,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Crossover frequency for low-frequency band (Hz).
     private var _bassCrossoverFrequency: Double = 110.0
     /// Crossover frequency for high-frequency band (Hz).
-    private var _trebleCrossoverFrequency: Double = 1000.0
+    private var _trebleCrossoverFrequency: Double = 3000.0
     /// Treble gain scale (amount) for the exciter.
     private var _trebleGainScale: Float = 1.0
     /// Maximum DB for the target curve.
@@ -105,7 +105,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
-    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 1000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
+    func updateForVolume(_ systemVolume: Float, digitalVolume: Float = 1.0, referencePhon: Double = 0.0, maxDB: Double = -30.0, gainScale: Float = 1.0, bassCrossoverFrequency: Double = 110.0, trebleCrossoverFrequency: Double = 3000.0, trebleGainScale: Float = 1.0, bassExciterWet: Float = 0.20, bassLinearWet: Float = 1.0) {
         let curveChanged = systemVolume != _currentSystemVolume
             || referencePhon != _currentReferencePhon
             || gainScale != _currentGainScale || maxDB != _currentMaxDB
@@ -322,7 +322,7 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let highL = _hpL.process(xL)
             let highR = _hpR.process(xR)
             
-            // Fast De-Esser / Sibilant Tamer: track peak envelope of high frequencies (>1 kHz)
+            // Fast De-Esser / Sibilant Tamer: track peak envelope of high frequencies (>3 kHz)
             let hfInstant = max(abs(highL), abs(highR))
             if hfInstant > _hfEnvelope {
                 _hfEnvelope = _hfEnvelope * 0.85 + hfInstant * 0.15
@@ -330,8 +330,8 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
                 _hfEnvelope = _hfEnvelope * 0.998
             }
             
-            // Background automatic CV ducking on harsh sibilants (above 0.25 peak)
-            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.25) * 2.0)
+            // Background automatic CV ducking on harsh sibilants (above 0.30 peak)
+            let sibilantDucking = 1.0 / (1.0 + max(0.0, _hfEnvelope - 0.30) * 2.5)
             let effectiveDrive = highWet * sibilantDucking
             
             // Bass Harmonic Exciter (instantaneous waveshaper, zero time-domain compression):
@@ -346,12 +346,13 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
             let filteredSatLowR = _lowPostLPFR.process(_lowPostHPFR.process(harmLowR))
             
             // Treble excitation: Pure Harmonic Exciter (Fundamental Subtraction, zero phase cancellation)
-            let drivenHighL = softKnee(highL * effectiveDrive)
-            let drivenHighR = softKnee(highR * effectiveDrive)
+            // Drive directly scales high-frequency band into smooth asymmetric saturator
+            let drivenHighL = highL * effectiveDrive
+            let drivenHighR = highR * effectiveDrive
             let harmHighL = generateTrebleHarmonics(drivenHighL)
             let harmHighR = generateTrebleHarmonics(drivenHighR)
             
-            // Post-HPF (1000 Hz) cleans up DC offset and sub-1kHz intermodulation difference products
+            // Post-HPF (3000 Hz) cleans up DC offset and sub-3kHz intermodulation difference products
             let cleanHarmHighL = _hpPostL.process(harmHighL)
             let cleanHarmHighR = _hpPostR.process(harmHighR)
             
@@ -452,16 +453,20 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     @inline(__always)
     private func generateTrebleHarmonics(_ u: Float) -> Float {
-        // Pure Harmonic Exciter with 0% fundamental component:
-        // Even-harmonic component (+2.0 * u^2) adds brilliant 2nd harmonic (octave-up sheen/air).
-        // Pure odd-harmonic component (-0.60 * (u^3 - 0.75 * u)) adds 3rd harmonic edge with 0% fundamental.
-        // Asymmetry provides warm analog excitation.
-        let u2 = u * u
-        let u3_pure = u2 * u - 0.75 * u
-        if u > 0 {
-            return 2.0 * u2 - 0.60 * u3_pure
+        // Pure Harmonic Exciter with Fundamental Subtraction (h(u) = u - f(u)):
+        // Asymmetric smooth saturation models vintage tube / diode exciter non-linearity:
+        // - Positive swing saturates at +1.0 (softer knee, rich 2nd and 3rd harmonics)
+        // - Negative swing saturates at -2.0 (firmer knee, preserves negative transient depth)
+        // - C2 continuous at u = 0 (h(0)=0, h'(0)=0, h''(0)=0) eliminating zero-crossing clicks/fuzz
+        // - Strictly monotonic (no full-wave rectification or octave buzzing)
+        // - Generates warm 2nd harmonic sheen and crisp 3rd harmonic air
+        if u > 0.0 {
+            let s = u / sqrt(1.0 + u * u)
+            return u - s
         } else {
-            return 1.5 * u2 - 0.40 * u3_pure
+            let v = u * 0.5
+            let s = u / sqrt(1.0 + v * v)
+            return u - s
         }
     }
 
