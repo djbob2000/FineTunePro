@@ -98,3 +98,4 @@
 | Task 95 | Refactor lowExciter in LoudnessCompensator to studio parallel analog architecture (La Petite Excite model), remove phase-cancelling post-LPF, update UI | done |
 | Task 96 | Fix Bass Exciter statically at 70 Hz & Knob 1.5, remove bass tuning sliders from UI, and finalize DSP documentation | done |
 | Task 97 | Set Bass Exciter Knob to 1.0, incorporate +2.9dB exciter boost into headroom budget (-1.74dB preamp cut with 0.6 factor) | done |
+| Task 98 | Lock Bass Exciter Knob to 1.5 with full headroom budget (-2.16dB preamp cut with 0.6 factor), rebuild and release | done |
